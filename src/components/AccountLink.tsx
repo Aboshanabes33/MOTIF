@@ -14,9 +14,11 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   API_KEY_PROVIDERS,
+  NO_SIGN_IN,
   SIGN_IN_PROVIDERS,
   keyProvider,
   linkProvider,
+  modelNote,
   type LinkProviderId,
   type LinkResult,
   type LinkStatus,
@@ -55,6 +57,7 @@ export function AccountLinkProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   // Counts finished actions: a status check that began before one finished is out of date.
   const actions = useRef(0);
 
@@ -85,10 +88,12 @@ export function AccountLinkProvider({ children }: { children: ReactNode }) {
     async (action: (token: string | null) => Promise<LinkResult | LinkStatus>) => {
       setBusy(true);
       setError(null);
+      setNote(null);
       try {
         const result = await action(readLinkToken());
         apply("status" in result ? result.status : result);
         setError("status" in result ? result.error : null);
+        setNote("status" in result ? (result.note ?? null) : null);
       } catch {
         setError("Motif's server didn't answer. Try again.");
       } finally {
@@ -199,6 +204,11 @@ export function AccountLinkProvider({ children }: { children: ReactNode }) {
               {error}
             </p>
           )}
+          {!error && note && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {note}
+            </p>
+          )}
         </DialogContent>
       </Dialog>
     </AccountLinkContext.Provider>
@@ -215,6 +225,7 @@ function Choose(props: {
   // account-only provider, which would offer a field it cannot accept.
   const [providerId, setProviderId] = useState<LinkProviderId>(API_KEY_PROVIDERS[0]!.id);
   const [apiKey, setApiKey] = useState("");
+  const chosenProvider = keyProvider(providerId);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     props.onApiKey(providerId, apiKey);
@@ -237,6 +248,11 @@ function Choose(props: {
         <p className="text-xs text-muted-foreground">
           You approve once on the provider&apos;s own page. Motif does the rest.
         </p>
+        {NO_SIGN_IN.map((provider) => (
+          <p key={provider.id} className="text-xs text-muted-foreground">
+            {provider.noSignInNote}
+          </p>
+        ))}
       </section>
       <form className="grid gap-3" onSubmit={submit}>
         <h3 className="text-sm font-semibold">Use an API key</h3>
@@ -270,9 +286,12 @@ function Choose(props: {
             onChange={(event) => setApiKey(event.target.value)}
           />
         </label>
+        {chosenProvider?.keyNote && (
+          <p className="text-xs text-muted-foreground">{chosenProvider.keyNote}</p>
+        )}
         <p className="text-xs text-muted-foreground">
-          Motif&apos;s server keeps the key in memory until you unlink or it restarts, and never
-          stores it in your browser.
+          Motif checks the key with {chosenProvider?.name ?? "the provider"} before linking, then
+          keeps it in memory until you unlink or the server restarts. It never reaches your browser.
         </p>
         <DialogFooter className="gap-2 sm:space-x-0">
           <Button type="button" variant="ghost" onClick={props.onSkip}>
@@ -419,11 +438,14 @@ function Linked(props: {
           disabled={busy}
           onChange={(event) => props.onModel(event.target.value)}
         >
-          {account.models.map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.name}
-            </option>
-          ))}
+          {account.models.map((model) => {
+            const note = modelNote(model);
+            return (
+              <option key={model.id} value={model.id}>
+                {note ? `${model.name} — ${note}` : model.name}
+              </option>
+            );
+          })}
         </select>
       </label>
       <p className="text-xs text-muted-foreground">

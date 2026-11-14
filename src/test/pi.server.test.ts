@@ -292,10 +292,10 @@ describe("API keys through the Pi SDK", () => {
       const ids = (await runtime.models(provider.id)).map((model) => model.id);
       expect(ids, provider.id).toContain(provider.defaultModel);
     }
-    expect(await runtime.models("opencode")).toContainEqual({
-      id: "kimi-k2.7-code",
-      name: expect.any(String),
-    });
+    // Models now carry capabilities too, so match the fields this test is about.
+    expect(await runtime.models("opencode")).toContainEqual(
+      expect.objectContaining({ id: "kimi-k2.7-code", name: expect.any(String) }),
+    );
   });
 
   it("gets a request out through every API the offered providers use", async () => {
@@ -700,5 +700,187 @@ describe("Connecting ChatGPT with a one-time code (the web app's way in)", () =>
 
     expect(questions.map(({ kind }) => kind)).toContain("manual_code");
     expect(await runtime.linked()).toEqual([]);
+  });
+});
+
+describe("checking an API key before it is stored", () => {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+
+  it("asks Anthropic with its own header and returns the models it lists", async () => {
+    const sent = stubNetwork(({ url }) =>
+      url.startsWith("https://api.anthropic.com/v1/models")
+        ? json({
+            data: [
+              { id: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6" },
+              { id: "claude-haiku-4-6", display_name: "Claude Haiku 4.6" },
+            ],
+          })
+        : json({}, 404),
+    );
+    const runtime = await createPiRuntime();
+
+    const check = await runtime.checkApiKey("anthropic", "sk-ant-api03-test");
+
+    expect(check).toEqual({
+      ok: true,
+      models: [
+        { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+        { id: "claude-haiku-4-6", name: "Claude Haiku 4.6" },
+      ],
+    });
+    // Anthropic rejects a bearer token; the key must go in its own header.
+    expect(sent[0]!.url).toBe("https://api.anthropic.com/v1/models?limit=100");
+    expect(sent[0]!.authorization).toBeNull();
+  });
+
+  it("reads OpenRouter's free flag and input modalities, which drive the vision gate", async () => {
+    // The catalogue endpoint needs no key; the key is checked against the endpoint that does.
+    stubNetwork(({ url }) =>
+      url === "https://openrouter.ai/api/v1/key"
+        ? json({ data: { label: "test" } })
+        : json({
+            data: [
+              {
+                id: "google/gemma-4-31b-it:free",
+                name: "Google: Gemma 4 31B (free)",
+                architecture: { input_modalities: ["text", "image"] },
+                pricing: { prompt: "0", completion: "0" },
+              },
+              {
+                id: "liquid/lfm-2.5-2.6b:free",
+                name: "LiquidAI: LFM2.5 2.6B (free)",
+                architecture: { input_modalities: ["text"] },
+                pricing: { prompt: "0", completion: "0" },
+              },
+              {
+                id: "acme/paid-vl",
+                name: "Acme VL",
+                architecture: { input_modalities: ["text", "image"] },
+                pricing: { prompt: "0.000001", completion: "0.000002" },
+              },
+            ],
+          }),
+    );
+    const runtime = await createPiRuntime();
+
+    const check = await runtime.checkApiKey("openrouter", "sk-or-v1-test");
+
+    expect(check.ok).toBe(true);
+    if (!check.ok) return;
+    expect(check.models).toEqual([
+      {
+        id: "google/gemma-4-31b-it:free",
+        name: "Google: Gemma 4 31B (free)",
+        input: ["text", "image"],
+        free: true,
+      },
+      {
+        id: "liquid/lfm-2.5-2.6b:free",
+        name: "LiquidAI: LFM2.5 2.6B (free)",
+        input: ["text"],
+        free: true,
+      },
+      { id: "acme/paid-vl", name: "Acme VL", input: ["text", "image"] },
+    ]);
+  });
+
+  it("tells a rejected key apart from an unreachable provider", async () => {
+    stubNetwork(() => json({ error: { message: "invalid x-api-key" } }, 401));
+    const runtime = await createPiRuntime();
+    expect(await runtime.checkApiKey("anthropic", "sk-ant-bad")).toEqual({
+      ok: false,
+      problem: "rejected",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+    );
+    const offline = await createPiRuntime();
+    expect(await offline.checkApiKey("anthropic", "sk-ant-good")).toEqual({
+      ok: false,
+      problem: "unreachable",
+    });
+  });
+
+  it("leaves OpenAI's non-chat models out of the picker", async () => {
+    stubNetwork(() =>
+      json({
+        data: [
+          { id: "gpt-6.1-sol" },
+          { id: "text-embedding-4-large" },
+          { id: "whisper-3" },
+          { id: "dall-e-5" },
+        ],
+      }),
+    );
+    const runtime = await createPiRuntime();
+
+    const check = await runtime.checkApiKey("openai", "sk-proj-test");
+
+    expect(check.ok).toBe(true);
+    if (!check.ok) return;
+    expect(check.models.map((model) => model.id)).toEqual(["gpt-6.1-sol"]);
+  });
+
+  it("carries each model's input modalities through to the picker", async () => {
+    // A verified key's models come from the SDK's own catalogue, which is where `input` lives.
+    const runtime = await createPiRuntime();
+    await runtime.linkApiKey("openrouter", KEY);
+
+    const models = await runtime.models("openrouter");
+
+    const withImage = models.filter((model) => model.input?.includes("image"));
+    const withoutImage = models.filter((model) => model.input && !model.input.includes("image"));
+    expect(models.length).toBeGreaterThan(100);
+    // The vision gate has real data on both sides, which is the point.
+    expect(withImage.length).toBeGreaterThan(0);
+    expect(withoutImage.length).toBeGreaterThan(0);
+  });
+
+  it("covers OpenCode the same way, so its models are gated too", async () => {
+    // OpenCode is not a special case: its catalogue carries the same modality data, and its key
+    // is checked against the gateway that lists what the key may call.
+    const sent = stubNetwork(({ url }) =>
+      url.startsWith("https://opencode.ai/inference/v1/models")
+        ? json({ data: [{ id: "kimi-k2.7-code", name: "Kimi K2.7 Code" }] })
+        : json({}, 404),
+    );
+    const runtime = await createPiRuntime();
+
+    const check = await runtime.checkApiKey("opencode", KEY);
+
+    expect(check).toEqual({
+      ok: true,
+      models: [{ id: "kimi-k2.7-code", name: "Kimi K2.7 Code" }],
+    });
+    expect(sent[0]!.url).toBe("https://opencode.ai/inference/v1/models");
+    expect(sent[0]!.authorization).toBe(`Bearer ${KEY}`);
+
+    await runtime.linkApiKey("opencode", KEY);
+    const models = await runtime.models("opencode");
+    expect(models.length).toBeGreaterThan(50);
+    expect(models.some((model) => model.input?.includes("image"))).toBe(true);
+    expect(models.some((model) => model.input && !model.input.includes("image"))).toBe(true);
+  });
+
+  it("asks OpenCode Go's own gateway, which is a different path", async () => {
+    const sent = stubNetwork(({ url }) =>
+      url.startsWith("https://opencode.ai/inference/go/v1/models")
+        ? json({ data: [{ id: "kimi-k3.1-pro", name: "Kimi K3.1 Pro" }] })
+        : json({}, 404),
+    );
+    const runtime = await createPiRuntime();
+
+    const check = await runtime.checkApiKey("opencode-go", KEY);
+
+    expect(check.ok).toBe(true);
+    expect(sent[0]!.url).toBe("https://opencode.ai/inference/go/v1/models");
   });
 });

@@ -16,15 +16,22 @@ export class AiError extends Error {
   }
 }
 
-/** Sends one prompt to the model of the caller's linked account and returns the reply text. */
-export async function ask(linkToken: unknown, prompt: string): Promise<string> {
-  const result = await accountLinks().complete(linkToken, prompt);
+/**
+ * Sends one prompt to the model of the caller's linked account and returns the reply text.
+ *
+ * `images` counts pictures travelling with the prompt, so a text-only model is refused before the
+ * request rather than answering it badly.
+ */
+export async function ask(linkToken: unknown, prompt: string, images = 0): Promise<string> {
+  const result = await accountLinks().complete(linkToken, prompt, images);
   if (!result.ok) throw new AiError(result.reason, result.status);
   return result.text;
 }
 
 const EXPLANATIONS: Record<Exclude<AiFailure, "failed">, string> = {
   not_linked: "Link an AI account to use this.",
+  no_vision:
+    "The model on your linked account can't read images. Pick a model that accepts images, or send this without one.",
   rejected: "Your linked AI account turned the request down. Link it again, or pick another model.",
   limited: "Your linked AI account is out of quota or rate limited. Try again later.",
 };

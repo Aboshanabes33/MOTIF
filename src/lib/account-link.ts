@@ -36,6 +36,14 @@ type LinkProvider = {
   readonly accountOnly?: boolean;
   /** Set when signing in with this entry earns a different method name on the server. */
   readonly apiKeyProviderId?: string;
+  /**
+   * Why this provider has no account sign-in, said in the pop-up. Set where the omission is a
+   * provider's rule rather than a gap: a visitor who expected a button deserves the reason, not
+   * silence.
+   */
+  readonly noSignInNote?: string;
+  /** Shown under the key field, for a provider whose free tier has limits worth knowing. */
+  readonly keyNote?: string;
 };
 
 /**
@@ -57,6 +65,23 @@ export const LINK_PROVIDERS = [
     accountOnly: true,
   },
   { id: "openai", name: "OpenAI (API key)", defaultModel: "gpt-6.1-sol" },
+  {
+    id: "anthropic",
+    name: "Claude (API key)",
+    defaultModel: "claude-sonnet-4-6",
+    // Not an omission Motif chose: Anthropic's terms forbid a third-party app from offering
+    // Claude.ai sign-in or routing a Free/Pro/Max plan through its own client, and they enforce it
+    // server-side. A key is the only way in, so say so rather than hide the button.
+    noSignInNote:
+      "Claude plans can't sign in to other apps. Anthropic asks for an API key instead.",
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    defaultModel: "openrouter/auto",
+    keyNote:
+      "Free models are limited to about 20 requests a minute, and 50 a day until the account has bought $10 of credit.",
+  },
   { id: "opencode", name: "OpenCode Zen", defaultModel: "kimi-k2.7-code" },
   { id: "opencode-go", name: "OpenCode Go", defaultModel: "kimi-k3.1-pro" },
 ] as const satisfies readonly LinkProvider[];
@@ -91,6 +116,19 @@ export const SIGN_IN_PROVIDERS: readonly (LinkProvider & {
 export function hasSignIn(id: LinkProviderId): boolean {
   return linkProvider(id).signIn !== undefined;
 }
+
+/**
+ * Providers that take a key but cannot sign in, and say why.
+ *
+ * Claude is the case that matters: its plans are barred from third-party sign-in by the provider's
+ * own terms, so a visitor looking for a "Connect Claude" button needs the reason, not silence.
+ */
+export const NO_SIGN_IN: readonly (LinkProvider & { id: LinkProviderId; noSignInNote: string })[] =
+  LINK_PROVIDERS.flatMap((provider) =>
+    "noSignInNote" in provider && provider.noSignInNote
+      ? [{ ...provider, noSignInNote: provider.noSignInNote }]
+      : [],
+  );
 
 /** The provider an API-key form chose, when it came from `API_KEY_PROVIDERS`. */
 export function keyProvider(id: string): (LinkProvider & { id: LinkProviderId }) | undefined {
@@ -131,13 +169,40 @@ export type SignInView = {
   error?: string;
 };
 
+/**
+ * A model an account can use, and what it accepts.
+ *
+ * `input` decides the vision gate: a prompt carrying a picture must be refused before it is sent
+ * when the chosen model does not list `image`. Free OpenRouter models are where this matters, since
+ * several take text only. It mirrors the Pi SDK's own per-model `input` list.
+ */
+export type LinkModel = {
+  id: string;
+  name: string;
+  /** What the model accepts as input. Absent when the provider did not say. */
+  input?: ("text" | "image")[];
+  /** True when the provider charges nothing for this model. OpenRouter's `:free` entries. */
+  free?: boolean;
+};
+
+/** Whether a model can be sent a picture. Only an explicit `image` counts. */
+export function acceptsImages(model: LinkModel | undefined): boolean {
+  return model?.input?.includes("image") ?? false;
+}
+
+/** A note shown next to a model, so a chosen model's limits are visible before it is used. */
+export function modelNote(model: LinkModel): string | null {
+  const vision = acceptsImages(model) ? "images" : "text only";
+  return model.free ? `Free · ${vision}` : vision === "text only" ? "Text only" : null;
+}
+
 export type LinkedAccount = {
   providerId: LinkProviderId;
   method: LinkMethod;
   /** The model the AI features use. */
   model: string;
   /** The models this account can choose from. */
-  models: { id: string; name: string }[];
+  models: LinkModel[];
 };
 
 export type LinkStatus = {
@@ -150,8 +215,19 @@ export type LinkStatus = {
   signIn: SignInView | null;
 };
 
-/** The outcome of an action in the pop-up: the new status and, when it failed, why. */
-export type LinkResult = { status: LinkStatus; error: string | null };
+/**
+ * The outcome of an action in the pop-up: the new status, when it failed why, and — for an action
+ * that worked — anything worth saying about it, such as a free tier's remaining quota.
+ */
+export type LinkResult = { status: LinkStatus; error: string | null; note?: string };
 
 /** Why an AI request could not be answered. */
-export type AiFailure = "not_linked" | "rejected" | "limited" | "failed";
+export type AiFailure = "not_linked" | "no_vision" | "rejected" | "limited" | "failed";
+
+/**
+ * Why a pasted API key was not accepted.
+ *
+ * `rejected` and `unreachable` need different words: one means the key is wrong and the visitor
+ * can fix it, the other means Motif could not ask and the key may well be fine.
+ */
+export type KeyProblem = "shape" | "rejected" | "unreachable" | "failed";

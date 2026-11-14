@@ -3,6 +3,31 @@
 Questions the owner has settled, newest first. The ones still open are listed in `AGENTS.md`
 under "Open decisions". When one is settled, move it here.
 
+## 2026-11-14: Claude connects with a key, and keys are checked before they are kept
+
+**Decided by** the owner, who asked for Claude, OpenRouter and OpenAI to be connectable by account
+**or** by API key, with the key checked and the model list shown only after it passes, free models
+supported on OpenRouter, and the app aware of whether a model can see images.
+
+**The question.** How to offer Claude when Anthropic's terms bar third-party sign-in, and what to
+show about a key before it is trusted.
+
+**The decision.** Claude connects with an API key and says why, on screen, rather than offering a
+button that Anthropic would withdraw. Every key is checked against the provider before it is
+stored, and a refused key is never kept. Models carry their input modalities, and a text-only model
+is refused for an image prompt — both when it is chosen and when a prompt is sent.
+
+**What changed in the repository.** `docs/plans/claude-openrouter-opencode.md` has the detail.
+Nothing is committed for this note yet.
+
+- Claude and OpenRouter join the provider list; Claude explains its missing sign-in in the pop-up.
+- `checkApiKey` on the runtime interface; each provider is asked at its own endpoint.
+- A rejected key, an unreachable provider and a malformed key get separate wording.
+- Free models are marked, and OpenRouter's remaining daily allowance is shown after linking.
+- A text-only model is refused for an image prompt, before the request.
+
+**Still open.** OpenRouter's own PKCE sign-in (recorded under "Open decisions" in `AGENTS.md`).
+
 ## 2026-11-14: Users link their own AI account through the Pi SDK
 
 **Decided by** the owner, who asked to connect an OpenCode account or a ChatGPT subscription
