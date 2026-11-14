@@ -66,6 +66,23 @@ function reasonFor(status: number | null): AiFailure {
   return "failed";
 }
 
+const UNREACHABLE =
+  "Motif's server could not reach the provider. Check the server's internet connection, then try again.";
+
+/**
+ * Whether a request got no answer at all. Node's fetch rejects with the message "fetch failed"
+ * when the host cannot be found or the connection is refused or dropped, and the SDK passes that
+ * on, sometimes wrapped in an error of its own.
+ */
+function neverReached(error: unknown): boolean {
+  let cause = error;
+  for (let depth = 0; depth < 5 && cause instanceof Error; depth += 1) {
+    if (cause.message === "fetch failed") return true;
+    cause = cause.cause;
+  }
+  return false;
+}
+
 /** A Pi runtime for one visitor. Its credentials live in this object and nowhere else. */
 export async function createPiRuntime(): Promise<ProviderRuntime> {
   const runtime = await ModelRuntime.create({
@@ -93,16 +110,22 @@ export async function createPiRuntime(): Promise<ProviderRuntime> {
     },
 
     async signIn(providerId, interaction) {
-      await runtime.login(
-        providerId,
-        "oauth",
-        {
-          signal: interaction.signal,
-          prompt: (prompt) => interaction.ask(toQuestion(prompt)),
-          notify: (event) => interaction.notify(toEvent(event)),
-        },
-        { agentName: AGENT_NAME, getDeviceId: () => installationId },
-      );
+      try {
+        await runtime.login(
+          providerId,
+          "oauth",
+          {
+            signal: interaction.signal,
+            prompt: (prompt) => interaction.ask(toQuestion(prompt)),
+            notify: (event) => interaction.notify(toEvent(event)),
+          },
+          { agentName: AGENT_NAME, getDeviceId: () => installationId },
+        );
+      } catch (error) {
+        // The pop-up shows this message, and "fetch failed" tells a visitor nothing.
+        if (neverReached(error)) throw new Error(UNREACHABLE, { cause: error });
+        throw error;
+      }
     },
 
     async unlink(providerId) {
@@ -131,8 +154,11 @@ export async function createPiRuntime(): Promise<ProviderRuntime> {
         // Refreshes an expired sign-in, so that a revoked one is told apart from other failures.
         await runtime.getAuth(model);
       } catch (error) {
-        const expired = error instanceof ModelsError && error.code === "oauth";
-        return { ok: false, reason: expired ? "rejected" : "failed", status: null };
+        // A renewal the provider never received says nothing about the account: the link stays
+        // good, and asking the visitor to link again would be wrong.
+        const refused =
+          error instanceof ModelsError && error.code === "oauth" && !neverReached(error);
+        return { ok: false, reason: refused ? "rejected" : "failed", status: null };
       }
 
       const seen: { status: number | null } = { status: null };

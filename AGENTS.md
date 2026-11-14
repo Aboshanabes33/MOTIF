@@ -134,7 +134,7 @@ No environment variable is needed: the AI features run on the account each visit
 app. To run a production build locally, use `npm run build` and then
 `node .output/server/index.mjs`; it listens on port 3000 unless `PORT` says otherwise.
 
-Baseline on 2026-11-14 with Node.js 22.19 or later: the build and the 70 tests pass. The tests
+Baseline on 2026-11-14 with Node.js 22.19 or later: the build and the 73 tests pass. The tests
 cover account linking, the Pi SDK adapter, the pop-up and routing. The adapter tests run the
 real SDK with the network replaced, and they listen on port 1455, so they fail while a sign-in is
 running on the same machine. The typecheck fails with 1 error (`src/routes/styles.tsx:28`,

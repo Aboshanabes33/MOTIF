@@ -136,16 +136,25 @@ The owner can reverse any of these. Numbers 3 and 4 change earlier behaviour.
 - Known limits: no rate limit, so a visitor can make the server create links until the oldest are
   dropped; the token is readable by scripts on the page; unlinking does not cancel a sign-in at
   the provider, which brief §5 asks for.
+- A key is not tried when it is linked: linking sends nothing to the provider, so a wrong key
+  shows on the first AI edit, as "Your linked AI account turned the request down."
+- When a sign-in's renewal fails because OpenAI answers with a server error, Motif still reports
+  the account as turned down and asks to link again. The SDK gives no status for a renewal, only
+  text. A renewal that gets no answer at all is reported as a plain failure and keeps the link.
 
 ## How it was checked
 
-- 70 unit tests. The linking logic runs against a stand-in provider library. The Pi adapter runs
+- 73 unit tests. The linking logic runs against a stand-in provider library. The Pi adapter runs
   against the real SDK with the network replaced, including a full Sign in with ChatGPT, a token
-  renewal and a revoked sign-in. Each protection was removed in turn to confirm that a test fails
-  without it.
+  renewal, a revoked sign-in and a provider that cannot be reached. Each protection was removed
+  in turn to confirm that a test fails without it.
 - A real browser (headless Chromium) drove the app, both `npm run dev` and the production build,
   against stand-ins for OpenAI and OpenCode: the pop-up on open, linking with a key, both sign-in
   routes, cancel, failure, two visitors at once, both AI features, reload, and a server restart.
+- The production build also ran in the sandbox with no stand-ins. The sandbox cannot reach OpenAI
+  or OpenCode, so this showed only the failure side: a key links (linking sends nothing), an AI
+  edit answers "The AI couldn't finish this edit. Try again.", and a sign-in stops with "Motif's
+  server could not reach the provider."
 - Not checked: a real ChatGPT subscription, a real OpenCode key, and any real provider reply.
 
 ## What the owner needs to do

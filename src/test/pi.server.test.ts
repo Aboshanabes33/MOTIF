@@ -446,6 +446,71 @@ describe("Sign in with ChatGPT through the Pi SDK", () => {
     expect(sent.map(({ url }) => url)).toEqual([TOKEN_URL, TOKEN_URL]);
   });
 
+  it("says so in plain words when the sign-in cannot reach OpenAI", async () => {
+    stubNetwork(() => {
+      throw new TypeError("fetch failed");
+    });
+    const runtime = await createPiRuntime();
+    const signIn = await startSignIn(runtime);
+    const state = encodeURIComponent(signIn.url.searchParams.get("state") ?? "");
+    signIn.answer(
+      `http://127.0.0.1:1455/auth/callback?code=ac_9f2&state=${state}&client_id=app_71`,
+    );
+
+    await expect(signIn.finished).rejects.toMatchObject({
+      message:
+        "Motif's server could not reach the provider. Check the server's internet connection, then try again.",
+      // Kept for the server's log, where the reason for the outage can be read.
+      cause: { message: "fetch failed" },
+    });
+    expect(await runtime.linked()).toEqual([]);
+  });
+
+  it("rewords only a request that got no answer, and leaves other errors as they are", async () => {
+    stubNetwork(() => {
+      throw new TypeError("Body is unusable");
+    });
+    const runtime = await createPiRuntime();
+    const signIn = await startSignIn(runtime);
+    const state = encodeURIComponent(signIn.url.searchParams.get("state") ?? "");
+    signIn.answer(
+      `http://127.0.0.1:1455/auth/callback?code=ac_9f2&state=${state}&client_id=app_71`,
+    );
+
+    await expect(signIn.finished).rejects.toThrow("Body is unusable");
+  });
+
+  it("reports a renewal that cannot reach OpenAI as a plain failure, and keeps the link", async () => {
+    let online = true;
+    let issued = 0;
+    const sent = stubNetwork(({ url }) => {
+      if (!online) throw new TypeError("fetch failed");
+      if (url !== TOKEN_URL) return responsesStream("gpt-6.1-sol", REPLY);
+      issued += 1;
+      return tokens(issued, issued === 1 ? 100 : 3600);
+    });
+    const runtime = await createPiRuntime();
+    const signIn = await startSignIn(runtime);
+    const state = encodeURIComponent(signIn.url.searchParams.get("state") ?? "");
+    signIn.answer(
+      `http://127.0.0.1:1455/auth/callback?code=ac_9f2&state=${state}&client_id=app_71`,
+    );
+    await signIn.finished;
+    online = false;
+
+    // The first token is already due for renewal, and the renewal gets no answer.
+    const offline = await runtime.complete("openai", "gpt-6.1-sol", "hello");
+
+    expect(offline).toEqual({ ok: false, reason: "failed", status: null });
+    expect(sent.map(({ url }) => url)).toEqual([TOKEN_URL, TOKEN_URL]);
+    expect(await runtime.linked()).toEqual([{ providerId: "openai", method: "sign_in" }]);
+
+    online = true;
+    const back = await runtime.complete("openai", "gpt-6.1-sol", "hello");
+
+    expect(back).toEqual({ ok: true, text: REPLY });
+  });
+
   it("fails on a wrong redirect address, and cancelling frees the port for the next sign-in", async () => {
     stubNetwork(() => tokens(1));
     const runtime = await createPiRuntime();
