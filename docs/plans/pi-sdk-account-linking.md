@@ -41,6 +41,11 @@ What the research found:
   - OpenAI takes an API key or "Sign in with ChatGPT", which uses a ChatGPT subscription.
   - OpenCode Zen and OpenCode Go take an API key only. The SDK has no OpenCode account sign-in,
     so an OpenCode account is linked with a key.
+  - **Both statements were revisited on 2026-11-14** (`docs/plans/oauth-account-connection.md`).
+    The SDK has a second OpenAI provider, `openai-codex`, whose sign-in has a device-code branch that
+    needs no localhost port and no pasted URL; and OpenCode's account connection is a device flow the
+    SDK lacks but that a MOTIF-owned adapter can implement. This document's limits above still hold
+    for the flow the app ships today.
 - A sign-in is a conversation between the SDK and the app. The SDK reports events (the address of
   the provider's page, progress) and asks questions (paste a code, choose an option). Motif
   passes these between the server and the pop-up.
