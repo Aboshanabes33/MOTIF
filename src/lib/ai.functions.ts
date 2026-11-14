@@ -1,17 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import { ask } from "./ai.server";
 
 type StyleIn = { name: string; colors: string[]; display: string; body: string; logo?: string | undefined; motion: string[] };
-
-async function ask(prompt: string): Promise<string> {
-  const { generateResponse } = await import("@lovable.dev/ai-gateway");
-  const res = await generateResponse({ model: "openai/gpt-6-astra", input: prompt });
-  let out = "";
-  for (const item of (res as { output?: unknown[] }).output ?? []) {
-    const it = item as { type?: string; content?: { type: string; text?: string }[] };
-    if (it.type === "message") for (const c of it.content ?? []) if (c.type === "output_text") out += c.text ?? "";
-  }
-  return out;
-}
 
 function parseJson<T>(s: string): T {
   const m = s.match(/\{[\s\S]*\}/);
