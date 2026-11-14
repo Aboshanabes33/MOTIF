@@ -22,9 +22,11 @@ export default defineConfig(({ command }) => ({
         client: { files: ["**/*.server.*", "**/server/**"], specifiers: ["server-only"] },
       },
     }),
-    // Build only: the dev server runs TanStack Start's own SSR. The output is a Cloudflare Worker
-    // unless NITRO_PRESET names another target, e.g. `NITRO_PRESET=node-server npm run build`.
-    command === "build" && nitro({ defaultPreset: "cloudflare-module" }),
+    // Build only: the dev server runs TanStack Start's own SSR. The output is a Node.js server,
+    // started with `node .output/server/index.mjs`. Keep it a long-running Node.js process:
+    // account linking holds its links in the server's memory and runs the Pi SDK, and a
+    // serverless or edge target (the earlier default was a Cloudflare Worker) can do neither.
+    command === "build" && nitro({ defaultPreset: "node-server" }),
     viteReact(),
   ],
 }));
