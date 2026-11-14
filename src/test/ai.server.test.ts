@@ -1,91 +1,101 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment node
+import { afterEach, describe, expect, it } from "vitest";
 
-import { ask } from "@/lib/ai.server";
+import { AccountLinks, type Completion, type ProviderRuntime } from "@/lib/account-link.server";
+import { AiError, ask, explainAiFailure } from "@/lib/ai.server";
 
-const KEY = "sk-proj-Zx81TESTKEYq7Lm";
+const SHARED = Symbol.for("motif.accountLinks");
+const scope = globalThis as { [SHARED]?: AccountLinks };
 
-function respondWith(status: number, body: unknown) {
-  const text = typeof body === "string" ? body : JSON.stringify(body);
-  const fetchMock = vi.fn<typeof fetch>(async () => new Response(text, { status }));
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
+/** Installs the server's links with a provider library that answers every prompt with `reply`. */
+function useLinks(reply: (prompt: string, model: string) => Completion) {
+  const runtime: ProviderRuntime = {
+    linkApiKey: async () => {},
+    signIn: async () => {},
+    unlink: async () => {},
+    linked: async () => [{ providerId: "opencode", method: "api_key" }],
+    models: async () => [{ id: "kimi-k2.7-code", name: "Kimi K2.7 Code" }],
+    complete: async (_providerId, modelId, prompt) => reply(prompt, modelId),
+  };
+  const links = new AccountLinks({ createRuntime: async () => runtime });
+  scope[SHARED] = links;
+  return links;
 }
 
 afterEach(() => {
-  vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
+  delete scope[SHARED];
 });
 
 describe("ask", () => {
-  it("sends the prompt to the OpenAI Responses API and returns the reply text", async () => {
-    vi.stubEnv("OPENAI_API_KEY", KEY);
-    // Shape of a real Responses API reply: a reasoning item, then the message split in two parts.
-    const fetchMock = respondWith(200, {
-      id: "resp_0a1b",
-      object: "response",
-      status: "completed",
-      output: [
-        {
-          id: "rs_0a1b",
-          type: "reasoning",
-          summary: [{ type: "summary_text", text: "Naming the style." }],
-          content: [{ type: "reasoning_text", text: "The user wants a short name." }],
-        },
-        {
-          id: "msg_0a1b",
-          type: "message",
-          role: "assistant",
-          content: [
-            { type: "output_text", text: '{"name":"Night', annotations: [] },
-            { type: "output_text", text: ' Drive"}', annotations: [] },
-          ],
-        },
-      ],
+  it("answers on the account the caller's token names", async () => {
+    const links = useLinks((prompt, model) => ({ ok: true, text: `${model} read: ${prompt}` }));
+    const { token } = (await links.linkApiKey(null, "opencode", "sk-zen-Qm81TESTKEYq7Lm")).status;
+
+    await expect(ask(token, "Extract a style")).resolves.toBe(
+      "kimi-k2.7-code read: Extract a style",
+    );
+  });
+
+  it("fails as not linked for a caller without a link", async () => {
+    useLinks(() => ({ ok: true, text: "never reached" }));
+
+    for (const token of [null, undefined, "made-up-token"]) {
+      const error: unknown = await ask(token, "hello").catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(AiError);
+      expect(error).toMatchObject({
+        reason: "not_linked",
+        message: "AI request failed: not_linked",
+      });
+    }
+  });
+
+  it("fails with the reason and the status only", async () => {
+    const links = useLinks(() => ({ ok: false, reason: "rejected", status: 401 }));
+    const { token } = (await links.linkApiKey(null, "opencode", "sk-zen-Qm81TESTKEYq7Lm")).status;
+
+    const error: unknown = await ask(token, "hello").catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(AiError);
+    expect(error).toMatchObject({
+      reason: "rejected",
+      message: "AI request failed: rejected, HTTP 401",
     });
+  });
+});
 
-    await expect(ask("Extract a style")).resolves.toBe('{"name":"Night Drive"}');
+describe("explainAiFailure", () => {
+  const fallback = "The AI couldn't finish this edit. Try again.";
 
-    expect(fetchMock).toHaveBeenCalledExactlyOnceWith("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: "gpt-6-astra", input: "Extract a style" }),
+  it("asks for a link when none exists, and offers the pop-up", () => {
+    expect(explainAiFailure(new AiError("not_linked", null), fallback)).toEqual({
+      error: "Link an AI account to use this.",
+      relink: true,
     });
   });
 
-  it("fails without a key and sends nothing", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "");
-    const fetchMock = respondWith(200, {});
-
-    await expect(ask("hello")).rejects.toThrow("OPENAI_API_KEY is not set");
-
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("reports OpenAI's error code but not its message, which repeats part of the key", async () => {
-    vi.stubEnv("OPENAI_API_KEY", KEY);
-    respondWith(401, {
-      error: {
-        message:
-          "Incorrect API key provided: sk-proj-********q7Lm. You can find your API key at https://platform.openai.com/account/api-keys.",
-        type: "invalid_request_error",
-        param: null,
-        code: "invalid_api_key",
-      },
+  it("points at the account when the provider turned the request down", () => {
+    expect(explainAiFailure(new AiError("rejected", 401), fallback)).toEqual({
+      error:
+        "Your linked AI account turned the request down. Link it again, or pick another model.",
+      relink: true,
     });
-
-    const error: unknown = await ask("hello").catch((e: unknown) => e);
-
-    expect(error).toBeInstanceOf(Error);
-    const { message } = error as Error;
-    expect(message).toBe("OpenAI request failed: HTTP 401 (invalid_api_key)");
-    expect(message).not.toContain("sk-proj");
-    expect(message).not.toContain("q7Lm");
   });
 
-  it("still reports the status when the error body is not JSON", async () => {
-    vi.stubEnv("OPENAI_API_KEY", KEY);
-    respondWith(502, "<html><body>502 Bad Gateway</body></html>");
+  it("does not offer the pop-up for a quota or rate limit", () => {
+    expect(explainAiFailure(new AiError("limited", 429), fallback)).toEqual({
+      error: "Your linked AI account is out of quota or rate limited. Try again later.",
+      relink: false,
+    });
+  });
 
-    await expect(ask("hello")).rejects.toThrow("OpenAI request failed: HTTP 502 (no error code)");
+  it("keeps the caller's own message for any other failure", () => {
+    expect(explainAiFailure(new AiError("failed", 500), fallback)).toEqual({
+      error: fallback,
+      relink: false,
+    });
+    expect(explainAiFailure(new SyntaxError("Unexpected token"), fallback)).toEqual({
+      error: fallback,
+      relink: false,
+    });
   });
 });

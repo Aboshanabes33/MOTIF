@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/Shell";
 import { useStore } from "@/lib/store";
 import { extractStyle } from "@/lib/ai.functions";
+import { readLinkToken } from "@/lib/link-token";
+import { useAccountLink } from "@/lib/useAccountLink";
 
 export const Route = createFileRoute("/styles")({
   head: () => ({ meta: [
@@ -21,11 +23,13 @@ function Styles() {
   const { styles, addStyle, setActiveStyleId } = useStore();
   const nav = useNavigate();
   const run = useServerFn(extractStyle);
+  const { openLink } = useAccountLink();
   const [busy, setBusy] = useState(false);
   const learn = async (kind: "md" | "url" | "video", content: string, label: string, src: string) => {
     setBusy(true);
-    const { style, error } = await run({ data: { kind, content } }).catch(() => ({ style: null, error: "Failed" }));
+    const { style, error, relink } = await run({ data: { link: readLinkToken(), kind, content } }).catch(() => ({ style: null, error: "Failed", relink: false }));
     setBusy(false);
+    if (relink) openLink();
     if (!style) return toast.error(error ?? "Failed");
     const id = addStyle({ ...style, kind: label, source: src });
     setActiveStyleId(id); toast.success(`Learned "${style.name}"`);

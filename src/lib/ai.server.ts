@@ -1,30 +1,40 @@
-// The one place that talks to an AI provider. Server only: it reads the provider key, and the
-// build refuses to let browser code import a *.server.* file (see vite.config.ts).
+// Where the app asks a model for text. Server only: the build refuses to let browser code import
+// a *.server.* file (see vite.config.ts). A request runs on the account the calling browser
+// linked (account-link.server.ts); the server has no AI credential of its own.
 
-/** Sends one prompt to the model and returns the text of its reply. */
-export async function ask(prompt: string): Promise<string> {
-  const apiKey = process.env["OPENAI_API_KEY"];
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not set in the server environment.");
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: "gpt-6-astra", input: prompt }),
-  });
-  if (!response.ok) {
-    // Report OpenAI's error code, never its message: the message can repeat part of the key.
-    const body = (await response.json().catch(() => null)) as {
-      error?: { code?: unknown; type?: unknown };
-    } | null;
-    const code = String(body?.error?.code ?? body?.error?.type ?? "no error code");
-    throw new Error(`OpenAI request failed: HTTP ${response.status} (${code})`);
+import type { AiFailure } from "./account-link";
+import { accountLinks } from "./account-link.server";
+
+/** An AI request that got no reply. Safe to log: it never repeats what the provider answered. */
+export class AiError extends Error {
+  constructor(
+    readonly reason: AiFailure,
+    status: number | null,
+  ) {
+    super(`AI request failed: ${reason}${status === null ? "" : `, HTTP ${status}`}`);
+    this.name = "AiError";
   }
-  const res = (await response.json()) as { output?: unknown[] };
-  let out = "";
-  for (const item of res.output ?? []) {
-    const it = item as { type?: string; content?: { type: string; text?: string }[] };
-    if (it.type === "message") {
-      for (const c of it.content ?? []) if (c.type === "output_text") out += c.text ?? "";
-    }
-  }
-  return out;
+}
+
+/** Sends one prompt to the model of the caller's linked account and returns the reply text. */
+export async function ask(linkToken: unknown, prompt: string): Promise<string> {
+  const result = await accountLinks().complete(linkToken, prompt);
+  if (!result.ok) throw new AiError(result.reason, result.status);
+  return result.text;
+}
+
+const EXPLANATIONS: Record<Exclude<AiFailure, "failed">, string> = {
+  not_linked: "Link an AI account to use this.",
+  rejected: "Your linked AI account turned the request down. Link it again, or pick another model.",
+  limited: "Your linked AI account is out of quota or rate limited. Try again later.",
+};
+
+/** What to tell the user about a failed request, and whether linking an account would fix it. */
+export function explainAiFailure(
+  error: unknown,
+  fallback: string,
+): { error: string; relink: boolean } {
+  const reason = error instanceof AiError ? error.reason : "failed";
+  if (reason === "failed") return { error: fallback, relink: false };
+  return { error: EXPLANATIONS[reason], relink: reason !== "limited" };
 }
