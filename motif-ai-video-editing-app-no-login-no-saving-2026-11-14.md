@@ -18,5 +18,5 @@ Turn the 4 screenshots into a working app that looks the same: dark three-column
 
 ## Technical details
 - TanStack routes as above; state in a React context store (no database, no auth).
-- Lovable Cloud enabled only to run AI on the server (Lovable AI Gateway, default chat model) via server functions: `chat` (streams reply + returns structured edit plan JSON) and `extractStyle` (from .md text or fetched website HTML).
+- AI runs only on the server (OpenAI API) via server functions: `chat` (streams reply + returns structured edit plan JSON) and `extractStyle` (from .md text or fetched website HTML).
 - Design tokens in styles.css (dark theme, Inter for UI, Anton for display), shadcn components, react-markdown for replies.

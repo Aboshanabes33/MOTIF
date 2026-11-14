@@ -1,38 +1,4 @@
-<!-- LOVABLE:BEGIN -->
-> [!IMPORTANT]
-> This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
-> published git history — force pushing, or rebasing/amending/squashing commits
-> that are already pushed — as it rewrites history on Lovable's side and the
-> user will likely lose their project history.
->
-> Commits you push to the connected branch sync back to Lovable and show up in
-> the editor, so keep the branch in a working state.
-
-## What Lovable manages
-
-Rules outside this block are the project's own. Change the pieces below in
-Lovable, not by hand. With the [Lovable MCP](https://mcp.lovable.dev)
-connected, `send_message` asks Lovable to do it; otherwise ask the user to
-use the editor.
-
-- **Database.** Do not add or edit `supabase/migrations/` or `drizzle/`.
-  Ask Lovable to change the schema.
-- **Generated files.** Do not edit a file whose header says it is automatically
-  generated.
-- **AI gateway.** Keep model calls on Lovable's gateway, and keep
-  `LOVABLE_API_KEY` out of browser code.
-- **Connectors.** Lovable provides native connectors. `list_connectors` shows
-  which are enabled; `add_connector` only returns the dashboard link. When a
-  connector is enabled, calls go through the connector gateway and need
-  `LOVABLE_API_KEY`. When Lovable does not provide one, users can bring their
-  own key and store it in Secrets.
-- **Secrets.** Lovable manages them. Do not put secret values in the repo.
-<!-- LOVABLE:END -->
-
 # MOTIF: project rules for coding agents
-
-Everything from this heading down is the project's own. The part above is managed by Lovable:
-never edit between the `LOVABLE:BEGIN` and `LOVABLE:END` markers.
 
 MOTIF is an AI creative-workflow app for video editors, motion designers and marketers: teach it
 a brand or style once, and every AI-assisted edit follows it without re-sending references or
@@ -47,8 +13,8 @@ production application defined in `product-brif.md`. It is an engineering task, 
 - The existing UI under `src/` is the source of truth for visual design and user experience.
 - `motif-ai-video-editing-app-no-login-no-saving-2026-11-14.md` is the plan the demo was
   generated from. It is historical: where it differs from the code, trust the code.
-- An explicit instruction from the owner in the current task overrides these project rules. If
-  following it would break one of Lovable's rules above, say so before you act.
+- `docs/decisions.md` records what the owner has already settled. Do not reopen those questions.
+- An explicit instruction from the owner in the current task overrides these project rules.
 
 ## Status
 
@@ -57,7 +23,7 @@ Phase 1 of 6, the repository audit. Its deliverable is a written audit and plan,
 foundation, creative intelligence, media pipeline, production readiness) have not started.
 
 Until the owner approves the plan, do not restructure the repository, add a backend, auth, a
-database or an agent runtime, or install the packages those would need. Four questions are also
+database or an agent runtime, or install the packages those would need. Three questions are also
 waiting on the owner: see "Open decisions".
 
 ## Rules that always apply
@@ -103,8 +69,8 @@ it exists yet.
 
 Verified on 2026-11-14.
 
-- **Stack:** TanStack Start (React 19, Vite 8, server-side rendering) through the Lovable preset
-  `@lovable.dev/vite-tanstack-config`, strict TypeScript, Tailwind CSS v4, shadcn/ui.
+- **Stack:** TanStack Start (React 19, Vite 8, server-side rendering), strict TypeScript,
+  Tailwind CSS v4, shadcn/ui.
 - **Routes** (`src/routes/`): `/` new session, `/session/$id` chat, `/session/$id/edit`
   timeline editor, `/styles` style library.
 - **UI:** in `src/components/`, `Shell.tsx` (app shell, sidebar, style panel), `Composer.tsx` and
@@ -114,12 +80,14 @@ Verified on 2026-11-14.
   memory and resets on refresh. There is no auth, database or persistence, and attached media
   is never uploaded: only its file name is used.
 - **Server:** two server functions in `src/lib/ai.functions.ts`, `chatEdit` and `extractStyle`.
-  Each makes one non-streaming call to the Lovable AI Gateway, which needs `LOVABLE_API_KEY` in
-  the server environment. Results, thumbnails and timelines are mock visuals; no video is
-  rendered or exported.
-- **Deployment:** Nitro preset `cloudflare-module` (Cloudflare Workers).
-- **Missing:** there is no Supabase client or migration, no `.env` file and no CI. Zod is
-  installed but never imported, and TanStack Query is wired up but runs no queries.
+  Each makes one non-streaming call to the OpenAI Responses API (model `gpt-6-astra`) through
+  `ask()` in `src/lib/ai.server.ts`, the only code that talks to an AI provider. It needs
+  `OPENAI_API_KEY` in the server environment; without the key both functions return an error to
+  the UI. Results, thumbnails and timelines are mock visuals; no video is rendered or exported.
+- **Build target:** a Cloudflare Worker (Nitro preset `cloudflare-module`), unless `NITRO_PRESET`
+  names another target such as `node-server`. Nothing deploys the app: it has no host and no CI.
+- **Missing:** there is no Supabase client or migration. Zod is installed but never imported, and
+  TanStack Query is wired up but runs no queries.
 
 ## Open decisions
 
@@ -127,66 +95,70 @@ Only the owner can settle these. Do not pick a side or start work that depends o
 raise the question instead. When one is settled, delete it here and record it in
 `docs/decisions.md`.
 
-1. **Lovable or the brief.** Lovable's rules above forbid hand-written `supabase/migrations/`
-   and require model calls to stay on Lovable's gateway, and Lovable builds deploy to Cloudflare
-   Workers. The brief requires migrations in the repository, the Pi SDK with each user's own
-   provider credentials, and a Node.js backend. No single change can satisfy both. Does MOTIF
-   stay on Lovable and accept those limits, move off it, or keep only the web app there?
-2. **Where the backend runs.** The Pi SDK needs a long-running Node.js (22.19 or later) or Bun
-   process, and server-side FFmpeg and whisper.cpp are native programs. Cloudflare Workers can
-   run none of them, and a server host is a new cost that brief §13 allows only with explicit
-   justification.
-3. **Repository layout and package manager.** Today there is one app, with `package-lock.json`
-   and `bun.lock` both committed. The brief suggests `apps/` and `packages/` on pnpm workspaces
-   if a monorepo is justified. Do not move files or introduce pnpm before that is approved.
-4. **Vocabulary.** The demo models a `Style` and a `Session`; the brief models brand profiles,
+1. **Where MOTIF runs.** The web app has no host, and its build targets a Cloudflare Worker. The
+   Pi SDK needs a long-running Node.js (22.19 or later) or Bun process, and server-side FFmpeg
+   and whisper.cpp are native programs. Cloudflare Workers can run none of them, and a server
+   host is a new cost that brief §13 allows only with explicit justification.
+2. **Repository layout and package manager.** Today there is one app, with `package-lock.json`
+   and `bun.lock` both committed; the two pin about 190 packages at different versions. The
+   brief suggests `apps/` and `packages/` on pnpm workspaces if a monorepo is justified. Do not
+   move files or introduce pnpm before that is approved.
+3. **Vocabulary.** The demo models a `Style` and a `Session`; the brief models brand profiles,
    projects and agent sessions. Agree the mapping before designing a schema or renaming UI.
 
 ## Commands
 
 ```sh
 npm ci             # install from package-lock.json
-npm run dev        # dev server at http://localhost:8080
+npm run dev        # dev server at http://localhost:8080; add `-- --host` to expose it
 npm run build      # production build into .output/
 npm test           # Vitest, single run
 npx tsc --noEmit   # typecheck; there is no npm script for it
 npm run lint       # ESLint, with Prettier as a rule
 ```
 
-Baseline on 2026-11-14 with Node.js 22: the build and the tests pass (one routing smoke test).
-The typecheck fails with 1 error (`src/routes/styles.tsx:25`, TS7030). Lint fails with 229
-`prettier/prettier` formatting errors and 9 warnings.
+The AI features need `OPENAI_API_KEY`: copy `.env.example` to `.env`, which `npm run dev` reads.
+To run a production build locally, use `NITRO_PRESET=node-server npm run build` and then
+`node .output/server/index.mjs`, with the key in the environment.
+
+Baseline on 2026-11-14 with Node.js 22: the build and the 5 tests pass (a routing smoke test,
+and the OpenAI call in `src/lib/ai.server.ts` against a stubbed `fetch`). The typecheck fails
+with 1 error (`src/routes/styles.tsx:25`, TS7030). Lint fails with 216 `prettier/prettier`
+formatting errors and 9 warnings. `npm run preview` answers HTTP 500 on every page:
+`vite.config.ts` loads Nitro for builds only.
 
 - Before reporting a code change as finished, run the tests, the typecheck and the build. Add no
   new failures, report against this baseline, and never call a failing run clean.
-- Do not run `npm run format` as part of other work: it rewrites every file, including
-  Lovable's part of this one. New files must pass `npx eslint <file>`. In a file that already
-  fails formatting, keep the diff minimal. Clearing the baseline is its own formatting-only
-  commit, needs the owner's go-ahead, and must leave this file untouched.
-- A dependency change must update both lockfiles: the Lovable template is set up for Bun, and
-  `bunfig.toml` refuses package versions published in the last 24 hours. If you cannot run Bun,
-  say so in your report.
+- Do not run `npm run format` as part of other work: it rewrites most files. New files must pass
+  `npx eslint <file>`. In a file that already fails formatting, keep the diff minimal. Clearing
+  the baseline is its own formatting-only commit and needs the owner's go-ahead.
+- A dependency change must update both lockfiles until the package manager is settled. Write
+  `package-lock.json` with npm 11 or later (`npx npm@11 install`; npm 10 strips its `libc`
+  fields) and `bun.lock` with `npx bun install --lockfile-only`. `bunfig.toml` refuses package
+  versions published in the last 24 hours.
 
 ## Conventions
 
 - TypeScript is `strict` with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
   Import from `src/` through the `@/` alias. Prettier: 100 columns, double quotes, semicolons.
-- Never hand-edit generated files: `src/routeTree.gen.ts` and `src/generated/ai-gateway/*`.
+- Never hand-edit the generated `src/routeTree.gen.ts`.
 - Before editing `vite.config.ts`, `src/styles.css` or `src/start.ts`, read the comments in that
   file; before adding a route, read `src/routes/README.md`. They state constraints that break
-  the build, or remove CSRF protection, when ignored.
+  the build, change the CSS that ships, or remove a protection (CSRF, server-only imports) when
+  ignored.
 - Style with the semantic Tailwind tokens defined in `src/styles.css` (`bg-background`,
   `text-brand-yellow`, `bg-track-video`), not raw colors. The theme is dark only.
-- Server functions use `createServerFn` in `*.functions.ts`; server-only modules are named
-  `*.server.ts`.
+- Server functions use `createServerFn` in `*.functions.ts`. Server-only modules are named
+  `*.server.ts` or live in a `server/` directory: the build fails when browser code imports one.
 
 ## Security
 
 Brief §5 and §9 are binding. In this codebase that means:
 
-- Secrets (provider keys, OAuth tokens, the Supabase service-role key, Whop credentials,
-  `LOVABLE_API_KEY`) exist only in the server environment: never in the repository, a log, an
+- Secrets (provider keys such as `OPENAI_API_KEY`, OAuth tokens, the Supabase service-role key,
+  Whop credentials) exist only in the server environment: never in the repository, a log, an
   error message, or a `VITE_`-prefixed variable, which the build injects into the browser bundle.
+  Locally they go in `.env`, which git ignores; commit only `.env.example`.
 - Every server entry point validates input with a Zod schema, checks that the caller owns the
   data, and validates model output before using it.
 - Never trust a path or URL from a user or a model. Keep file operations inside the authorized
@@ -200,13 +172,14 @@ Brief §5 and §9 are binding. In this codebase that means:
 - Rate-limit expensive operations (AI calls, media processing).
 
 Known gaps in the demo, to close when the backend is built and never to copy: the AI server
-functions have no auth or rate limit, their validators are identity casts, model output is
-parsed without a schema, `extractStyle` fetches any URL without a timeout, size cap or address
-filter, and user text is interpolated straight into prompts.
+functions have no auth or rate limit, so anyone who can reach a deployment spends the owner's
+OpenAI key. Their validators are identity casts, model output is parsed without a schema,
+`extractStyle` fetches any URL without a timeout, size cap or address filter, and user text is
+interpolated straight into prompts.
 
 ## Git
 
-- Never rewrite pushed history. `main` syncs to Lovable, so it must always build and pass tests.
+- Never rewrite pushed history. Keep `main` building and passing its tests.
 - Keep commits small and single-purpose; never mix formatting with behavior changes.
 
 ## Maintaining this file
