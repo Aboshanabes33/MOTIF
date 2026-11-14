@@ -206,5 +206,7 @@ filter, and user text is interpolated straight into prompts.
 
 - Update "Status", "Open decisions", "The code today" and the baseline in the same change that
   makes them stale. Keep the file short; detail belongs in `product-brif.md` or `docs/`.
+- `README.md` tells people what the demo does, what is not real yet, how to run it and how to
+  link an AI account. Update it in the same change that makes it stale.
 - Write scoped package names in backticks: `CLAUDE.md` imports this file, and Claude Code reads
   a bare `@path` as a file to import.
