@@ -125,6 +125,11 @@ raise the question instead. When one is settled, delete it here and record it in
    move files or introduce pnpm before that is approved.
 3. **Vocabulary.** The demo models a `Style` and a `Session`; the brief models brand profiles,
    projects and agent sessions. Agree the mapping before designing a schema or renaming UI.
+4. **OpenRouter's own sign-in.** OpenRouter offers a PKCE flow that would let it connect with a
+   button, no pasted key, and a hosted callback — the same shape as the ChatGPT code. Its terms do
+   not settle whether a third-party app should present that sign-in, and the flow has not been
+   verified against a live account. OpenRouter connects with a checked API key until this is
+   settled. See `docs/plans/claude-openrouter-opencode.md`.
 
 ## Commands
 
@@ -141,7 +146,7 @@ No environment variable is needed: the AI features run on the account each visit
 app. To run a production build locally, use `npm run build` and then
 `node .output/server/index.mjs`; it listens on port 3000 unless `PORT` says otherwise.
 
-Baseline on 2026-11-14 with Node.js 22.19 or later: the build and the 73 tests pass. The tests
+Baseline on 2026-11-14 with Node.js 22.19 or later: the build and the 100 tests pass. The tests
 cover account linking, the Pi SDK adapter, the pop-up and routing. The adapter tests run the
 real SDK with the network replaced, and they listen on port 1455, so they fail while a sign-in is
 running on the same machine. The typecheck fails with 1 error (`src/routes/styles.tsx:28`,

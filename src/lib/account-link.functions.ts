@@ -37,8 +37,17 @@ export const cancelSignIn = createServerFn({ method: "POST" })
   .handler(({ data }) => accountLinks().cancelSignIn(data.token));
 
 export const chooseModel = createServerFn({ method: "POST" })
-  .validator(z.object({ token, model: z.string().max(200) }))
-  .handler(({ data }) => accountLinks().chooseModel(data.token, data.model));
+  .validator(
+    z.object({
+      token,
+      model: z.string().max(200),
+      // Set by a screen whose next prompt carries a picture, so a text-only model is refused here.
+      needsVision: z.boolean().optional(),
+    }),
+  )
+  .handler(({ data }) =>
+    accountLinks().chooseModel(data.token, data.model, data.needsVision ?? false),
+  );
 
 export const unlinkAccount = createServerFn({ method: "POST" })
   .validator(z.object({ token }))

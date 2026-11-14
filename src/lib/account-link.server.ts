@@ -8,10 +8,13 @@
 import { randomBytes } from "node:crypto";
 
 import {
+  acceptsImages,
   hasSignIn,
   linkProvider,
   type AiFailure,
+  type KeyProblem,
   type LinkMethod,
+  type LinkModel,
   type LinkProviderId,
   type LinkResult,
   type LinkStatus,
@@ -57,12 +60,32 @@ export type Completion =
   { ok: true; text: string } | { ok: false; reason: AiFailure; status: number | null };
 
 /**
+ * What a provider answered when asked whether a key works.
+ *
+ * `ok` carries the models the key can use, so a verified key and its catalogue arrive together
+ * and the pop-up never shows a "linked" state with an empty model list.
+ */
+export type KeyCheck =
+  | {
+      ok: true;
+      models: LinkModel[];
+      /** Something worth telling the visitor about the key, such as a free tier's remaining quota. */
+      detail?: string;
+    }
+  | { ok: false; problem: KeyProblem; detail?: string };
+
+/**
  * What Motif needs from an AI provider library, for one visitor. The Pi SDK implements it in
  * pi.server.ts; nothing else in Motif knows which library is behind it.
  */
 export interface ProviderRuntime {
   /** Stores an API key for the provider, replacing its earlier credential. */
   linkApiKey(providerId: string, apiKey: string): Promise<void>;
+  /**
+   * Asks the provider whether `apiKey` works, without storing it. Called before the key is kept,
+   * so a wrong key is refused here rather than surfacing later as a failed AI request.
+   */
+  checkApiKey(providerId: string, apiKey: string): Promise<KeyCheck>;
   /**
    * Runs the provider's sign-in to the end. Rejects when it fails or `signal` fires. `kind` picks
    * between the provider's device-code and browser ways in, for a provider that has both;
@@ -76,9 +99,12 @@ export interface ProviderRuntime {
   unlink(providerId: string): Promise<void>;
   /** The providers that hold a credential. */
   linked(): Promise<{ providerId: string; method: LinkMethod }[]>;
-  /** The models the provider's credential can use. */
-  models(providerId: string): Promise<{ id: string; name: string }[]>;
-  /** Sends one prompt and returns the reply text. Fails without a credential for the provider. */
+  /** The models the provider's credential can use, with what each accepts. */
+  models(providerId: string): Promise<LinkModel[]>;
+  /**
+   * Sends one prompt and returns the reply text. Fails without a credential for the provider.
+   * Whether the model can see the prompt is settled above this, in `AccountLinks.complete`.
+   */
   complete(providerId: string, modelId: string, prompt: string): Promise<Completion>;
 }
 
@@ -121,7 +147,13 @@ type Attempt = {
 type Link = {
   token: string;
   runtime: ProviderRuntime;
-  account: { providerId: LinkProviderId; method: LinkMethod; model: string } | null;
+  account: {
+    providerId: LinkProviderId;
+    method: LinkMethod;
+    model: string;
+    /** Set when the visitor asked for a model that can see, so choosing a text-only one is refused. */
+    needsVision?: boolean;
+  } | null;
   attempt: Attempt | null;
   usedAt: number;
 };
@@ -134,6 +166,23 @@ const NOTHING: LinkStatus = { token: null, account: null, signIn: null };
 const API_KEY = /^[A-Za-z0-9][\w.~+/=:-]{7,511}$/;
 
 const BUSY = "Someone else is signing in on this server right now. Try again in a minute.";
+
+/**
+ * What to say about a key the provider did not accept.
+ *
+ * The three cases are kept apart on purpose: a wrong key is the visitor's to fix, an unreachable
+ * provider is not, and telling them the key is bad when the network was down would send them to
+ * regenerate a key that works.
+ */
+const KEY_WORDING: Record<KeyProblem, (providerId: LinkProviderId) => string> = {
+  shape: () => "That doesn't look like an API key. Paste it exactly as your provider shows it.",
+
+  rejected: (providerId) =>
+    `${linkProvider(providerId).name} didn't accept that key. Check it and paste it again.`,
+  unreachable: (providerId) =>
+    `Motif's server couldn't reach ${linkProvider(providerId).name} to check the key. Try again in a moment.`,
+  failed: () => "Motif couldn't check that key just now. Try again in a moment.",
+};
 
 /**
  * The questions a sign-in may show, decided by the way in and by whether this build can finish a
@@ -213,11 +262,22 @@ export class AccountLinks {
   ): Promise<LinkResult> {
     const key = apiKey.trim();
     if (!API_KEY.test(key)) {
-      const error =
-        "That doesn't look like an API key. Paste it exactly as your provider shows it.";
-      return { status: await this.status(token), error };
+      return { status: await this.status(token), error: KEY_WORDING.shape(providerId) };
     }
     const link = this.find(token) ?? (await this.create());
+    // Ask the provider before keeping anything. A key that fails here was never stored, so the
+    // visitor's existing account is untouched and there is nothing to clean up.
+    const check = await link.runtime
+      .checkApiKey(providerId, key)
+      .catch((error: unknown): KeyCheck => {
+        console.error("Checking an API key failed:", String(error).replaceAll(key, "[key]"));
+        return { ok: false, problem: "failed" };
+      });
+    if (!check.ok) {
+      this.discardIfEmpty(link);
+      return { status: await this.statusOf(link), error: KEY_WORDING[check.problem](providerId) };
+    }
+    const note = check.detail;
     await this.endSignIn(link);
     try {
       await link.runtime.linkApiKey(providerId, key);
@@ -234,7 +294,7 @@ export class AccountLinks {
         error: "Motif couldn't store that key. Try again.",
       };
     }
-    return { status: await this.view(link), error: null };
+    return { status: await this.view(link), error: null, ...(note ? { note } : {}) };
   }
 
   /**
@@ -310,18 +370,32 @@ export class AccountLinks {
     return this.statusOf(link);
   }
 
-  async chooseModel(token: unknown, model: string): Promise<LinkResult> {
+  /**
+   * Picks the link's model. `needsVision` is set when the caller knows the next prompt carries a
+   * picture, which is what makes refusing a text-only model here rather than after a failed send.
+   */
+  async chooseModel(token: unknown, model: string, needsVision = false): Promise<LinkResult> {
     const link = this.find(token);
     if (!link?.account)
       return { status: await this.status(token), error: "Link an account first." };
     const models = await link.runtime.models(link.account.providerId);
-    if (!models.some((candidate) => candidate.id === model)) {
+    const chosen = models.find((candidate) => candidate.id === model);
+    if (!chosen) {
       return {
         status: await this.view(link),
         error: "That model isn't available on this account.",
       };
     }
+    // The vision decision belongs here, where the model list is known, so a text-only model is
+    // never left selected for a prompt that carries a picture.
+    if (needsVision && !acceptsImages(chosen)) {
+      return {
+        status: await this.view(link),
+        error: `${chosen.name} works on text only. Choose a model that accepts images, or send the prompt without one.`,
+      };
+    }
     link.account.model = model;
+    link.account.needsVision = needsVision;
     return { status: await this.view(link), error: null };
   }
 
@@ -342,10 +416,21 @@ export class AccountLinks {
     return NOTHING;
   }
 
-  /** Sends one prompt to the model of the linked account. */
-  async complete(token: unknown, prompt: string): Promise<Completion> {
+  /**
+   * Sends one prompt to the model of the linked account.
+   *
+   * `images` counts the pictures travelling with it. A model that cannot see refuses the prompt
+   * here, before the request: a provider's own 400 explains it far worse, and the picker has
+   * already been told what the model accepts.
+   */
+  async complete(token: unknown, prompt: string, images = 0): Promise<Completion> {
     const link = this.find(token);
     if (!link?.account) return { ok: false, reason: "not_linked", status: null };
+    if (images > 0) {
+      const models = await link.runtime.models(link.account.providerId);
+      const chosen = models.find((candidate) => candidate.id === link.account!.model);
+      if (chosen && !acceptsImages(chosen)) return { ok: false, reason: "no_vision", status: null };
+    }
     return link.runtime.complete(link.account.providerId, link.account.model, prompt);
   }
 

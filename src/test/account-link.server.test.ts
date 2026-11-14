@@ -1,10 +1,11 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { LinkMethod } from "@/lib/account-link";
+import type { LinkMethod, LinkModel } from "@/lib/account-link";
 import {
   AccountLinks,
   type AccountLinksOptions,
+  type KeyCheck,
   type ProviderRuntime,
   type SignInInteraction,
   type SignInPolicy,
@@ -14,7 +15,7 @@ const KEY = "sk-zen-Qm81TESTKEYq7Lm0000";
 const NOTHING = { token: null, account: null, signIn: null };
 const CALLBACK = "http://127.0.0.1:1455/auth/callback";
 
-const MODELS: Record<string, { id: string; name: string }[]> = {
+const MODELS: Record<string, LinkModel[]> = {
   openai: [
     { id: "gpt-6-astra", name: "GPT-6 Astra" },
     { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
@@ -27,6 +28,19 @@ const MODELS: Record<string, { id: string; name: string }[]> = {
     { id: "big-pickle", name: "Big Pickle" },
     { id: "kimi-k2.7-code", name: "Kimi K2.7 Code" },
   ],
+  anthropic: [
+    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", input: ["text", "image"] },
+    { id: "claude-haiku-4-6", name: "Claude Haiku 4.6", input: ["text"] },
+  ],
+  openrouter: [
+    {
+      id: "google/gemma-4-31b-it:free",
+      name: "Gemma 4 31B (free)",
+      input: ["text", "image"],
+      free: true,
+    },
+    { id: "liquid/lfm-2.5-2.6b:free", name: "LFM2.5 (free)", input: ["text"], free: true },
+  ],
   "opencode-go": [{ id: "kimi-k3.1-pro", name: "Kimi K3.1 Pro" }],
 };
 
@@ -36,9 +50,17 @@ type SignInScript = (
 ) => Promise<void>;
 
 /** A provider library that keeps what it is given and answers with what it would have sent. */
-function fakeRuntime(signInScript: SignInScript, models = MODELS) {
+function fakeRuntime(
+  signInScript: SignInScript,
+  models = MODELS,
+  check?: (providerId: string, apiKey: string) => KeyCheck | Promise<KeyCheck>,
+) {
   const stored = new Map<string, { method: LinkMethod; secret: string }>();
   const runtime: ProviderRuntime = {
+    async checkApiKey(providerId, apiKey) {
+      stored.set(`checked:${providerId}`, { method: "api_key", secret: apiKey });
+      return check?.(providerId, apiKey) ?? { ok: true, models: models[providerId] ?? [] };
+    },
     async linkApiKey(providerId, apiKey) {
       stored.set(providerId, { method: "api_key", secret: apiKey });
     },
@@ -64,13 +86,18 @@ function fakeRuntime(signInScript: SignInScript, models = MODELS) {
   return { runtime, stored };
 }
 
-function setup(options: Partial<AccountLinksOptions> & { signIn?: SignInScript } = {}) {
+function setup(
+  options: Partial<AccountLinksOptions> & {
+    signIn?: SignInScript;
+    check?: (providerId: string, apiKey: string) => KeyCheck | Promise<KeyCheck>;
+  } = {},
+) {
   const clock = { now: 1_000_000 };
   const runtimes: ReturnType<typeof fakeRuntime>[] = [];
-  const { signIn = async () => {}, ...rest } = options;
+  const { signIn = async () => {}, check, ...rest } = options;
   const links = new AccountLinks({
     createRuntime: async () => {
-      const made = fakeRuntime(signIn);
+      const made = fakeRuntime(signIn, MODELS, check);
       runtimes.push(made);
       return made.runtime;
     },
@@ -132,6 +159,83 @@ describe("linking with an API key", () => {
       });
     }
     expect(runtimes).toHaveLength(0);
+  });
+
+  it("asks the provider whether the key works before keeping it", async () => {
+    const asked: string[] = [];
+    const { links, runtimes } = setup({
+      check: (providerId, apiKey) => {
+        asked.push(`${providerId}:${apiKey}`);
+        return { ok: true, models: MODELS[providerId] ?? [] };
+      },
+    });
+
+    const { status, error } = await links.linkApiKey(null, "anthropic", KEY);
+
+    expect(error).toBeNull();
+    expect(asked).toEqual([`anthropic:${KEY}`]);
+    expect(status.account).toMatchObject({ providerId: "anthropic", method: "api_key" });
+    // Verified and stored are two different things: the check must not leave a credential.
+    expect(runtimes[0]!.stored.get("anthropic")?.method).toBe("api_key");
+  });
+
+  it("passes on what the check learned about the key, such as a free allowance", async () => {
+    const { links } = setup({
+      check: (providerId) => ({
+        ok: true,
+        models: MODELS[providerId] ?? [],
+        detail: "Free models: 43 requests left today.",
+      }),
+    });
+
+    const result = await links.linkApiKey(null, "openrouter", KEY);
+
+    expect(result.error).toBeNull();
+    expect(result.note).toBe("Free models: 43 requests left today.");
+    expect(result.status.account?.providerId).toBe("openrouter");
+  });
+
+  it("refuses a key the provider rejects, and stores nothing", async () => {
+    const { links, runtimes } = setup({
+      check: () => ({ ok: false, problem: "rejected" }),
+    });
+
+    const { status, error } = await links.linkApiKey(null, "openrouter", KEY);
+
+    expect(error).toBe("OpenRouter didn't accept that key. Check it and paste it again.");
+    expect(status.account).toBeNull();
+    // Nothing was linked: the only trace is the check itself, which never becomes a credential.
+    expect(status.token).toBeNull();
+    expect(runtimes.flatMap((made) => [...made.stored.keys()])).toEqual(["checked:openrouter"]);
+  });
+
+  it("does not blame the key when the provider could not be reached", async () => {
+    // The two failures need different words: one is the visitor's to fix, the other is not.
+    const { links } = setup({ check: () => ({ ok: false, problem: "unreachable" }) });
+
+    const { error } = await links.linkApiKey(null, "anthropic", KEY);
+
+    expect(error).toBe(
+      "Motif's server couldn't reach Claude (API key) to check the key. Try again in a moment.",
+    );
+    expect(error).not.toMatch(/didn't accept/);
+  });
+
+  it("keeps the link's existing account when a new key is refused", async () => {
+    // A failed attempt must not cost the visitor the account they already had.
+    let accept = true;
+    const { links } = setup({
+      check: () =>
+        accept ? { ok: true, models: MODELS["opencode"]! } : { ok: false, problem: "rejected" },
+    });
+    const { status } = await links.linkApiKey(null, "opencode", KEY);
+    accept = false;
+
+    const result = await links.linkApiKey(status.token, "opencode", KEY);
+
+    expect(result.error).toMatch(/didn't accept/);
+    expect(result.status.account).toMatchObject({ providerId: "opencode", method: "api_key" });
+    expect(await links.complete(status.token, "hi")).toMatchObject({ ok: true });
   });
 
   it("stores the key and answers with a token that names the link", async () => {
@@ -260,6 +364,46 @@ describe("linking with an API key", () => {
     expect((await links.chooseModel("made-up-token", "big-pickle")).error).toBe(
       "Link an account first.",
     );
+  });
+
+  it("refuses a text-only model when the prompt carries a picture", async () => {
+    // The OpenRouter case: some free models take text only, and the picker must not leave one
+    // selected for an image prompt. The check happens on choosing, before anything is sent.
+    const { links } = setup();
+    const { token } = (await links.linkApiKey(null, "openrouter", KEY)).status;
+
+    const blind = await links.chooseModel(token, "liquid/lfm-2.5-2.6b:free", true);
+    expect(blind.error).toBe(
+      "LFM2.5 (free) works on text only. Choose a model that accepts images, or send the prompt without one.",
+    );
+    expect(blind.status.account?.model).toBe("google/gemma-4-31b-it:free");
+
+    const seeing = await links.chooseModel(token, "google/gemma-4-31b-it:free", true);
+    expect(seeing.error).toBeNull();
+    expect(seeing.status.account?.model).toBe("google/gemma-4-31b-it:free");
+  });
+
+  it("refuses to send a picture to a text-only model, before the request", async () => {
+    // The same rule at send time, for a caller that swapped the model without picking it again.
+    const { links, runtimes } = setup();
+    const { token } = (await links.linkApiKey(null, "openrouter", KEY)).status;
+    await links.chooseModel(token, "liquid/lfm-2.5-2.6b:free");
+
+    const result = await links.complete(token, "what is this?", 1);
+
+    expect(result).toEqual({ ok: false, reason: "no_vision", status: null });
+    expect(await links.complete(token, "what is this?", 0)).toMatchObject({ ok: true });
+    expect(runtimes).toHaveLength(1);
+  });
+
+  it("allows a text-only model when nothing needs to be seen", async () => {
+    const { links } = setup();
+    const { token } = (await links.linkApiKey(null, "openrouter", KEY)).status;
+
+    const chosen = await links.chooseModel(token, "liquid/lfm-2.5-2.6b:free");
+
+    expect(chosen.error).toBeNull();
+    expect(chosen.status.account?.model).toBe("liquid/lfm-2.5-2.6b:free");
   });
 
   it("keeps the chosen model when the same provider is linked again", async () => {

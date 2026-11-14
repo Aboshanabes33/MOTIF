@@ -11,6 +11,7 @@ const scope = globalThis as { [SHARED]?: AccountLinks };
 function useLinks(reply: (prompt: string, model: string) => Completion) {
   const runtime: ProviderRuntime = {
     linkApiKey: async () => {},
+    checkApiKey: async () => ({ ok: true, models: [] }),
     signIn: async () => {},
     unlink: async () => {},
     linked: async () => [{ providerId: "opencode", method: "api_key" }],

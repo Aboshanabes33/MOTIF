@@ -103,6 +103,8 @@ describe("the account pop-up when the app opens", () => {
     // ChatGPT is not here: it has no API key, so the key form must not offer it.
     expect(providers.map((option) => option.textContent)).toEqual([
       "OpenAI (API key)",
+      "Claude (API key)",
+      "OpenRouter",
       "OpenCode Zen",
       "OpenCode Go",
     ]);
@@ -157,6 +159,89 @@ describe("the account pop-up when the app opens", () => {
 });
 
 describe("linking with an API key", () => {
+  it("explains why Claude has no sign-in button, rather than hiding the provider", async () => {
+    openApp();
+    const dialog = within(await popUp());
+
+    // Anthropic's terms bar third-party sign-in, so the reason is on screen next to the key field.
+    expect(
+      dialog.getByText(
+        "Claude plans can't sign in to other apps. Anthropic asks for an API key instead.",
+      ),
+    ).toBeInTheDocument();
+    expect(dialog.queryByRole("button", { name: /Claude/ })).not.toBeInTheDocument();
+  });
+
+  it("shows OpenRouter's free-tier limits once it is chosen", async () => {
+    openApp();
+    const dialog = within(await popUp());
+
+    fireEvent.change(dialog.getByLabelText("Provider"), { target: { value: "openrouter" } });
+
+    expect(dialog.getByText(/about 20 requests a minute/)).toBeInTheDocument();
+    // The key is checked before it is stored, and the form says so.
+    expect(dialog.getByText(/checks the key with OpenRouter before linking/)).toBeInTheDocument();
+  });
+
+  it("marks a model free and says when it cannot see", async () => {
+    // The picker is where a text-only free model has to be visible before it is chosen.
+    const account = {
+      providerId: "openrouter" as const,
+      method: "api_key" as const,
+      model: "google/gemma-4-31b-it:free",
+      models: [
+        {
+          id: "google/gemma-4-31b-it:free",
+          name: "Gemma 4 31B (free)",
+          input: ["text", "image"] as ("text" | "image")[],
+          free: true,
+        },
+        {
+          id: "liquid/lfm-2.5-2.6b:free",
+          name: "LFM2.5 (free)",
+          input: ["text"] as ("text" | "image")[],
+          free: true,
+        },
+      ],
+    };
+    window.localStorage.setItem("motif.link", TOKEN);
+    api.getLinkStatus.mockResolvedValue({
+      token: TOKEN,
+      signIn: null,
+      account: { ...account, models: [...account.models] },
+    });
+    openApp();
+    fireEvent.click(await screen.findByRole("button", { name: /AI account/ }));
+    const dialog = within(await popUp("Your AI account"));
+
+    const options = within(await dialog.findByLabelText("Model")).getAllByRole("option");
+
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Gemma 4 31B (free) — Free · images",
+      "LFM2.5 (free) — Free · text only",
+    ]);
+  });
+
+  it("says how much of the free allowance is left after the key is checked", async () => {
+    // OpenRouter reports today's remaining free requests when the key is checked; a free-tier
+    // user runs into that ceiling long before anything else, so the pop-up says it up front.
+    api.linkApiKey.mockResolvedValue({
+      status: LINKED,
+      error: null,
+      note: "Free models: 43 requests left today.",
+    });
+    openApp();
+    const dialog = within(await popUp());
+
+    fireEvent.change(dialog.getByLabelText("Provider"), { target: { value: "openrouter" } });
+    fireEvent.change(dialog.getByLabelText(/API key/i), { target: { value: "sk-or-v1-test" } });
+    fireEvent.click(dialog.getByRole("button", { name: /Link/ }));
+
+    expect(await dialog.findByRole("status")).toHaveTextContent(
+      "Free models: 43 requests left today.",
+    );
+  });
+
   it("sends the key to the server once and keeps only the token it gets back", async () => {
     api.linkApiKey.mockResolvedValue({ status: LINKED, error: null });
     openApp();
