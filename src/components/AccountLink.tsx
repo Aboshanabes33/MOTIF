@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
-  LINK_PROVIDERS,
+  API_KEY_PROVIDERS,
+  SIGN_IN_PROVIDERS,
+  keyProvider,
   linkProvider,
   type LinkProviderId,
   type LinkResult,
@@ -209,9 +211,9 @@ function Choose(props: {
   onApiKey: (providerId: LinkProviderId, apiKey: string) => void;
   onSkip: () => void;
 }) {
-  // Start the key form on a provider that has no sign-in: a key is its only way in.
-  const first = LINK_PROVIDERS.find((provider) => !("signIn" in provider)) ?? LINK_PROVIDERS[0];
-  const [providerId, setProviderId] = useState<LinkProviderId>(first.id);
+  // Start the key form on the first provider that takes a key; the list never shows an
+  // account-only provider, which would offer a field it cannot accept.
+  const [providerId, setProviderId] = useState<LinkProviderId>(API_KEY_PROVIDERS[0]!.id);
   const [apiKey, setApiKey] = useState("");
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -220,8 +222,8 @@ function Choose(props: {
   return (
     <div className="grid gap-5">
       <section className="grid gap-2">
-        <h3 className="text-sm font-semibold">Sign in to a subscription</h3>
-        {LINK_PROVIDERS.filter((provider) => "signIn" in provider).map((provider, index) => (
+        <h3 className="text-sm font-semibold">Connect your subscription</h3>
+        {SIGN_IN_PROVIDERS.map((provider, index) => (
           <Button
             key={provider.id}
             ref={index === 0 ? focusOnMount : undefined}
@@ -232,6 +234,9 @@ function Choose(props: {
             {provider.signIn}
           </Button>
         ))}
+        <p className="text-xs text-muted-foreground">
+          You approve once on the provider&apos;s own page. Motif does the rest.
+        </p>
       </section>
       <form className="grid gap-3" onSubmit={submit}>
         <h3 className="text-sm font-semibold">Use an API key</h3>
@@ -242,11 +247,11 @@ function Choose(props: {
             value={providerId}
             disabled={props.busy}
             onChange={(event) => {
-              const chosen = LINK_PROVIDERS.find((provider) => provider.id === event.target.value);
+              const chosen = keyProvider(event.target.value);
               if (chosen) setProviderId(chosen.id);
             }}
           >
-            {LINK_PROVIDERS.map((provider) => (
+            {API_KEY_PROVIDERS.map((provider) => (
               <option key={provider.id} value={provider.id}>
                 {provider.name}
               </option>
@@ -266,8 +271,8 @@ function Choose(props: {
           />
         </label>
         <p className="text-xs text-muted-foreground">
-          OpenCode accounts link with a key. Motif&apos;s server keeps the key in memory until you
-          unlink or it restarts, and never stores it in your browser.
+          Motif&apos;s server keeps the key in memory until you unlink or it restarts, and never
+          stores it in your browser.
         </p>
         <DialogFooter className="gap-2 sm:space-x-0">
           <Button type="button" variant="ghost" onClick={props.onSkip}>
@@ -319,27 +324,30 @@ function SignIn(props: {
     event.preventDefault();
     if (prompt) props.onAnswer(prompt.id, answer.trim());
   };
+  // A device-code sign-in shows one code and one link; a browser one shows a link only. Both are
+  // described by what the user does there, never by what OAuth is doing underneath.
+  const link = view.code?.url ?? view.url;
   return (
     <div className="grid gap-4">
-      {view.url && (
+      {view.code && (
+        <div className="grid gap-2 rounded-lg border border-input p-3">
+          <p className="text-xs text-muted-foreground">Enter this code on {provider.name}</p>
+          <code className="select-all font-mono text-lg tracking-[0.2em] text-foreground">
+            {view.code.value}
+          </code>
+        </div>
+      )}
+      {link && (
         <Button asChild>
-          <a ref={focusOnMount} href={view.url} target="_blank" rel="noopener noreferrer">
-            Open the {provider.name} sign-in page <ExternalLink />
+          <a ref={focusOnMount} href={link} target="_blank" rel="noopener noreferrer">
+            {view.code ? "Open the approval page" : `Open the ${provider.name} sign-in page`}{" "}
+            <ExternalLink />
           </a>
         </Button>
       )}
-      {view.code && (
-        <p className="text-sm">
-          Enter this code on{" "}
-          <a className="underline" href={view.code.url} target="_blank" rel="noopener noreferrer">
-            the {provider.name} sign-in page
-          </a>
-          : <code className="rounded bg-secondary px-1.5 py-0.5 font-mono">{view.code.value}</code>
-        </p>
-      )}
-      {view.url || view.code ? (
+      {link ? (
         <p className="text-sm text-muted-foreground">
-          Approve the request there. This window carries on by itself when you are done.
+          Approve the request there and this window carries on by itself.
         </p>
       ) : (
         !prompt && <p className="text-sm text-muted-foreground">Starting the sign-in…</p>
@@ -362,9 +370,7 @@ function SignIn(props: {
       {prompt && prompt.kind !== "select" && (
         <form className="grid gap-2" onSubmit={submit}>
           <label className={FIELD_LABEL}>
-            {prompt.kind === "manual_code"
-              ? "Did the page fail to load after you approved? Copy its address from the address bar and paste it here."
-              : prompt.message}
+            {prompt.message}
             <Input
               type={prompt.kind === "secret" ? "password" : "text"}
               autoComplete="off"

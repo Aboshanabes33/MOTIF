@@ -7,6 +7,7 @@ import {
   type AccountLinksOptions,
   type ProviderRuntime,
   type SignInInteraction,
+  type SignInPolicy,
 } from "@/lib/account-link.server";
 
 const KEY = "sk-zen-Qm81TESTKEYq7Lm0000";
@@ -18,6 +19,10 @@ const MODELS: Record<string, { id: string; name: string }[]> = {
     { id: "gpt-6-astra", name: "GPT-6 Astra" },
     { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
   ],
+  "openai-codex": [
+    { id: "gpt-6-astra", name: "GPT-6 Astra" },
+    { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
+  ],
   opencode: [
     { id: "big-pickle", name: "Big Pickle" },
     { id: "kimi-k2.7-code", name: "Kimi K2.7 Code" },
@@ -25,7 +30,10 @@ const MODELS: Record<string, { id: string; name: string }[]> = {
   "opencode-go": [{ id: "kimi-k3.1-pro", name: "Kimi K3.1 Pro" }],
 };
 
-type SignInScript = (interaction: SignInInteraction) => Promise<void>;
+type SignInScript = (
+  interaction: SignInInteraction,
+  options: { kind: "device_code" | "browser"; policy: SignInPolicy },
+) => Promise<void>;
 
 /** A provider library that keeps what it is given and answers with what it would have sent. */
 function fakeRuntime(signInScript: SignInScript, models = MODELS) {
@@ -34,8 +42,8 @@ function fakeRuntime(signInScript: SignInScript, models = MODELS) {
     async linkApiKey(providerId, apiKey) {
       stored.set(providerId, { method: "api_key", secret: apiKey });
     },
-    async signIn(providerId, interaction) {
-      await signInScript(interaction);
+    async signIn(providerId, interaction, options) {
+      await signInScript(interaction, options);
       stored.set(providerId, { method: "sign_in", secret: "access-token-1" });
     },
     async unlink(providerId) {
@@ -73,17 +81,37 @@ function setup(options: Partial<AccountLinksOptions> & { signIn?: SignInScript }
   return { links, clock, runtimes };
 }
 
-/** A sign-in that shows its page and waits for the pasted redirect address, like ChatGPT's. */
-function browserSignIn(received: string[] = []): SignInScript {
+/**
+ * A sign-in of the kind the web app uses: it shows one code, opens no address, asks nothing, and
+ * finishes when the provider's poll turns over.
+ */
+function deviceSignIn(finished: number[] = []): SignInScript {
+  return async (interaction, { policy }) => {
+    const answer = await interaction.ask({
+      kind: "select",
+      message: "Select OpenAI Codex login method:",
+      options: [
+        { id: "browser", label: "Browser login (default)" },
+        { id: "device_code", label: "Device code login (headless)" },
+      ],
+    });
+    if (answer !== "device_code") throw new Error("Motif asks for the device code.");
+    void policy;
+    interaction.notify({
+      kind: "code",
+      value: "WDJB-MJHT",
+      url: "https://auth.openai.com/codex/device",
+    });
+    interaction.notify({ kind: "message", message: "Waiting for you to approve" });
+    finished.push(1);
+  };
+}
+
+/** A sign-in that shows its page and then waits, so only a timeout or a cancel can end it. */
+function openSignIn(): SignInScript {
   return async (interaction) => {
     interaction.notify({ kind: "url", url: "https://auth.openai.com/authorize?state=abc" });
-    const answer = await interaction.ask({
-      kind: "manual_code",
-      message: "Complete login in your browser, or paste the final redirect URL here:",
-      placeholder: CALLBACK,
-    });
-    received.push(answer);
-    interaction.notify({ kind: "message", message: "Exchanging authorization code for tokens..." });
+    await interaction.ask({ kind: "text", message: "Which workspace?" });
   };
 }
 
@@ -286,55 +314,82 @@ describe("linking with an API key", () => {
 });
 
 describe("linking with a provider sign-in", () => {
-  it("relays the sign-in: its page, its question, the answer, then the account", async () => {
-    const received: string[] = [];
-    const { links, runtimes } = setup({ signIn: browserSignIn(received) });
+  it("shows one code and no question, then the account once the provider approves", async () => {
+    const finished: number[] = [];
+    const { links, runtimes } = setup({ signIn: deviceSignIn(finished) });
 
-    const started = await links.startSignIn(null, "openai");
+    const started = await links.startSignIn(null, "openai-codex");
 
     expect(started.error).toBeNull();
     const { token, signIn } = started.status;
     expect(token).toMatch(/^[\w-]{43}$/);
     expect(started.status.account).toBeNull();
+    // Nothing to answer, nothing to open: the code is the whole of it.
     expect(signIn).toEqual({
-      providerId: "openai",
-      url: "https://auth.openai.com/authorize?state=abc",
-      prompt: {
-        id: expect.stringMatching(/^[\w-]{12}$/),
-        kind: "manual_code",
-        message: "Complete login in your browser, or paste the final redirect URL here:",
-        placeholder: CALLBACK,
-      },
+      providerId: "openai-codex",
+      kind: "device_code",
+      code: { value: "WDJB-MJHT", url: "https://auth.openai.com/codex/device" },
+      message: "Waiting for you to approve",
     });
-
-    const pasted = `${CALLBACK}?code=ac_9f2&state=abc&client_id=app_71`;
-    const stale = await links.answerSignIn(token, "another-question", pasted);
-    expect(stale.error).toBe("That sign-in is no longer waiting for an answer.");
-    expect(received).toEqual([]);
-
-    const answered = await links.answerSignIn(token, signIn!.prompt!.id, pasted);
-
-    expect(received).toEqual([pasted]);
-    expect(answered).toEqual({
-      error: null,
-      status: {
-        token,
+    expect(signIn?.prompt).toBeUndefined();
+    expect(finished).toEqual([1]);
+    expect(runtimes[0]?.stored.get("openai-codex")?.method).toBe("sign_in");
+    // The provider collected the result while the code was on screen: the next look says so.
+    await vi.waitFor(async () => {
+      expect(await links.status(token)).toMatchObject({
         signIn: null,
-        account: {
-          providerId: "openai",
-          method: "sign_in",
-          model: "gpt-6.1-sol",
-          models: MODELS["openai"],
-        },
-      },
+        account: { providerId: "openai-codex", method: "sign_in" },
+      });
     });
-    expect(runtimes[0]?.stored.get("openai")?.method).toBe("sign_in");
     expect(await links.complete(token, "hi")).toMatchObject({ ok: true });
   });
 
+  it("asks nothing of the user: no question reaches the pop-up", async () => {
+    // The adapter answers the provider's "how should we sign in?" question itself.
+    const kinds: string[] = [];
+    const { links } = setup({
+      signIn: async (interaction) => {
+        await interaction.ask({ kind: "text", message: "Workspace?" });
+        kinds.push("asked");
+      },
+    });
+
+    const { status } = await links.startSignIn(null, "openai-codex");
+
+    // A question the sign-in genuinely needs still reaches the pop-up, and is answerable.
+    expect(status.signIn?.prompt).toMatchObject({ kind: "text", message: "Workspace?" });
+    await links.answerSignIn(status.token, status.signIn!.prompt!.id, "acme");
+    expect(kinds).toEqual(["asked"]);
+  });
+
+  it("never shows the pasted-URL field, even when a provider asks for it anyway", async () => {
+    // A device-code sign-in never needs an address pasted back, so if one asks, the question is a
+    // sign the sign-in cannot finish. Explain that instead of putting the field on screen.
+    const shown: string[] = [];
+    const { links, runtimes } = setup({
+      signIn: async (interaction) => {
+        await interaction.ask({
+          kind: "manual_code",
+          message: "Paste the full callback URL from the browser",
+        });
+        shown.push("asked");
+      },
+    });
+
+    const { status } = await links.startSignIn(null, "openai-codex");
+    await vi.waitFor(async () => {
+      expect((await links.status(status.token)).signIn?.error).toBe(
+        "Motif could not finish the ChatGPT sign-in on its own. Try again, or link an API key instead.",
+      );
+    });
+
+    expect(shown).toEqual([]);
+    expect(runtimes[0]!.stored.size).toBe(0);
+  });
+
   it("answers no AI request while the sign-in is still running", async () => {
-    const { links } = setup({ signIn: browserSignIn() });
-    const { token } = (await links.startSignIn(null, "openai")).status;
+    const { links } = setup({ signIn: deviceSignIn() });
+    const { token } = (await links.startSignIn(null, "openai-codex")).status;
 
     expect(await links.complete(token, "hello")).toEqual({
       ok: false,
@@ -345,28 +400,29 @@ describe("linking with a provider sign-in", () => {
   });
 
   it("finishes by itself when the provider withdraws its question", async () => {
-    // What happens when the browser's redirect reaches the provider library directly.
-    const redirect = new AbortController();
+    // What happens when the approval arrives while a question is still open: the provider closes
+    // the question rather than letting the answer arrive late.
+    const approved = new AbortController();
     const { links } = setup({
       signIn: async (interaction) => {
         interaction.notify({ kind: "url", url: "https://auth.openai.com/authorize" });
-        const pasted = interaction.ask({
-          kind: "manual_code",
-          message: "Paste the redirect URL",
-          signal: redirect.signal,
+        const asked = interaction.ask({
+          kind: "text",
+          message: "Which workspace?",
+          signal: approved.signal,
         });
-        await pasted.catch(() => "the redirect arrived instead");
+        await asked.catch(() => "the provider approved instead");
       },
     });
-    const { token } = (await links.startSignIn(null, "openai")).status;
-    expect((await links.status(token)).signIn?.prompt?.kind).toBe("manual_code");
+    const { token } = (await links.startSignIn(null, "openai-codex")).status;
+    expect((await links.status(token)).signIn?.prompt?.kind).toBe("text");
 
-    redirect.abort();
+    approved.abort();
 
     await vi.waitFor(async () => {
       expect(await links.status(token)).toMatchObject({
         signIn: null,
-        account: { providerId: "openai", method: "sign_in" },
+        account: { providerId: "openai-codex", method: "sign_in" },
       });
     });
   });
@@ -386,26 +442,27 @@ describe("linking with a provider sign-in", () => {
       },
     });
 
-    const { signIn } = (await links.startSignIn(null, "openai")).status;
+    const { signIn } = (await links.startSignIn(null, "openai-codex")).status;
 
     expect(signIn?.url).toBeUndefined();
     expect(signIn?.code).toBeUndefined();
     expect(signIn?.message).toHaveLength(301);
     expect(signIn?.prompt).toMatchObject({ kind: "text", message: "Workspace?" });
-    await links.cancelSignIn((await links.startSignIn(null, "openai")).status.token);
+    await links.cancelSignIn((await links.startSignIn(null, "openai-codex")).status.token);
   });
 
-  it("passes on a one-time code and the choices of a question", async () => {
+  it("passes on a one-time code and the choices of a question it may show", async () => {
     const chosen: string[] = [];
     const { links } = setup({
       signIn: async (interaction) => {
+        // A provider's own choice, not the SDK's sign-in-method one: that is answered for the user.
         chosen.push(
           await interaction.ask({
             kind: "select",
-            message: "Select a login method:",
+            message: "Which organization?",
             options: [
-              { id: "browser", label: "Browser login" },
-              { id: "device_code", label: "Device code login", description: "No browser here" },
+              { id: "org_1", label: "Acme" },
+              { id: "org_2", label: "Personal", description: "Your own workspace" },
             ],
           }),
         );
@@ -417,15 +474,15 @@ describe("linking with a provider sign-in", () => {
         await interaction.ask({ kind: "text", message: "Press enter when done" });
       },
     });
-    const first = (await links.startSignIn(null, "openai")).status;
+    const first = (await links.startSignIn(null, "openai-codex")).status;
     expect(first.signIn?.prompt?.options).toEqual([
-      { id: "browser", label: "Browser login" },
-      { id: "device_code", label: "Device code login", description: "No browser here" },
+      { id: "org_1", label: "Acme" },
+      { id: "org_2", label: "Personal", description: "Your own workspace" },
     ]);
 
-    const next = await links.answerSignIn(first.token, first.signIn!.prompt!.id, "device_code");
+    const next = await links.answerSignIn(first.token, first.signIn!.prompt!.id, "org_2");
 
-    expect(chosen).toEqual(["device_code"]);
+    expect(chosen).toEqual(["org_2"]);
     expect(next.status.signIn?.code).toEqual({
       value: "WDJB-MJHT",
       url: "https://auth.openai.com/codex/device",
@@ -442,9 +499,13 @@ describe("linking with a provider sign-in", () => {
       },
     });
 
-    const { status } = await links.startSignIn(null, "openai");
+    const { status } = await links.startSignIn(null, "openai-codex");
 
-    expect(status.signIn).toEqual({ providerId: "openai", error: "OAuth state mismatch" });
+    expect(status.signIn).toEqual({
+      providerId: "openai-codex",
+      kind: "device_code",
+      error: "OAuth state mismatch",
+    });
     expect(status.account).toBeNull();
     expect(await links.cancelSignIn(status.token)).toEqual(NOTHING);
     expect(await links.status(status.token)).toEqual(NOTHING);
@@ -459,7 +520,7 @@ describe("linking with a provider sign-in", () => {
     });
     const { token } = (await links.linkApiKey(null, "opencode", KEY)).status;
 
-    const { status } = await links.startSignIn(token, "openai");
+    const { status } = await links.startSignIn(token, "openai-codex");
 
     expect(status.signIn?.error).toBe("ChatGPT authorization failed: access_denied");
     expect(status.account).toMatchObject({ providerId: "opencode", method: "api_key" });
@@ -475,55 +536,86 @@ describe("linking with a provider sign-in", () => {
     const { links } = setup({
       signIn: async (interaction) => {
         signals.push(interaction.signal);
-        await interaction.ask({ kind: "manual_code", message: "Paste the redirect URL" });
+        await interaction.ask({ kind: "text", message: "Which workspace?" });
       },
     });
-    const { token } = (await links.startSignIn(null, "openai")).status;
+    const { token } = (await links.startSignIn(null, "openai-codex")).status;
 
     expect(await links.cancelSignIn(token)).toEqual(NOTHING);
 
     expect(signals[0]?.aborted).toBe(true);
-    const again = await links.startSignIn(null, "openai");
+    const again = await links.startSignIn(null, "openai-codex");
     expect(again.error).toBeNull();
     expect(again.status.signIn?.prompt).toBeDefined();
     await links.cancelSignIn(again.status.token);
   });
 
-  it("lets one visitor sign in at a time and tells the next to wait", async () => {
-    const { links } = setup({ signIn: browserSignIn() });
-    const anna = (await links.startSignIn(null, "openai")).status;
+  it("lets two visitors connect at the same time, since a code needs no port", async () => {
+    const { links, runtimes } = setup({ signIn: deviceSignIn() });
 
-    const omar = await links.startSignIn(null, "openai");
+    const anna = (await links.startSignIn(null, "openai-codex")).status;
+    const omar = (await links.startSignIn(null, "openai-codex")).status;
+
+    // Neither is told to wait, and each sees only its own sign-in.
+    expect(omar.signIn?.code?.value).toBe("WDJB-MJHT");
+    expect(omar.token).not.toBe(anna.token);
+    expect(runtimes).toHaveLength(2);
+    expect((await links.status(anna.token)).account?.providerId).toBe("openai-codex");
+    expect((await links.status(omar.token)).account?.providerId).toBe("openai-codex");
+    expect(await links.complete(anna.token, "anna")).toMatchObject({
+      text: "openai-codex/gpt-6.1-sol as access-token-1: anna",
+    });
+  });
+
+  it("still lets only one visitor in at a time through the browser, which holds a port", async () => {
+    const { links } = setup({
+      signIn: deviceSignIn(),
+      browserSignIn: "allow",
+    });
+    const anna = (await links.startSignIn(null, "openai-codex", "browser")).status;
+
+    const omar = await links.startSignIn(null, "openai-codex", "browser");
 
     expect(omar.error).toMatch(/Someone else is signing in/);
     expect(omar.status).toEqual(NOTHING);
-    expect((await links.status(anna.token)).signIn?.prompt?.id).toBe(anna.signIn?.prompt?.id);
     await links.cancelSignIn(anna.token);
   });
 
-  it("gives an abandoned sign-in's turn to the next visitor", async () => {
-    const { links, clock } = setup({ signIn: browserSignIn() });
-    const anna = (await links.startSignIn(null, "openai")).status;
+  it("refuses the browser way in on a hosted app, where its redirect cannot arrive", async () => {
+    const { links, runtimes } = setup({ signIn: deviceSignIn() });
+
+    // The default is the hosted app's setting.
+    const { error } = await links.startSignIn(null, "openai-codex", "browser");
+
+    expect(error).toBe("Motif signs you in automatically. No address needs to be copied.");
+    expect(runtimes).toHaveLength(0);
+  });
+
+  it("gives an abandoned browser sign-in's turn to the next visitor", async () => {
+    const { links, clock } = setup({ signIn: deviceSignIn(), browserSignIn: "allow" });
+    const anna = (await links.startSignIn(null, "openai-codex", "browser")).status;
     clock.now += 60 * 1000;
     await links.status(anna.token);
     clock.now += 60 * 1000;
-    expect((await links.startSignIn(null, "openai")).error).toMatch(/Someone else/);
+    expect((await links.startSignIn(null, "openai-codex", "browser")).error).toMatch(
+      /Someone else/,
+    );
 
     // Anna's tab is gone: nothing has asked about her sign-in for more than 90 seconds.
     clock.now += 91 * 1000;
-    const omar = await links.startSignIn(null, "openai");
+    const omar = await links.startSignIn(null, "openai-codex", "browser");
 
     expect(omar.error).toBeNull();
-    expect(omar.status.signIn?.url).toBe("https://auth.openai.com/authorize?state=abc");
+    expect(omar.status.signIn?.kind).toBe("browser");
     expect(await links.status(anna.token)).toEqual(NOTHING);
     await links.cancelSignIn(omar.status.token);
   });
 
   it("restarts the link's own sign-in instead of reporting it busy", async () => {
-    const { links } = setup({ signIn: browserSignIn() });
-    const first = (await links.startSignIn(null, "openai")).status;
+    const { links } = setup({ signIn: deviceSignIn(), browserSignIn: "allow" });
+    const first = (await links.startSignIn(null, "openai-codex", "browser")).status;
 
-    const second = await links.startSignIn(first.token, "openai");
+    const second = await links.startSignIn(first.token, "openai-codex", "browser");
 
     expect(second.error).toBeNull();
     expect(second.status.token).toBe(first.token);
@@ -532,27 +624,28 @@ describe("linking with a provider sign-in", () => {
   });
 
   it("cancels a sign-in that takes too long", async () => {
-    const { links } = setup({ signIn: browserSignIn(), signInTimeoutMs: 60 });
-    const { token } = (await links.startSignIn(null, "openai")).status;
+    const { links } = setup({ signIn: openSignIn(), signInTimeoutMs: 60 });
+    const { token } = (await links.startSignIn(null, "openai-codex")).status;
 
     await vi.waitFor(async () => {
       expect((await links.status(token)).signIn).toEqual({
-        providerId: "openai",
+        providerId: "openai-codex",
+        kind: "device_code",
         url: "https://auth.openai.com/authorize?state=abc",
         error: "The sign-in took too long. Start it again.",
       });
     });
-    expect((await links.startSignIn(null, "openai")).error).toBeNull();
+    expect((await links.startSignIn(null, "openai-codex")).error).toBeNull();
   });
 
   it("linking a key instead cancels the link's running sign-in", async () => {
-    const { links } = setup({ signIn: browserSignIn() });
-    const { token } = (await links.startSignIn(null, "openai")).status;
+    const { links } = setup({ signIn: deviceSignIn() });
+    const { token } = (await links.startSignIn(null, "openai-codex")).status;
 
     const { status } = await links.linkApiKey(token, "opencode", KEY);
 
     expect(status).toMatchObject({ token, signIn: null, account: { providerId: "opencode" } });
-    expect((await links.startSignIn(null, "openai")).error).toBeNull();
+    expect((await links.startSignIn(null, "openai-codex")).error).toBeNull();
   });
 
   it("refuses a sign-in for a provider that only takes a key", async () => {
