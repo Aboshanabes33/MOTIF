@@ -22,9 +22,12 @@ Phase 1 of 6, the repository audit. Its deliverable is a written audit and plan,
 (brief §14). It has not been delivered or approved, and phases 2 to 6 (backend foundation, agent
 foundation, creative intelligence, media pipeline, production readiness) have not started.
 
+One piece of phase 3 exists ahead of the plan, at the owner's instruction: linking an AI account
+through the Pi SDK. `docs/plans/pi-sdk-account-linking.md` describes it and what it leaves open.
+
 Until the owner approves the plan, do not restructure the repository, add a backend, auth, a
-database or an agent runtime, or install the packages those would need. Three questions are also
-waiting on the owner: see "Open decisions".
+database or the agent runtime (the Pi SDK's `createAgentSession`), or install the packages those
+would need. Three questions are also waiting on the owner: see "Open decisions".
 
 ## Rules that always apply
 
@@ -73,19 +76,29 @@ Verified on 2026-11-14.
   Tailwind CSS v4, shadcn/ui.
 - **Routes** (`src/routes/`): `/` new session, `/session/$id` chat, `/session/$id/edit`
   timeline editor, `/styles` style library.
-- **UI:** in `src/components/`, `Shell.tsx` (app shell, sidebar, style panel), `Composer.tsx` and
-  `ResultCard.tsx`. Of the 46 shadcn components in `src/components/ui/`, only `dropdown-menu`
+- **UI:** in `src/components/`, `Shell.tsx` (app shell, sidebar, style panel), `Composer.tsx`,
+  `ResultCard.tsx` and `AccountLink.tsx` (the account pop-up and its sidebar entry). Of the 46
+  shadcn components in `src/components/ui/`, only `button`, `dialog`, `dropdown-menu`, `input`
   and `sonner` are used; reuse the rest before adding a UI dependency.
 - **State:** one React context store, `src/lib/store.tsx`, seeded with sample data. It lives in
   memory and resets on refresh. There is no auth, database or persistence, and attached media
-  is never uploaded: only its file name is used.
-- **Server:** two server functions in `src/lib/ai.functions.ts`, `chatEdit` and `extractStyle`.
-  Each makes one non-streaming call to the OpenAI Responses API (model `gpt-6-astra`) through
-  `ask()` in `src/lib/ai.server.ts`, the only code that talks to an AI provider. It needs
-  `OPENAI_API_KEY` in the server environment; without the key both functions return an error to
-  the UI. Results, thumbnails and timelines are mock visuals; no video is rendered or exported.
-- **Build target:** a Cloudflare Worker (Nitro preset `cloudflare-module`), unless `NITRO_PRESET`
-  names another target such as `node-server`. Nothing deploys the app: it has no host and no CI.
+  is never uploaded: only its file name is used. The one thing the browser keeps is the token of
+  its account link, in local storage.
+- **AI features:** two server functions in `src/lib/ai.functions.ts`, `chatEdit` and
+  `extractStyle`. Each sends one prompt through `ask()` in `src/lib/ai.server.ts`, which runs it
+  on the AI account the calling browser linked. Without a linked account both return an error
+  and the UI reopens the pop-up. Results, thumbnails and timelines are mock visuals; no video is
+  rendered or exported.
+- **Account linking:** when the app opens, a pop-up asks each visitor to link their own AI
+  account, with an API key or a provider sign-in. `src/lib/account-link.server.ts` keeps one
+  link per browser in the server's memory, so a restart forgets them all, and
+  `account-link.functions.ts` serves the pop-up. `src/lib/pi.server.ts` does the provider work
+  with the Pi SDK's `ModelRuntime`. The server has no AI credential of its own and reads no
+  provider key from its environment.
+- **Build target:** a Node.js server (Nitro preset `node-server`), started with
+  `node .output/server/index.mjs`. It must stay one long-running Node.js process, version 22.19
+  or later: the account links live in its memory. Nothing deploys the app: it has no host and no
+  CI.
 - **Missing:** there is no Supabase client or migration. Zod is installed but never imported, and
   TanStack Query is wired up but runs no queries.
 
@@ -95,10 +108,10 @@ Only the owner can settle these. Do not pick a side or start work that depends o
 raise the question instead. When one is settled, delete it here and record it in
 `docs/decisions.md`.
 
-1. **Where MOTIF runs.** The web app has no host, and its build targets a Cloudflare Worker. The
-   Pi SDK needs a long-running Node.js (22.19 or later) or Bun process, and server-side FFmpeg
-   and whisper.cpp are native programs. Cloudflare Workers can run none of them, and a server
-   host is a new cost that brief §13 allows only with explicit justification.
+1. **Which host runs MOTIF.** The app needs one long-running Node.js process (settled on
+   2026-11-14, see `docs/decisions.md`), and server-side FFmpeg and whisper.cpp are native
+   programs. It has no host yet, and a server host is a new cost that brief §13 allows only with
+   explicit justification.
 2. **Repository layout and package manager.** Today there is one app, with `package-lock.json`
    and `bun.lock` both committed; the two pin about 190 packages at different versions. The
    brief suggests `apps/` and `packages/` on pnpm workspaces if a monorepo is justified. Do not
@@ -117,15 +130,16 @@ npx tsc --noEmit   # typecheck; there is no npm script for it
 npm run lint       # ESLint, with Prettier as a rule
 ```
 
-The AI features need `OPENAI_API_KEY`: copy `.env.example` to `.env`, which `npm run dev` reads.
-To run a production build locally, use `NITRO_PRESET=node-server npm run build` and then
-`node .output/server/index.mjs`, with the key in the environment.
+No environment variable is needed: the AI features run on the account each visitor links in the
+app. To run a production build locally, use `npm run build` and then
+`node .output/server/index.mjs`; it listens on port 3000 unless `PORT` says otherwise.
 
-Baseline on 2026-11-14 with Node.js 22: the build and the 5 tests pass (a routing smoke test,
-and the OpenAI call in `src/lib/ai.server.ts` against a stubbed `fetch`). The typecheck fails
-with 1 error (`src/routes/styles.tsx:25`, TS7030). Lint fails with 216 `prettier/prettier`
-formatting errors and 9 warnings. `npm run preview` answers HTTP 500 on every page:
-`vite.config.ts` loads Nitro for builds only.
+Baseline on 2026-11-14 with Node.js 22.19 or later: the build and the 70 tests pass. The tests
+cover account linking, the Pi SDK adapter, the pop-up and routing. The adapter tests run the
+real SDK with the network replaced, and they listen on port 1455, so they fail while a sign-in is
+running on the same machine. The typecheck fails with 1 error (`src/routes/styles.tsx:28`,
+TS7030). Lint fails with 216 `prettier/prettier` formatting errors and 9 warnings.
+`npm run preview` answers HTTP 500 on every page: `vite.config.ts` loads Nitro for builds only.
 
 - Before reporting a code change as finished, run the tests, the typecheck and the build. Add no
   new failures, report against this baseline, and never call a failing run clean.
@@ -150,15 +164,21 @@ formatting errors and 9 warnings. `npm run preview` answers HTTP 500 on every pa
   `text-brand-yellow`, `bg-track-video`), not raw colors. The theme is dark only.
 - Server functions use `createServerFn` in `*.functions.ts`. Server-only modules are named
   `*.server.ts` or live in a `server/` directory: the build fails when browser code imports one.
+- Only `src/lib/pi.server.ts` imports the Pi SDK (`@earendil-works/*`). Everything else uses the
+  `ProviderRuntime` interface in `src/lib/account-link.server.ts`.
 
 ## Security
 
 Brief §5 and §9 are binding. In this codebase that means:
 
-- Secrets (provider keys such as `OPENAI_API_KEY`, OAuth tokens, the Supabase service-role key,
-  Whop credentials) exist only in the server environment: never in the repository, a log, an
-  error message, or a `VITE_`-prefixed variable, which the build injects into the browser bundle.
-  Locally they go in `.env`, which git ignores; commit only `.env.example`.
+- Secrets (users' provider keys and sign-in tokens, the Supabase service-role key, Whop
+  credentials) exist only on the server: never in the repository, a log, an error message, the
+  browser, or a `VITE_`-prefixed variable, which the build injects into the browser bundle.
+  Secrets of the server itself go in `.env` locally, which git ignores; commit only
+  `.env.example`.
+- Never hand the Pi SDK's default credential store, the file `auth.json`, a value a user typed:
+  it runs a key that starts with `!` as a shell command and expands `$NAME` from the server's
+  environment. Use its in-memory store, as `src/lib/pi.server.ts` does.
 - Every server entry point validates input with a Zod schema, checks that the caller owns the
   data, and validates model output before using it.
 - Never trust a path or URL from a user or a model. Keep file operations inside the authorized
@@ -171,11 +191,11 @@ Brief §5 and §9 are binding. In this codebase that means:
   informed consent. Ask for confirmation before a destructive operation or an overwriting export.
 - Rate-limit expensive operations (AI calls, media processing).
 
-Known gaps in the demo, to close when the backend is built and never to copy: the AI server
-functions have no auth or rate limit, so anyone who can reach a deployment spends the owner's
-OpenAI key. Their validators are identity casts, model output is parsed without a schema,
-`extractStyle` fetches any URL without a timeout, size cap or address filter, and user text is
-interpolated straight into prompts.
+Known gaps in the demo, to close when the backend is built and never to copy: nothing is rate
+limited, and an account link belongs to a token in the browser's local storage, not to a
+signed-in user. The validators of the two AI functions are identity casts, model output is
+parsed without a schema, `extractStyle` fetches any URL without a timeout, size cap or address
+filter, and user text is interpolated straight into prompts.
 
 ## Git
 

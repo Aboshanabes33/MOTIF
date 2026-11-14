@@ -3,6 +3,39 @@
 Questions the owner has settled, newest first. The ones still open are listed in `AGENTS.md`
 under "Open decisions". When one is settled, move it here.
 
+## 2026-11-14: Users link their own AI account through the Pi SDK
+
+**Decided by** the owner, who asked to connect an OpenCode account or a ChatGPT subscription
+through the Pi SDK, with a pop-up when the app opens that prompts the user to link an account,
+either with an API key or by connecting their own account or subscription.
+
+**The question.** Which credential do the AI features run on? Since MOTIF left Lovable they used
+one OpenAI key from the server's environment, a stand-in.
+
+**The decision.** Each user links their own AI account in the app, with an API key or a provider
+sign-in, through the Pi SDK. The Pi SDK is installed now for this, ahead of phase 3.
+
+**What changed in the repository.** `docs/plans/pi-sdk-account-linking.md` has the detail.
+
+- A pop-up asks for an account when the app opens. It offers OpenAI (an API key, or Sign in with
+  ChatGPT, which uses a ChatGPT subscription), OpenCode Zen and OpenCode Go (API keys).
+- The two AI server functions run on the linked account. `OPENAI_API_KEY` is no longer read, and
+  the server has no AI credential of its own.
+- Only the SDK's credential and model layer is used. The agent runtime is still phase 3.
+
+**What follows from it.**
+
+- The app's server must be one long-running Node.js process, version 22.19 or later: the SDK
+  needs one, and the links live in the server's memory. The build therefore targets Node.js
+  instead of a Cloudflare Worker. This settles half of the open decision "Where MOTIF runs"; the
+  other half, which host, is still open.
+- Model calls are billed to each user's own account, no longer to the owner's OpenAI key.
+
+**Not decided here.** These were chosen during the work and are the owner's to change: a link
+belongs to a browser and lasts until the server restarts, because MOTIF has no user accounts or
+database yet; each provider starts on the Pi SDK's default model (`gpt-6.1-sol` for OpenAI,
+where the demo used `gpt-6-astra`); and only the three providers above are offered.
+
 ## 2026-11-14: MOTIF leaves Lovable
 
 **Decided by** the owner, with the instruction "Remove Lovable in this Project".

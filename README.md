@@ -11,15 +11,23 @@
 
 ## Development
 
-You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+You need Node.js 22.19 or later and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
 
 ```sh
 git clone <this-repository-url>
 cd <repository-name>
 npm i
-cp .env.example .env   # then put your OpenAI API key in .env
 npm run dev            # http://localhost:8080
 ```
 
-The two AI features, edit plans and style extraction, call the OpenAI API from the server and
-need `OPENAI_API_KEY`. Without a key the app still runs and those two features show an error.
+When the app opens it asks you to link an AI account: sign in with a ChatGPT subscription, or
+paste an API key from OpenCode or OpenAI. The two AI features, edit plans and style extraction,
+run on that account. Without one the app still runs and those two features ask you to link.
+
+The link is kept in the server's memory. Restarting the server forgets it, and you link again.
+
+Sign in with ChatGPT finishes by itself when your browser and the server are on the same
+computer. When they are not, the last page of the sign-in fails to load: copy its address from
+the address bar and paste it into the pop-up.
+
+To run the production build, use `npm run build` and then `node .output/server/index.mjs`.
