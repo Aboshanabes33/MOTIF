@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { Check, Folder, Palette, PanelLeft, PanelRight, Plus, PlusCircle, User } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { AccountLinkButton } from "@/components/AccountLink";
 import { useStore, useStyle, type Style } from "@/lib/store";
 
 export function Logo() {
@@ -58,7 +59,8 @@ function Sidebar() {
           </button>
         ))}
       </div>
-      <div className="mt-auto flex items-center gap-2 px-2 pt-3 text-sm">
+      <AccountLinkButton />
+      <div className="flex items-center gap-2 px-2 pt-3 text-sm">
         <span className="grid size-6 place-items-center rounded-full bg-secondary"><User className="size-3.5" /></span> My Studio
       </div>
     </aside>
