@@ -25,6 +25,13 @@ foundation, creative intelligence, media pipeline, production readiness) have no
 One piece of phase 3 exists ahead of the plan, at the owner's instruction: linking an AI account
 through the Pi SDK. `docs/plans/pi-sdk-account-linking.md` describes it and what it leaves open.
 
+`docs/plans/oauth-account-connection.md` (2026-11-14) is the owner's requested audit and design for
+one-click, consumer-friendly account connection without callback URLs or pasted redirects. It records
+which flows the installed SDK actually supports, which are impossible in a remote multi-user
+deployment, and a six-phase plan. It settles nothing: its §7 lists five decisions that are the
+owner's. Until they are made, do not start its phases 2–4 (backend routes, encrypted credential
+store, OpenCode adapter); they depend on Whop identity and on the repository layout decision below.
+
 Until the owner approves the plan, do not restructure the repository, add a backend, auth, a
 database or the agent runtime (the Pi SDK's `createAgentSession`), or install the packages those
 would need. Three questions are also waiting on the owner: see "Open decisions".
