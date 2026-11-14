@@ -31,7 +31,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment files hold secrets (OPENAI_API_KEY). Only the example is committed.
+# Environment files hold secrets. Only the example is committed.
 .env
 .env.*
 !.env.example

@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { StoreProvider } from "../lib/store";
+import { AccountLinkProvider } from "../components/AccountLink";
 import { Toaster } from "../components/ui/sonner";
 
 function NotFoundComponent() {
@@ -123,7 +124,9 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <StoreProvider>
-        <Outlet />
+        <AccountLinkProvider>
+          <Outlet />
+        </AccountLinkProvider>
         <Toaster />
       </StoreProvider>
     </QueryClientProvider>
