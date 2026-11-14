@@ -341,6 +341,29 @@ Goal: nothing in the shipped app asks a web user for a callback URL.
 Acceptance: a user on a remote browser can connect ChatGPT with two actions (click, approve) and sees
 zero technical text. OpenCode still needs an API key at the end of this phase.
 
+**Shipped** (branch `arena/ed5515f3-motif`). `LINK_PROVIDERS` now starts with `openai-codex`
+("ChatGPT", `signInKind: "device_code"`, `accountOnly`), and `openai` became "OpenAI (API key)".
+The pop-up splits into `SIGN_IN_PROVIDERS` (Connect buttons) and `API_KEY_PROVIDERS` (the key form,
+which never offers the account-only entry). The provider's `select` is answered inside
+`pi.server.ts`; the pasted-URL question is refused in `account-link.server.ts`, which is also the
+layer that owns the wording, and only when the build cannot finish a browser sign-in.
+
+Two details worth keeping:
+
+- **The policy is split by layer, and the caller wins.** `pi.server.ts` holds only what every build
+  must do (answer `/login method/i` with `device_code`); `account-link.server.ts` decides whether a
+  browser sign-in may run at all and whether the paste field may appear. `mergePolicy` lets the
+  caller's `allow` override the built-in one, because only the caller knows whether the server and
+  the browser share a machine.
+- **`startSignIn` waits for a device sign-in to finish, not just to show its code.** A device code
+  asks nothing of the user, and the provider often approves within the same second, so the pop-up
+  opens already Connected instead of polling a code nobody read. `settle()` therefore wakes on the
+  view changing _and_ on the sign-in returning, and `settleMs` still bounds the wait.
+
+The shared-port gate (`BUSY`) now applies only to `browser` sign-ins, which listen on
+`127.0.0.1:1455`; device-code sign-ins hold no port, so two visitors can wait for approval at the
+same time. That is a stopgap until Phase 2 replaces the gate with per-user attempts.
+
 ### Phase 2 — Attempts: concurrency and isolation (depends on Whop identity from phase 2 of the brief)
 
 1. Hono routes: `POST /api/connections/:provider/connect`, `GET /api/connections/attempts/:id`,

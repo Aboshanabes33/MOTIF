@@ -16,8 +16,14 @@ import {
 import { registerLazyOAuthFlows } from "@earendil-works/pi-ai/lazy-oauth";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
-import type { AiFailure } from "./account-link";
-import type { ProviderRuntime, SignInEvent, SignInQuestion } from "./account-link.server";
+import type { AiFailure, SignInKind } from "./account-link";
+import type {
+  ProviderRuntime,
+  SignInEvent,
+  SignInInteraction,
+  SignInPolicy,
+  SignInQuestion,
+} from "./account-link.server";
 
 // The production build bundles the SDK into the server. By default the SDK finds its sign-in
 // flows through a file path, which a bundle no longer has; this makes it load the bundled copies.
@@ -36,7 +42,8 @@ const APIS_WITHOUT_CUSTOM_FETCH = new Set(["google-generative-ai"]);
 
 function toQuestion(prompt: AuthPrompt): SignInQuestion {
   return {
-    kind: prompt.type,
+    // The policy decides whether a manual_code question may be shown; the type does not carry it.
+    kind: prompt.type as SignInQuestion["kind"],
     message: prompt.message,
     ...(prompt.type !== "select" && prompt.placeholder ? { placeholder: prompt.placeholder } : {}),
     ...(prompt.type === "select"
@@ -83,6 +90,49 @@ function neverReached(error: unknown): boolean {
   return false;
 }
 
+/**
+ * How Motif answers the questions a provider's sign-in asks, per way in.
+ *
+ * The SDK asks the `openai-codex` sign-in which way in to take, and asks the browser way in for a
+ * pasted redirect URL when the browser's redirect does not arrive. Neither question is one a
+ * Motif user should ever see: the user already chose by clicking Connect, and the web app cannot
+ * receive a redirect at all.
+ */
+const BUILT_IN_POLICY: Record<SignInKind, SignInPolicy> = {
+  device_code: { choices: [{ match: /login method/i, answer: "device_code" }] },
+  browser: {},
+};
+
+/**
+ * The decisions every build must make, plus the caller's.
+ *
+ * The device-code answer is not negotiable: without it the SDK asks the user which way in to take,
+ * which is the technical choice this exists to remove. Whether the paste field may be shown is the
+ * caller's, because it depends on whether the server and the browser are on one machine.
+ */
+function mergePolicy(base: SignInPolicy, given: SignInPolicy): SignInPolicy {
+  return {
+    choices: [...(given.choices ?? []), ...(base.choices ?? [])],
+    allow: (kind) => (given.allow ?? base.allow)?.(kind) ?? true,
+  };
+}
+
+/**
+ * Answers one question from a provider's sign-in.
+ *
+ * Only the automatic answers are settled here. Everything else goes to the pop-up, which is also
+ * where a question Motif refuses is turned away: that decision belongs to the layer that knows
+ * whether this build may show it, and it should produce the one explanation the user reads.
+ */
+function answer(
+  policy: SignInPolicy,
+  interaction: SignInInteraction,
+  prompt: AuthPrompt,
+): Promise<string> {
+  const chosen = policy.choices?.find((choice) => choice.match.test(prompt.message));
+  return chosen ? Promise.resolve(chosen.answer) : interaction.ask(toQuestion(prompt));
+}
+
 /** A Pi runtime for one visitor. Its credentials live in this object and nowhere else. */
 export async function createPiRuntime(): Promise<ProviderRuntime> {
   const runtime = await ModelRuntime.create({
@@ -109,16 +159,21 @@ export async function createPiRuntime(): Promise<ProviderRuntime> {
       });
     },
 
-    async signIn(providerId, interaction) {
+    async signIn(providerId, interaction, options) {
+      // The caller's policy wins: it is the one that knows whether this build may show a paste
+      // field. The built-in one covers what every build must do (answer the method question).
+      const policy = mergePolicy(BUILT_IN_POLICY[options.kind], options.policy);
       try {
         await runtime.login(
           providerId,
           "oauth",
           {
             signal: interaction.signal,
-            prompt: (prompt) => interaction.ask(toQuestion(prompt)),
+            prompt: (prompt) => answer(policy, interaction, prompt),
             notify: (event) => interaction.notify(toEvent(event)),
           },
+          // `agentName` names Motif on the browser sign-in's page; `getDeviceId` is the
+          // installation UUID that sign-in needs. The device-code kind uses neither.
           { agentName: AGENT_NAME, getDeviceId: () => installationId },
         );
       } catch (error) {

@@ -10,6 +10,9 @@ const providerId = z.custom<LinkProviderId>(
   (value) => LINK_PROVIDERS.some((provider) => provider.id === value),
   "Unknown provider",
 );
+// The default is the device code: the only way in that works when the browser and the server are
+// on different machines. A local build asks for the other one explicitly.
+const signInKind = z.enum(["device_code", "browser"]).default("device_code");
 
 export const getLinkStatus = createServerFn({ method: "POST" })
   .validator(z.object({ token }))
@@ -20,8 +23,10 @@ export const linkApiKey = createServerFn({ method: "POST" })
   .handler(({ data }) => accountLinks().linkApiKey(data.token, data.providerId, data.apiKey));
 
 export const startSignIn = createServerFn({ method: "POST" })
-  .validator(z.object({ token, providerId }))
-  .handler(({ data }) => accountLinks().startSignIn(data.token, data.providerId));
+  .validator(z.object({ token, providerId, kind: signInKind.optional() }))
+  .handler(({ data }) =>
+    accountLinks().startSignIn(data.token, data.providerId, data.kind ?? "device_code"),
+  );
 
 export const answerSignIn = createServerFn({ method: "POST" })
   .validator(z.object({ token, promptId: z.string().max(64), value: z.string().max(8192) }))
