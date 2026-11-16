@@ -3,6 +3,31 @@
 Questions the owner has settled, newest first. The ones still open are listed in `AGENTS.md`
 under "Open decisions". When one is settled, move it here.
 
+## 2026-11-16: Only supported provider auth is shown; the local vault is the interim boundary
+
+**Decided by** the owner, who asked for a production-ready unified AI provider authentication
+implementation at the start of ABSH-10/ABSH-96.
+
+**The question.** Which connected-provider methods MOTIF may truthfully present in a web build, and
+where the credentials and connection state live until Convex/identity is configured.
+
+**The decision.** Offer only officially supported, BYOAI methods: official API keys for OpenAI,
+Anthropic, OpenRouter, xAI, Gemini, OpenCode Zen and OpenCode Go; OpenRouter's documented BYOAI
+PKCE flow; and GitHub Copilot OAuth only after a MOTIF-owned app is registered and configured.
+Do not expose Pi's Codex/Copilot device flows, Anthropic Claude.ai login, or any ChatGPT
+subscription client. Credentials are validated, then encrypted by the signed-browser principal in
+a local AES-256-GCM vault. Once the real Convex/Whop boundary exists, replace the vault with that
+backend's owner-scoped secret storage; callers above `connection-vault.server.ts` should not need
+to change.
+
+**What changed.** `docs/provider-auth.md` records the official-source audit and the interim
+security boundary. It also records request-shape tests, mocked-network inference tests, required
+environment variables, the temporary absence of Supabase/Convex, and the limits of live testing.
+
+**Still open.** ABSH-37/ABSH-43/ABSH-9 and the host/identity decision are required before this
+boundary can be called multi-tenant production complete; GitHub Copilot needs an owner-registered
+OAuth App; no live provider keys or subscription sign-ins were used in verification.
+
 ## 2026-11-14: Claude connects with a key, and keys are checked before they are kept
 
 **Decided by** the owner, who asked for Claude, OpenRouter and OpenAI to be connectable by account

@@ -1,74 +1,87 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LinkMethod, LinkModel } from "@/lib/account-link";
-import {
-  AccountLinks,
-  type AccountLinksOptions,
-  type KeyCheck,
-  type ProviderRuntime,
-  type SignInInteraction,
-  type SignInPolicy,
-} from "@/lib/account-link.server";
+import { AccountLinks, type Completion, type ProviderRuntime } from "@/lib/account-link.server";
+import type { LinkModel } from "@/lib/provider-registry";
+import { credentialStoreFor } from "@/lib/connection-vault.server";
+
+import { json, principal, createTempVault } from "./test-vault";
 
 const KEY = "sk-zen-Qm81TESTKEYq7Lm0000";
-const NOTHING = { token: null, account: null, signIn: null };
-const CALLBACK = "http://127.0.0.1:1455/auth/callback";
-
+const OR_KEY = "sk-or-v1-" + "a".repeat(64);
 const MODELS: Record<string, LinkModel[]> = {
-  openai: [
-    { id: "gpt-6-astra", name: "GPT-6 Astra" },
-    { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
-  ],
-  "openai-codex": [
-    { id: "gpt-6-astra", name: "GPT-6 Astra" },
-    { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
-  ],
-  opencode: [
-    { id: "big-pickle", name: "Big Pickle" },
-    { id: "kimi-k2.7-code", name: "Kimi K2.7 Code" },
-  ],
+  openai: [{ id: "gpt-6.1-sol", name: "GPT-6.1 Sol", input: ["text", "image"] }],
   anthropic: [
     { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", input: ["text", "image"] },
     { id: "claude-haiku-4-6", name: "Claude Haiku 4.6", input: ["text"] },
   ],
   openrouter: [
+    { id: "openrouter/auto", name: "OpenRouter Auto", input: ["text", "image"], free: true },
     {
       id: "google/gemma-4-31b-it:free",
       name: "Gemma 4 31B (free)",
       input: ["text", "image"],
       free: true,
     },
-    { id: "liquid/lfm-2.5-2.6b:free", name: "LFM2.5 (free)", input: ["text"], free: true },
   ],
+  xai: [{ id: "grok-4.7", name: "Grok 4.7", input: ["text", "image"] }],
+  google: [{ id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", input: ["text", "image"] }],
+  opencode: [{ id: "kimi-k2.7-code", name: "Kimi K2.7 Code" }],
   "opencode-go": [{ id: "kimi-k3.1-pro", name: "Kimi K3.1 Pro" }],
 };
 
-type SignInScript = (
-  interaction: SignInInteraction,
-  options: { kind: "device_code" | "browser"; policy: SignInPolicy },
-) => Promise<void>;
+type Sent = { url: string; authorization: string | null; body: unknown };
 
-/** A provider library that keeps what it is given and answers with what it would have sent. */
-function fakeRuntime(
-  signInScript: SignInScript,
-  models = MODELS,
-  check?: (providerId: string, apiKey: string) => KeyCheck | Promise<KeyCheck>,
-) {
-  const stored = new Map<string, { method: LinkMethod; secret: string }>();
+function catalogue(models: LinkModel[]) {
+  return {
+    data: models.map((model) => ({
+      id: model.id,
+      display_name: model.name,
+      name: model.name,
+      input_modalities: model.input,
+      pricing: model.free ? { prompt: "0", completion: "0" } : undefined,
+    })),
+  };
+}
+
+/** The fake provider network. Existing per-provider mode endpoint handlers may override it. */
+function defaultNetwork({ url }: Sent): Response {
+  if (url === "https://openrouter.ai/api/v1/key") {
+    return json({ data: { free_model_daily_requests: { remaining: 43 } } });
+  }
+  if (url === "https://openrouter.ai/api/v1/auth/keys") return json({ key: OR_KEY });
+  if (url === "https://openrouter.ai/api/v1/models") return json(catalogue(MODELS["openrouter"]!));
+  if (url === "https://api.openai.com/v1/models") return json(catalogue(MODELS["openai"]!));
+  if (url.startsWith("https://api.anthropic.com/v1/models"))
+    return json(catalogue(MODELS["anthropic"]!));
+  if (url === "https://api.x.ai/v1/language-models") return json(catalogue(MODELS["xai"]!));
+  if (url === "https://generativelanguage.googleapis.com/v1beta/models") {
+    return json({
+      models: (MODELS["google"] ?? []).map((model) => ({
+        name: `models/${model.id}`,
+        displayName: model.name,
+        inputModalities: model.input,
+        supportedGenerationMethods: ["generateContent"],
+      })),
+    });
+  }
+  if (url === "https://opencode.ai/inference/v1/models")
+    return json(catalogue(MODELS["opencode"]!));
+  if (url === "https://opencode.ai/inference/go/v1/models")
+    return json(catalogue(MODELS["opencode-go"]!));
+  return json({ error: { message: "unstubbed test URL" } }, 404);
+}
+
+function fakeRuntime(principalId: string, models = MODELS) {
+  const store = credentialStoreFor(principalId);
+  const stored = new Map<string, { method: "api_key" | "openrouter_pkce"; secret: string }>();
   const runtime: ProviderRuntime = {
-    async checkApiKey(providerId, apiKey) {
-      stored.set(`checked:${providerId}`, { method: "api_key", secret: apiKey });
-      return check?.(providerId, apiKey) ?? { ok: true, models: models[providerId] ?? [] };
-    },
     async linkApiKey(providerId, apiKey) {
+      await store.modify(providerId, async () => ({ type: "api_key", key: apiKey }));
       stored.set(providerId, { method: "api_key", secret: apiKey });
     },
-    async signIn(providerId, interaction, options) {
-      await signInScript(interaction, options);
-      stored.set(providerId, { method: "sign_in", secret: "access-token-1" });
-    },
     async unlink(providerId) {
+      await store.delete(providerId);
       stored.delete(providerId);
     },
     async linked() {
@@ -77,728 +90,230 @@ function fakeRuntime(
     async models(providerId) {
       return models[providerId] ?? [];
     },
-    async complete(providerId, modelId, prompt) {
-      const credential = stored.get(providerId);
+    async complete(providerId, modelId, prompt): Promise<Completion> {
+      const credential = await store.read(providerId);
       if (!credential) return { ok: false, reason: "not_linked", status: null };
-      return { ok: true, text: `${providerId}/${modelId} as ${credential.secret}: ${prompt}` };
+      return { ok: true, text: `${providerId}/${modelId}: ${prompt}` };
     },
   };
   return { runtime, stored };
 }
 
-function setup(
-  options: Partial<AccountLinksOptions> & {
-    signIn?: SignInScript;
-    check?: (providerId: string, apiKey: string) => KeyCheck | Promise<KeyCheck>;
-  } = {},
-) {
-  const clock = { now: 1_000_000 };
+function setup(options: { respond?: (sent: Sent) => Response | Promise<Response> } = {}) {
+  const vault = createTempVault();
   const runtimes: ReturnType<typeof fakeRuntime>[] = [];
-  const { signIn = async () => {}, check, ...rest } = options;
+  const sent: Sent[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : {}));
+      const raw = init?.body;
+      const body = typeof raw === "string" ? JSON.parse(raw) : raw;
+      const request = { url, authorization: headers.get("authorization"), body };
+      sent.push(request);
+      if (options.respond) return options.respond(request);
+      return defaultNetwork(request);
+    }),
+  );
   const links = new AccountLinks({
-    createRuntime: async () => {
-      const made = fakeRuntime(signIn, MODELS, check);
+    createRuntime: async (principalId) => {
+      const made = fakeRuntime(principalId);
       runtimes.push(made);
       return made.runtime;
     },
-    now: () => clock.now,
-    settleMs: 40,
-    ...rest,
   });
-  return { links, clock, runtimes };
-}
-
-/**
- * A sign-in of the kind the web app uses: it shows one code, opens no address, asks nothing, and
- * finishes when the provider's poll turns over.
- */
-function deviceSignIn(finished: number[] = []): SignInScript {
-  return async (interaction, { policy }) => {
-    const answer = await interaction.ask({
-      kind: "select",
-      message: "Select OpenAI Codex login method:",
-      options: [
-        { id: "browser", label: "Browser login (default)" },
-        { id: "device_code", label: "Device code login (headless)" },
-      ],
-    });
-    if (answer !== "device_code") throw new Error("Motif asks for the device code.");
-    void policy;
-    interaction.notify({
-      kind: "code",
-      value: "WDJB-MJHT",
-      url: "https://auth.openai.com/codex/device",
-    });
-    interaction.notify({ kind: "message", message: "Waiting for you to approve" });
-    finished.push(1);
-  };
-}
-
-/** A sign-in that shows its page and then waits, so only a timeout or a cancel can end it. */
-function openSignIn(): SignInScript {
-  return async (interaction) => {
-    interaction.notify({ kind: "url", url: "https://auth.openai.com/authorize?state=abc" });
-    await interaction.ask({ kind: "text", message: "Which workspace?" });
-  };
+  return { links, sent, runtimes, vault };
 }
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("linking with an API key", () => {
-  it("treats a token it does not know as not linked", async () => {
-    const { links, runtimes } = setup();
+  it("shows only officially supported methods and never ChatGPT sign-in", async () => {
+    const { links, vault } = setup();
 
-    for (const token of [null, undefined, "", "made-up-token", 42, { token: "x" }]) {
-      expect(await links.status(token)).toEqual(NOTHING);
-      expect(await links.complete(token, "hello")).toEqual({
-        ok: false,
-        reason: "not_linked",
-        status: null,
-      });
-    }
-    expect(runtimes).toHaveLength(0);
+    const status = await links.status(principal("q"));
+
+    const providers = Object.fromEntries(
+      status.providers.map((provider) => [provider.id, provider]),
+    );
+    expect(
+      providers["openai"]?.methods.some((method) => method.label === "Use an OpenAI API key"),
+    ).toBe(true);
+    expect(providers["openrouter"]?.methods.map((method) => method.id)).toEqual([
+      "api_key",
+      "openrouter_pkce",
+    ]);
+    expect(providers["anthropic"]?.methods.some((method) => method.label.includes("API key"))).toBe(
+      true,
+    );
+    expect(status.providers.some((provider) => provider.id === "openai-codex")).toBe(false);
+    expect(
+      status.providers.find((provider) => provider.id === "github-copilot")?.methods[0]?.available,
+    ).toBe(false);
+
+    await vault.cleanup();
   });
 
-  it("asks the provider whether the key works before keeping it", async () => {
-    const asked: string[] = [];
-    const { links, runtimes } = setup({
-      check: (providerId, apiKey) => {
-        asked.push(`${providerId}:${apiKey}`);
-        return { ok: true, models: MODELS[providerId] ?? [] };
+  it("checks the key and stores it without exposing it in status", async () => {
+    const { links, runtimes, vault } = setup();
+
+    const { status, error, note } = await links.linkApiKey(principal("a"), "openrouter", KEY);
+
+    expect(error).toBeNull();
+    expect(note).toBe("Free models: 43 requests left today.");
+    expect(status.account).toMatchObject({
+      providerId: "openrouter",
+      method: "api_key",
+      model: "openrouter/auto",
+    });
+    expect(JSON.stringify(status)).not.toContain(KEY);
+    expect(runtimes[0]!.stored.get("openrouter")).toEqual({ method: "api_key", secret: KEY });
+
+    await vault.cleanup();
+  });
+
+  it("refuses a provider-rejected key and stores nothing", async () => {
+    const { links, runtimes, vault } = setup({
+      respond: () => json({ error: { message: "no" } }, 401),
+    });
+
+    const { status, error } = await links.linkApiKey(principal("b"), "anthropic", KEY);
+
+    expect(error).toMatch(/didn't accept/);
+    expect(status.accounts).toEqual([]);
+    expect(runtimes).toHaveLength(0);
+
+    await vault.cleanup();
+  });
+
+  it("keeps the existing connection when a replacement key is refused", async () => {
+    let accept = true;
+    const { links, vault } = setup({
+      respond: ({ url }) => {
+        if (accept) return defaultNetwork({ url, authorization: null, body: undefined });
+        return json({ error: { message: "no" } }, 401);
       },
     });
-
-    const { status, error } = await links.linkApiKey(null, "anthropic", KEY);
-
-    expect(error).toBeNull();
-    expect(asked).toEqual([`anthropic:${KEY}`]);
-    expect(status.account).toMatchObject({ providerId: "anthropic", method: "api_key" });
-    // Verified and stored are two different things: the check must not leave a credential.
-    expect(runtimes[0]!.stored.get("anthropic")?.method).toBe("api_key");
-  });
-
-  it("passes on what the check learned about the key, such as a free allowance", async () => {
-    const { links } = setup({
-      check: (providerId) => ({
-        ok: true,
-        models: MODELS[providerId] ?? [],
-        detail: "Free models: 43 requests left today.",
-      }),
-    });
-
-    const result = await links.linkApiKey(null, "openrouter", KEY);
-
-    expect(result.error).toBeNull();
-    expect(result.note).toBe("Free models: 43 requests left today.");
-    expect(result.status.account?.providerId).toBe("openrouter");
-  });
-
-  it("refuses a key the provider rejects, and stores nothing", async () => {
-    const { links, runtimes } = setup({
-      check: () => ({ ok: false, problem: "rejected" }),
-    });
-
-    const { status, error } = await links.linkApiKey(null, "openrouter", KEY);
-
-    expect(error).toBe("OpenRouter didn't accept that key. Check it and paste it again.");
-    expect(status.account).toBeNull();
-    // Nothing was linked: the only trace is the check itself, which never becomes a credential.
-    expect(status.token).toBeNull();
-    expect(runtimes.flatMap((made) => [...made.stored.keys()])).toEqual(["checked:openrouter"]);
-  });
-
-  it("does not blame the key when the provider could not be reached", async () => {
-    // The two failures need different words: one is the visitor's to fix, the other is not.
-    const { links } = setup({ check: () => ({ ok: false, problem: "unreachable" }) });
-
-    const { error } = await links.linkApiKey(null, "anthropic", KEY);
-
-    expect(error).toBe(
-      "Motif's server couldn't reach Claude (API key) to check the key. Try again in a moment.",
-    );
-    expect(error).not.toMatch(/didn't accept/);
-  });
-
-  it("keeps the link's existing account when a new key is refused", async () => {
-    // A failed attempt must not cost the visitor the account they already had.
-    let accept = true;
-    const { links } = setup({
-      check: () =>
-        accept ? { ok: true, models: MODELS["opencode"]! } : { ok: false, problem: "rejected" },
-    });
-    const { status } = await links.linkApiKey(null, "opencode", KEY);
+    const owner = principal("c");
+    const first = await links.linkApiKey(owner, "opencode", KEY);
     accept = false;
 
-    const result = await links.linkApiKey(status.token, "opencode", KEY);
+    const second = await links.linkApiKey(owner, "opencode", KEY);
 
-    expect(result.error).toMatch(/didn't accept/);
-    expect(result.status.account).toMatchObject({ providerId: "opencode", method: "api_key" });
-    expect(await links.complete(status.token, "hi")).toMatchObject({ ok: true });
+    expect(first.error).toBeNull();
+    expect(second.error).toMatch(/didn't accept/);
+    expect((await links.status(owner)).account?.providerId).toBe("opencode");
+
+    await vault.cleanup();
   });
 
-  it("stores the key and answers with a token that names the link", async () => {
-    const { links, runtimes } = setup();
+  it("keeps each browser principal apart", async () => {
+    const { links, vault } = setup();
+    const anna = principal("a");
+    const omar = principal("b");
 
-    const { status, error } = await links.linkApiKey(null, "opencode", `  ${KEY}\n`);
+    await links.linkApiKey(anna, "opencode", KEY);
 
-    expect(error).toBeNull();
-    expect(status.token).toMatch(/^[\w-]{43}$/);
-    expect(status.signIn).toBeNull();
-    expect(status.account).toEqual({
-      providerId: "opencode",
-      method: "api_key",
-      model: "kimi-k2.7-code",
-      models: MODELS["opencode"],
-    });
-    expect(runtimes[0]?.stored.get("opencode")).toEqual({ method: "api_key", secret: KEY });
-    expect(JSON.stringify(status)).not.toContain(KEY);
-    expect(await links.status(status.token)).toEqual(status);
+    expect((await links.status(anna)).account?.providerId).toBe("opencode");
+    expect((await links.status(omar)).account).toBeNull();
+
+    await vault.cleanup();
   });
 
-  it("refuses text that is not a key before any provider library sees it", async () => {
-    const { links, runtimes } = setup();
-    const notKeys = [
-      "!touch /tmp/motif-pwned",
-      "$OPENAI_API_KEY",
-      "sk-proj-abc$HOME",
-      "sk key with spaces",
-      "sk-abcd",
-      "",
-      `sk-${"a".repeat(600)}`,
-      "sk-zen-clé-secrète-000",
-    ];
+  it("deletes the stored credential on disconnect", async () => {
+    const { links, runtimes, vault } = setup();
+    const owner = principal("d");
+    await links.linkApiKey(owner, "opencode", KEY);
 
-    for (const text of notKeys) {
-      const { status, error } = await links.linkApiKey(null, "opencode", text);
-      expect(error).toMatch(/doesn't look like an API key/);
-      expect(status).toEqual(NOTHING);
-    }
-    expect(runtimes).toHaveLength(0);
+    const result = await links.unlink(owner, "opencode");
+
+    expect(result.status.accounts).toEqual([]);
+    expect(runtimes[0]!.stored.has("opencode")).toBe(false);
+
+    await vault.cleanup();
   });
 
-  it("keeps each browser's account apart", async () => {
-    const { links } = setup();
-    const anna = (await links.linkApiKey(null, "opencode", "sk-anna-0000000000")).status.token;
-    const omar = (await links.linkApiKey(null, "openai", "sk-omar-0000000000")).status.token;
-
-    expect(anna).not.toBe(omar);
-    expect(await links.complete(anna, "hi")).toEqual({
+  it("refuses to choose a text-only model for an image prompt", async () => {
+    const { links, vault } = setup();
+    const owner = principal("e");
+    await links.linkApiKey(owner, "anthropic", KEY);
+    // The default model can see, so this request may proceed.
+    await expect(links.complete(owner, "describe", 1)).resolves.toEqual({
       ok: true,
-      text: "opencode/kimi-k2.7-code as sk-anna-0000000000: hi",
-    });
-    expect(await links.complete(omar, "hi")).toEqual({
-      ok: true,
-      text: "openai/gpt-6.1-sol as sk-omar-0000000000: hi",
-    });
-  });
-
-  it("holds one account per link: linking another provider replaces the first", async () => {
-    const { links, runtimes } = setup();
-    const { token } = (await links.linkApiKey(null, "opencode", KEY)).status;
-
-    const { status } = await links.linkApiKey(token, "opencode-go", "sk-go-00000000000");
-
-    expect(status.token).toBe(token);
-    expect(status.account).toMatchObject({ providerId: "opencode-go", model: "kimi-k3.1-pro" });
-    expect([...runtimes[0]!.stored.keys()]).toEqual(["opencode-go"]);
-    expect(runtimes).toHaveLength(1);
-  });
-
-  it("falls back to the provider's first model when its default is not offered", async () => {
-    const models = { opencode: [{ id: "glm-5.3", name: "GLM 5.3" }] };
-    const links = new AccountLinks({
-      createRuntime: async () => fakeRuntime(async () => {}, models).runtime,
+      text: "anthropic/claude-sonnet-4-6: describe",
     });
 
-    const { status } = await links.linkApiKey(null, "opencode", KEY);
+    await links.chooseModel(owner, "anthropic", "claude-haiku-4-6");
+    const blind = await links.complete(owner, "describe", 1);
 
-    expect(status.account?.model).toBe("glm-5.3");
-  });
+    expect(blind).toEqual({ ok: false, reason: "no_vision", status: null });
+    expect(
+      (await links.chooseModel(owner, "anthropic", "claude-sonnet-4-6", true)).error,
+    ).toBeNull();
 
-  it("reports a provider with no model at all and keeps nothing", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const made = fakeRuntime(async () => {}, {});
-    const links = new AccountLinks({ createRuntime: async () => made.runtime });
-
-    const { status, error } = await links.linkApiKey(null, "opencode", KEY);
-
-    expect(error).toBe("Motif couldn't store that key. Try again.");
-    expect(status).toEqual(NOTHING);
-    expect(made.stored.size).toBe(0);
-    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(KEY);
-  });
-
-  it("never logs the key when the provider library fails with it in its message", async () => {
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    const made = fakeRuntime(async () => {});
-    made.runtime.linkApiKey = async (_providerId, apiKey) => {
-      throw new Error(`Credential store rejected ${apiKey}`);
-    };
-    const links = new AccountLinks({ createRuntime: async () => made.runtime });
-
-    const { status, error } = await links.linkApiKey(null, "opencode", KEY);
-
-    expect(error).toBe("Motif couldn't store that key. Try again.");
-    expect(status).toEqual(NOTHING);
-    expect(logged).toHaveBeenCalledExactlyOnceWith(
-      "Storing an API key failed:",
-      "Error: Credential store rejected [key]",
-    );
-  });
-
-  it("changes the model, but only to one the account offers", async () => {
-    const { links } = setup();
-    const { token } = (await links.linkApiKey(null, "opencode", KEY)).status;
-
-    const changed = await links.chooseModel(token, "big-pickle");
-    const refused = await links.chooseModel(token, "gpt-6.1-sol");
-
-    expect(changed).toMatchObject({ error: null, status: { account: { model: "big-pickle" } } });
-    expect(refused.error).toBe("That model isn't available on this account.");
-    expect(refused.status.account?.model).toBe("big-pickle");
-    expect(await links.complete(token, "hi")).toMatchObject({
-      text: `opencode/big-pickle as ${KEY}: hi`,
-    });
-    expect((await links.chooseModel("made-up-token", "big-pickle")).error).toBe(
-      "Link an account first.",
-    );
-  });
-
-  it("refuses a text-only model when the prompt carries a picture", async () => {
-    // The OpenRouter case: some free models take text only, and the picker must not leave one
-    // selected for an image prompt. The check happens on choosing, before anything is sent.
-    const { links } = setup();
-    const { token } = (await links.linkApiKey(null, "openrouter", KEY)).status;
-
-    const blind = await links.chooseModel(token, "liquid/lfm-2.5-2.6b:free", true);
-    expect(blind.error).toBe(
-      "LFM2.5 (free) works on text only. Choose a model that accepts images, or send the prompt without one.",
-    );
-    expect(blind.status.account?.model).toBe("google/gemma-4-31b-it:free");
-
-    const seeing = await links.chooseModel(token, "google/gemma-4-31b-it:free", true);
-    expect(seeing.error).toBeNull();
-    expect(seeing.status.account?.model).toBe("google/gemma-4-31b-it:free");
-  });
-
-  it("refuses to send a picture to a text-only model, before the request", async () => {
-    // The same rule at send time, for a caller that swapped the model without picking it again.
-    const { links, runtimes } = setup();
-    const { token } = (await links.linkApiKey(null, "openrouter", KEY)).status;
-    await links.chooseModel(token, "liquid/lfm-2.5-2.6b:free");
-
-    const result = await links.complete(token, "what is this?", 1);
-
-    expect(result).toEqual({ ok: false, reason: "no_vision", status: null });
-    expect(await links.complete(token, "what is this?", 0)).toMatchObject({ ok: true });
-    expect(runtimes).toHaveLength(1);
-  });
-
-  it("allows a text-only model when nothing needs to be seen", async () => {
-    const { links } = setup();
-    const { token } = (await links.linkApiKey(null, "openrouter", KEY)).status;
-
-    const chosen = await links.chooseModel(token, "liquid/lfm-2.5-2.6b:free");
-
-    expect(chosen.error).toBeNull();
-    expect(chosen.status.account?.model).toBe("liquid/lfm-2.5-2.6b:free");
-  });
-
-  it("keeps the chosen model when the same provider is linked again", async () => {
-    const { links } = setup();
-    const { token } = (await links.linkApiKey(null, "opencode", KEY)).status;
-    await links.chooseModel(token, "big-pickle");
-
-    const { status } = await links.linkApiKey(token, "opencode", "sk-zen-rotated-0000");
-
-    expect(status.account?.model).toBe("big-pickle");
-  });
-
-  it("unlink forgets the credential and the token", async () => {
-    const { links, runtimes } = setup();
-    const { token } = (await links.linkApiKey(null, "opencode", KEY)).status;
-
-    expect(await links.unlink(token)).toEqual(NOTHING);
-
-    expect(runtimes[0]?.stored.size).toBe(0);
-    expect(await links.status(token)).toEqual(NOTHING);
-    expect(await links.complete(token, "hi")).toMatchObject({ ok: false, reason: "not_linked" });
-  });
-
-  it("forgets a link nobody used for a day", async () => {
-    const { links, clock } = setup();
-    const { token } = (await links.linkApiKey(null, "opencode", KEY)).status;
-
-    clock.now += 23 * 60 * 60 * 1000;
-    expect((await links.status(token)).account).not.toBeNull();
-    clock.now += 23 * 60 * 60 * 1000;
-    expect((await links.status(token)).account).not.toBeNull();
-    clock.now += 25 * 60 * 60 * 1000;
-
-    expect(await links.status(token)).toEqual(NOTHING);
-  });
-
-  it("past its limit, drops the link used least recently", async () => {
-    const { links, clock } = setup({ maxLinks: 2 });
-    const first = (await links.linkApiKey(null, "opencode", KEY)).status.token;
-    clock.now += 1000;
-    const second = (await links.linkApiKey(null, "opencode", KEY)).status.token;
-    clock.now += 1000;
-    await links.status(first);
-    clock.now += 1000;
-
-    const third = (await links.linkApiKey(null, "opencode", KEY)).status.token;
-
-    expect((await links.status(first)).account).not.toBeNull();
-    expect(await links.status(second)).toEqual(NOTHING);
-    expect((await links.status(third)).account).not.toBeNull();
+    await vault.cleanup();
   });
 });
 
-describe("linking with a provider sign-in", () => {
-  it("shows one code and no question, then the account once the provider approves", async () => {
-    const finished: number[] = [];
-    const { links, runtimes } = setup({ signIn: deviceSignIn(finished) });
+describe("OpenRouter OAuth (BYOAI PKCE)", () => {
+  it("starts only for OpenRouter and returns an authorization URL without the verifier", async () => {
+    const { links, vault } = setup();
 
-    const started = await links.startSignIn(null, "openai-codex");
+    const other = await links.startOAuth(principal("f"), "anthropic");
+    const started = await links.startOAuth(principal("g"), "openrouter");
 
+    expect(other.error).toMatch(/no supported OAuth/);
     expect(started.error).toBeNull();
-    const { token, signIn } = started.status;
-    expect(token).toMatch(/^[\w-]{43}$/);
-    expect(started.status.account).toBeNull();
-    // Nothing to answer, nothing to open: the code is the whole of it.
-    expect(signIn).toEqual({
-      providerId: "openai-codex",
-      kind: "device_code",
-      code: { value: "WDJB-MJHT", url: "https://auth.openai.com/codex/device" },
-      message: "Waiting for you to approve",
-    });
-    expect(signIn?.prompt).toBeUndefined();
-    expect(finished).toEqual([1]);
-    expect(runtimes[0]?.stored.get("openai-codex")?.method).toBe("sign_in");
-    // The provider collected the result while the code was on screen: the next look says so.
-    await vi.waitFor(async () => {
-      expect(await links.status(token)).toMatchObject({
-        signIn: null,
-        account: { providerId: "openai-codex", method: "sign_in" },
-      });
-    });
-    expect(await links.complete(token, "hi")).toMatchObject({ ok: true });
+    const url = new URL(started.authorizationUrl!);
+    expect(url.origin + url.pathname).toBe("https://openrouter.ai/auth");
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("state")).toBeTruthy();
+    expect(url.searchParams.get("code_verifier")).toBeNull();
+
+    await vault.cleanup();
   });
 
-  it("asks nothing of the user: no question reaches the pop-up", async () => {
-    // The adapter answers the provider's "how should we sign in?" question itself.
-    const kinds: string[] = [];
-    const { links } = setup({
-      signIn: async (interaction) => {
-        await interaction.ask({ kind: "text", message: "Workspace?" });
-        kinds.push("asked");
-      },
+  it("exchanges the code, validates the minted key and connects", async () => {
+    const { links, runtimes, vault } = setup();
+    const owner = principal("h");
+    const started = await links.startOAuth(owner, "openrouter");
+    const state = new URL(started.authorizationUrl!).searchParams.get("state")!;
+
+    const result = await links.completeOpenRouterOAuth(owner, "auth-code", state);
+
+    expect(result).toEqual({ ok: true, providerId: "openrouter" });
+    expect(runtimes[0]!.stored.get("openrouter")).toEqual({
+      method: "api_key",
+      secret: OR_KEY,
+    });
+    expect((await links.status(owner)).account).toMatchObject({
+      providerId: "openrouter",
+      method: "openrouter_pkce",
     });
 
-    const { status } = await links.startSignIn(null, "openai-codex");
-
-    // A question the sign-in genuinely needs still reaches the pop-up, and is answerable.
-    expect(status.signIn?.prompt).toMatchObject({ kind: "text", message: "Workspace?" });
-    await links.answerSignIn(status.token, status.signIn!.prompt!.id, "acme");
-    expect(kinds).toEqual(["asked"]);
+    await vault.cleanup();
   });
 
-  it("never shows the pasted-URL field, even when a provider asks for it anyway", async () => {
-    // A device-code sign-in never needs an address pasted back, so if one asks, the question is a
-    // sign the sign-in cannot finish. Explain that instead of putting the field on screen.
-    const shown: string[] = [];
-    const { links, runtimes } = setup({
-      signIn: async (interaction) => {
-        await interaction.ask({
-          kind: "manual_code",
-          message: "Paste the full callback URL from the browser",
-        });
-        shown.push("asked");
-      },
-    });
+  it("rejects a replayed callback and a wrong state", async () => {
+    const { links, vault } = setup();
+    const owner = principal("i");
+    const started = await links.startOAuth(owner, "openrouter");
+    const state = new URL(started.authorizationUrl!).searchParams.get("state")!;
 
-    const { status } = await links.startSignIn(null, "openai-codex");
-    await vi.waitFor(async () => {
-      expect((await links.status(status.token)).signIn?.error).toBe(
-        "Motif could not finish the ChatGPT sign-in on its own. Try again, or link an API key instead.",
-      );
-    });
-
-    expect(shown).toEqual([]);
-    expect(runtimes[0]!.stored.size).toBe(0);
-  });
-
-  it("answers no AI request while the sign-in is still running", async () => {
-    const { links } = setup({ signIn: deviceSignIn() });
-    const { token } = (await links.startSignIn(null, "openai-codex")).status;
-
-    expect(await links.complete(token, "hello")).toEqual({
+    expect(await links.completeOpenRouterOAuth(owner, "auth-code", "wrong-state")).toEqual({
       ok: false,
-      reason: "not_linked",
-      status: null,
+      error: "invalid_state",
     });
-    await links.cancelSignIn(token);
-  });
-
-  it("finishes by itself when the provider withdraws its question", async () => {
-    // What happens when the approval arrives while a question is still open: the provider closes
-    // the question rather than letting the answer arrive late.
-    const approved = new AbortController();
-    const { links } = setup({
-      signIn: async (interaction) => {
-        interaction.notify({ kind: "url", url: "https://auth.openai.com/authorize" });
-        const asked = interaction.ask({
-          kind: "text",
-          message: "Which workspace?",
-          signal: approved.signal,
-        });
-        await asked.catch(() => "the provider approved instead");
-      },
-    });
-    const { token } = (await links.startSignIn(null, "openai-codex")).status;
-    expect((await links.status(token)).signIn?.prompt?.kind).toBe("text");
-
-    approved.abort();
-
-    await vi.waitFor(async () => {
-      expect(await links.status(token)).toMatchObject({
-        signIn: null,
-        account: { providerId: "openai-codex", method: "sign_in" },
-      });
-    });
-  });
-
-  it("shows only https links, a one-time code, and the latest progress message", async () => {
-    const { links } = setup({
-      signIn: async (interaction) => {
-        interaction.notify({ kind: "url", url: "javascript:alert(document.domain)" });
-        interaction.notify({
-          kind: "code",
-          value: "WDJB-MJHT",
-          url: "http://auth.example.com/device",
-        });
-        interaction.notify({ kind: "message", message: "Waiting for approval" });
-        interaction.notify({ kind: "message", message: "Still waiting ".repeat(40) });
-        await interaction.ask({ kind: "text", message: "Workspace?" });
-      },
+    expect((await links.completeOpenRouterOAuth(owner, "auth-code", state)).ok).toBe(true);
+    expect(await links.completeOpenRouterOAuth(owner, "auth-code", state)).toEqual({
+      ok: false,
+      error: "invalid_state",
     });
 
-    const { signIn } = (await links.startSignIn(null, "openai-codex")).status;
-
-    expect(signIn?.url).toBeUndefined();
-    expect(signIn?.code).toBeUndefined();
-    expect(signIn?.message).toHaveLength(301);
-    expect(signIn?.prompt).toMatchObject({ kind: "text", message: "Workspace?" });
-    await links.cancelSignIn((await links.startSignIn(null, "openai-codex")).status.token);
-  });
-
-  it("passes on a one-time code and the choices of a question it may show", async () => {
-    const chosen: string[] = [];
-    const { links } = setup({
-      signIn: async (interaction) => {
-        // A provider's own choice, not the SDK's sign-in-method one: that is answered for the user.
-        chosen.push(
-          await interaction.ask({
-            kind: "select",
-            message: "Which organization?",
-            options: [
-              { id: "org_1", label: "Acme" },
-              { id: "org_2", label: "Personal", description: "Your own workspace" },
-            ],
-          }),
-        );
-        interaction.notify({
-          kind: "code",
-          value: "WDJB-MJHT",
-          url: "https://auth.openai.com/codex/device",
-        });
-        await interaction.ask({ kind: "text", message: "Press enter when done" });
-      },
-    });
-    const first = (await links.startSignIn(null, "openai-codex")).status;
-    expect(first.signIn?.prompt?.options).toEqual([
-      { id: "org_1", label: "Acme" },
-      { id: "org_2", label: "Personal", description: "Your own workspace" },
-    ]);
-
-    const next = await links.answerSignIn(first.token, first.signIn!.prompt!.id, "org_2");
-
-    expect(chosen).toEqual(["org_2"]);
-    expect(next.status.signIn?.code).toEqual({
-      value: "WDJB-MJHT",
-      url: "https://auth.openai.com/codex/device",
-    });
-    expect(next.status.signIn?.prompt?.id).not.toBe(first.signIn!.prompt!.id);
-    await links.cancelSignIn(first.token);
-  });
-
-  it("reports a failed sign-in until it is dismissed, and keeps no empty link", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const { links } = setup({
-      signIn: async () => {
-        throw new Error("OAuth state mismatch");
-      },
-    });
-
-    const { status } = await links.startSignIn(null, "openai-codex");
-
-    expect(status.signIn).toEqual({
-      providerId: "openai-codex",
-      kind: "device_code",
-      error: "OAuth state mismatch",
-    });
-    expect(status.account).toBeNull();
-    expect(await links.cancelSignIn(status.token)).toEqual(NOTHING);
-    expect(await links.status(status.token)).toEqual(NOTHING);
-  });
-
-  it("keeps the linked account when a later sign-in fails", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const { links } = setup({
-      signIn: async () => {
-        throw new Error("ChatGPT authorization failed: access_denied");
-      },
-    });
-    const { token } = (await links.linkApiKey(null, "opencode", KEY)).status;
-
-    const { status } = await links.startSignIn(token, "openai-codex");
-
-    expect(status.signIn?.error).toBe("ChatGPT authorization failed: access_denied");
-    expect(status.account).toMatchObject({ providerId: "opencode", method: "api_key" });
-    expect(await links.cancelSignIn(token)).toMatchObject({
-      token,
-      signIn: null,
-      account: { providerId: "opencode" },
-    });
-  });
-
-  it("cancel stops a running sign-in and frees the way for the next", async () => {
-    const signals: AbortSignal[] = [];
-    const { links } = setup({
-      signIn: async (interaction) => {
-        signals.push(interaction.signal);
-        await interaction.ask({ kind: "text", message: "Which workspace?" });
-      },
-    });
-    const { token } = (await links.startSignIn(null, "openai-codex")).status;
-
-    expect(await links.cancelSignIn(token)).toEqual(NOTHING);
-
-    expect(signals[0]?.aborted).toBe(true);
-    const again = await links.startSignIn(null, "openai-codex");
-    expect(again.error).toBeNull();
-    expect(again.status.signIn?.prompt).toBeDefined();
-    await links.cancelSignIn(again.status.token);
-  });
-
-  it("lets two visitors connect at the same time, since a code needs no port", async () => {
-    const { links, runtimes } = setup({ signIn: deviceSignIn() });
-
-    const anna = (await links.startSignIn(null, "openai-codex")).status;
-    const omar = (await links.startSignIn(null, "openai-codex")).status;
-
-    // Neither is told to wait, and each sees only its own sign-in.
-    expect(omar.signIn?.code?.value).toBe("WDJB-MJHT");
-    expect(omar.token).not.toBe(anna.token);
-    expect(runtimes).toHaveLength(2);
-    expect((await links.status(anna.token)).account?.providerId).toBe("openai-codex");
-    expect((await links.status(omar.token)).account?.providerId).toBe("openai-codex");
-    expect(await links.complete(anna.token, "anna")).toMatchObject({
-      text: "openai-codex/gpt-6.1-sol as access-token-1: anna",
-    });
-  });
-
-  it("still lets only one visitor in at a time through the browser, which holds a port", async () => {
-    const { links } = setup({
-      signIn: deviceSignIn(),
-      browserSignIn: "allow",
-    });
-    const anna = (await links.startSignIn(null, "openai-codex", "browser")).status;
-
-    const omar = await links.startSignIn(null, "openai-codex", "browser");
-
-    expect(omar.error).toMatch(/Someone else is signing in/);
-    expect(omar.status).toEqual(NOTHING);
-    await links.cancelSignIn(anna.token);
-  });
-
-  it("refuses the browser way in on a hosted app, where its redirect cannot arrive", async () => {
-    const { links, runtimes } = setup({ signIn: deviceSignIn() });
-
-    // The default is the hosted app's setting.
-    const { error } = await links.startSignIn(null, "openai-codex", "browser");
-
-    expect(error).toBe("Motif signs you in automatically. No address needs to be copied.");
-    expect(runtimes).toHaveLength(0);
-  });
-
-  it("gives an abandoned browser sign-in's turn to the next visitor", async () => {
-    const { links, clock } = setup({ signIn: deviceSignIn(), browserSignIn: "allow" });
-    const anna = (await links.startSignIn(null, "openai-codex", "browser")).status;
-    clock.now += 60 * 1000;
-    await links.status(anna.token);
-    clock.now += 60 * 1000;
-    expect((await links.startSignIn(null, "openai-codex", "browser")).error).toMatch(
-      /Someone else/,
-    );
-
-    // Anna's tab is gone: nothing has asked about her sign-in for more than 90 seconds.
-    clock.now += 91 * 1000;
-    const omar = await links.startSignIn(null, "openai-codex", "browser");
-
-    expect(omar.error).toBeNull();
-    expect(omar.status.signIn?.kind).toBe("browser");
-    expect(await links.status(anna.token)).toEqual(NOTHING);
-    await links.cancelSignIn(omar.status.token);
-  });
-
-  it("restarts the link's own sign-in instead of reporting it busy", async () => {
-    const { links } = setup({ signIn: deviceSignIn(), browserSignIn: "allow" });
-    const first = (await links.startSignIn(null, "openai-codex", "browser")).status;
-
-    const second = await links.startSignIn(first.token, "openai-codex", "browser");
-
-    expect(second.error).toBeNull();
-    expect(second.status.token).toBe(first.token);
-    expect(second.status.signIn?.prompt?.id).not.toBe(first.signIn?.prompt?.id);
-    await links.cancelSignIn(first.token);
-  });
-
-  it("cancels a sign-in that takes too long", async () => {
-    const { links } = setup({ signIn: openSignIn(), signInTimeoutMs: 60 });
-    const { token } = (await links.startSignIn(null, "openai-codex")).status;
-
-    await vi.waitFor(async () => {
-      expect((await links.status(token)).signIn).toEqual({
-        providerId: "openai-codex",
-        kind: "device_code",
-        url: "https://auth.openai.com/authorize?state=abc",
-        error: "The sign-in took too long. Start it again.",
-      });
-    });
-    expect((await links.startSignIn(null, "openai-codex")).error).toBeNull();
-  });
-
-  it("linking a key instead cancels the link's running sign-in", async () => {
-    const { links } = setup({ signIn: deviceSignIn() });
-    const { token } = (await links.startSignIn(null, "openai-codex")).status;
-
-    const { status } = await links.linkApiKey(token, "opencode", KEY);
-
-    expect(status).toMatchObject({ token, signIn: null, account: { providerId: "opencode" } });
-    expect((await links.startSignIn(null, "openai-codex")).error).toBeNull();
-  });
-
-  it("refuses a sign-in for a provider that only takes a key", async () => {
-    const { links, runtimes } = setup();
-
-    const { status, error } = await links.startSignIn(null, "opencode");
-
-    expect(error).toBe("OpenCode Zen has no sign-in. Link it with an API key.");
-    expect(status).toEqual(NOTHING);
-    expect(runtimes).toHaveLength(0);
+    await vault.cleanup();
   });
 });

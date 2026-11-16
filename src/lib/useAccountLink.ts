@@ -1,18 +1,21 @@
 import { createContext, useContext } from "react";
 
-import type { LinkedAccount } from "./account-link";
+import type { LinkedAccount } from "./provider-registry";
 
 export type AccountLinkState = {
-  /** The account this browser has linked, or null. */
+  /** The active connection this browser principal uses, or null. */
   account: LinkedAccount | null;
-  /** False until the server has said whether an account is linked. */
+  /** Every validated connection for this principal. */
+  accounts: LinkedAccount[];
+  /** False until the server has said what this principal has connected. */
   ready: boolean;
-  /** Opens the pop-up that links, changes or unlinks the account. */
+  /** Opens the dialog that connects, selects, or disconnects providers. */
   openLink: () => void;
 };
 
 export const AccountLinkContext = createContext<AccountLinkState>({
   account: null,
+  accounts: [],
   ready: false,
   openLink: () => {},
 });

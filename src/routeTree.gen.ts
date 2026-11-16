@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as StylesRouteImport } from './routes/styles'
 import { Route as SessionIdRouteImport } from './routes/session.$id'
 import { Route as SessionIdEditRouteImport } from './routes/session.$id_.edit'
+import { Route as ApiAuthProviderCallbackRouteImport } from './routes/api/auth/$provider/callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +35,25 @@ const SessionIdEditRoute = SessionIdEditRouteImport.update({
   path: '/session/$id/edit',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthProviderCallbackRoute = ApiAuthProviderCallbackRouteImport.update({
+  id: '/api/auth/$provider/callback',
+  path: '/api/auth/$provider/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/styles': typeof StylesRoute
   '/session/$id': typeof SessionIdRoute
   '/session/$id/edit': typeof SessionIdEditRoute
+  '/api/auth/$provider/callback': typeof ApiAuthProviderCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/styles': typeof StylesRoute
   '/session/$id': typeof SessionIdRoute
   '/session/$id/edit': typeof SessionIdEditRoute
+  '/api/auth/$provider/callback': typeof ApiAuthProviderCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,30 @@ export interface FileRoutesById {
   '/styles': typeof StylesRoute
   '/session/$id': typeof SessionIdRoute
   '/session/$id_/edit': typeof SessionIdEditRoute
+  '/api/auth/$provider/callback': typeof ApiAuthProviderCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/styles' | '/session/$id' | '/session/$id/edit'
+  fullPaths:
+    | '/'
+    | '/styles'
+    | '/session/$id'
+    | '/session/$id/edit'
+    | '/api/auth/$provider/callback'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/styles' | '/session/$id' | '/session/$id/edit'
-  id: '__root__' | '/' | '/styles' | '/session/$id' | '/session/$id_/edit'
+  to:
+    | '/'
+    | '/styles'
+    | '/session/$id'
+    | '/session/$id/edit'
+    | '/api/auth/$provider/callback'
+  id:
+    | '__root__'
+    | '/'
+    | '/styles'
+    | '/session/$id'
+    | '/session/$id_/edit'
+    | '/api/auth/$provider/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +92,7 @@ export interface RootRouteChildren {
   StylesRoute: typeof StylesRoute
   SessionIdRoute: typeof SessionIdRoute
   SessionIdEditRoute: typeof SessionIdEditRoute
+  ApiAuthProviderCallbackRoute: typeof ApiAuthProviderCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +125,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SessionIdEditRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/$provider/callback': {
+      id: '/api/auth/$provider/callback'
+      path: '/api/auth/$provider/callback'
+      fullPath: '/api/auth/$provider/callback'
+      preLoaderRoute: typeof ApiAuthProviderCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +140,7 @@ const rootRouteChildren: RootRouteChildren = {
   StylesRoute: StylesRoute,
   SessionIdRoute: SessionIdRoute,
   SessionIdEditRoute: SessionIdEditRoute,
+  ApiAuthProviderCallbackRoute: ApiAuthProviderCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

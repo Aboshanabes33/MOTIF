@@ -1,230 +1,138 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountLinkButton, AccountLinkProvider } from "@/components/AccountLink";
-import type { LinkStatus } from "@/lib/account-link";
 import * as server from "@/lib/account-link.functions";
+import type { LinkedAccount, LinkStatus } from "@/lib/provider-registry";
+import { providerViews } from "@/lib/provider-registry";
 
 vi.mock("@/lib/account-link.functions", () => ({
   getLinkStatus: vi.fn(),
   linkApiKey: vi.fn(),
-  startSignIn: vi.fn(),
-  answerSignIn: vi.fn(),
-  cancelSignIn: vi.fn(),
+  startOAuth: vi.fn(),
+  activateProvider: vi.fn(),
   chooseModel: vi.fn(),
   unlinkAccount: vi.fn(),
 }));
 
 const api = vi.mocked(server);
-
-const TOKEN = "Jw3xT0kenOf43Characters-000000000000000000_";
 const KEY = "sk-zen-Qm81TESTKEYq7Lm0000";
-const AUTHORIZE = "https://auth.openai.com/api/accounts/authorize?client_id=dynamic_agent_client";
-const DEVICE_PAGE = "https://auth.openai.com/codex/device";
-
-const NOTHING: LinkStatus = { token: null, account: null, signIn: null };
+const providers = providerViews({ configuredEnv: [] });
+const ACCOUNT: LinkedAccount = {
+  providerId: "opencode",
+  method: "api_key",
+  status: "connected",
+  model: "kimi-k2.7-code",
+  connectedAt: 1_000,
+  updatedAt: 1_000,
+  models: [
+    { id: "big-pickle", name: "Big Pickle" },
+    { id: "kimi-k2.7-code", name: "Kimi K2.7 Code" },
+  ],
+};
+const OPENROUTER_ACCOUNT: LinkedAccount = {
+  providerId: "openrouter",
+  method: "openrouter_pkce",
+  status: "connected",
+  model: "openrouter/auto",
+  connectedAt: 2_000,
+  updatedAt: 2_000,
+  models: [{ id: "openrouter/auto", name: "OpenRouter Auto" }],
+};
+const OPENROUTER_LINKED: LinkStatus = {
+  accounts: [OPENROUTER_ACCOUNT],
+  account: OPENROUTER_ACCOUNT,
+  activeProviderId: "openrouter",
+  providers,
+  pendingOAuth: null,
+};
+const NOTHING: LinkStatus = {
+  accounts: [],
+  account: null,
+  activeProviderId: null,
+  providers,
+  pendingOAuth: null,
+};
 const LINKED: LinkStatus = {
-  token: TOKEN,
-  signIn: null,
-  account: {
-    providerId: "opencode",
-    method: "api_key",
-    model: "kimi-k2.7-code",
-    models: [
-      { id: "big-pickle", name: "Big Pickle" },
-      { id: "kimi-k2.7-code", name: "Kimi K2.7 Code" },
-    ],
-  },
-};
-const SIGNED_IN: LinkStatus = {
-  token: TOKEN,
-  signIn: null,
-  account: {
-    providerId: "openai-codex",
-    method: "sign_in",
-    model: "gpt-6.1-sol",
-    models: [{ id: "gpt-6.1-sol", name: "GPT-6.1 Sol" }],
-  },
-};
-
-/** What the pop-up shows while a one-time code waits for approval: one code, nothing else. */
-const WAITING_FOR_CODE: LinkStatus = {
-  token: TOKEN,
-  account: null,
-  signIn: {
-    providerId: "openai-codex",
-    kind: "device_code",
-    code: { value: "WDJB-MJHT", url: DEVICE_PAGE },
-    message: "Waiting for you to approve",
-  },
-};
-
-/** What a local build shows when the browser's redirect did not arrive. */
-const SIGNING_IN: LinkStatus = {
-  token: TOKEN,
-  account: null,
-  signIn: {
-    providerId: "openai-codex",
-    kind: "browser",
-    url: AUTHORIZE,
-  },
+  accounts: [ACCOUNT],
+  account: ACCOUNT,
+  activeProviderId: "opencode",
+  providers,
+  pendingOAuth: null,
 };
 
 function openApp() {
-  render(
+  return render(
     <AccountLinkProvider>
       <AccountLinkButton />
     </AccountLinkProvider>,
   );
 }
 
-const popUp = (name = "Link your AI account") => screen.findByRole("dialog", { name });
+const popUp = (name = "Connect an AI provider") => screen.findByRole("dialog", { name });
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   api.getLinkStatus.mockResolvedValue(NOTHING);
 });
 
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
   vi.resetAllMocks();
-  window.localStorage.clear();
+  window.history.replaceState(null, "", "/");
 });
 
-describe("the account pop-up when the app opens", () => {
-  it("asks for an account when this browser has none, offering a sign-in and an API key", async () => {
+describe("the connection dialog when the app opens", () => {
+  it("asks for a provider connection, with only supported methods", async () => {
     openApp();
 
     const dialog = within(await popUp());
 
-    expect(dialog.getByRole("button", { name: "Connect ChatGPT" })).toBeEnabled();
-    expect(dialog.getByLabelText("API key")).toHaveAttribute("type", "password");
-    const providers = within(dialog.getByLabelText("Provider")).getAllByRole("option");
-    // ChatGPT is not here: it has no API key, so the key form must not offer it.
-    expect(providers.map((option) => option.textContent)).toEqual([
-      "OpenAI (API key)",
-      "Claude (API key)",
-      "OpenRouter",
-      "OpenCode Zen",
-      "OpenCode Go",
-    ]);
-    // The first provider that takes a key is the OpenAI key, and it is not the ChatGPT entry: that
-    // one has no key, so offering it here would offer a field it cannot accept.
-    expect(dialog.getByLabelText("Provider")).toHaveValue("openai");
-    expect(dialog.getByRole("button", { name: "Link account" })).toBeDisabled();
-    expect(api.getLinkStatus).not.toHaveBeenCalled();
-    expect(screen.getByText("Not linked")).toBeInTheDocument();
+    expect(dialog.getByRole("button", { name: /Connect with OpenRouter/ })).toBeEnabled();
+    expect(dialog.getByLabelText("OpenAI API key")).toHaveAttribute("type", "password");
+    expect(dialog.getByLabelText("Anthropic Claude API key")).toHaveAttribute("type", "password");
+    expect(dialog.queryByRole("button", { name: /ChatGPT/ })).not.toBeInTheDocument();
+    expect(dialog.getByText(/Claude Pro\/Max plans cannot sign in/)).toBeInTheDocument();
+    expect(dialog.getByText(/MOTIF does not expose Pi's first-party Copilot/)).toBeInTheDocument();
+    expect(api.getLinkStatus).toHaveBeenCalledExactlyOnceWith();
+    expect(screen.getByText("AI account")).toBeInTheDocument();
+    expect(screen.getByText("Not connected")).toBeInTheDocument();
   });
 
-  it("stays closed when this browser already has an account linked", async () => {
-    window.localStorage.setItem("motif.link", TOKEN);
+  it("stays closed when this browser already has a connection", async () => {
     api.getLinkStatus.mockResolvedValue(LINKED);
 
     openApp();
 
     expect(await screen.findByText("OpenCode Zen · kimi-k2.7-code")).toBeInTheDocument();
-    expect(api.getLinkStatus).toHaveBeenCalledExactlyOnceWith({ data: { token: TOKEN } });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("drops a token the server no longer knows, and asks again", async () => {
-    window.localStorage.setItem("motif.link", TOKEN);
+  it("opens with the result carried by the OAuth callback URL", async () => {
+    window.history.replaceState(null, "", "/?connected=openrouter");
+    api.getLinkStatus.mockResolvedValue(OPENROUTER_LINKED);
 
     openApp();
 
-    await popUp();
-    expect(window.localStorage.getItem("motif.link")).toBeNull();
+    const dialog = within(await popUp("Your AI connections"));
+    expect(await dialog.findByRole("status")).toHaveTextContent("OpenRouter is connected.");
+    expect(window.location.search).toBe("");
   });
 
-  it("asks, but keeps the token, when the server does not answer", async () => {
-    window.localStorage.setItem("motif.link", TOKEN);
-    api.getLinkStatus.mockRejectedValue(new TypeError("Failed to fetch"));
+  it("does not claim success when the callback cannot be verified", async () => {
+    window.history.replaceState(null, "", "/?connected=openrouter");
 
     openApp();
 
-    await popUp();
-    expect(window.localStorage.getItem("motif.link")).toBe(TOKEN);
-  });
-
-  it("can be put off, and comes back from the sidebar", async () => {
-    openApp();
-    const dialog = await popUp();
-
-    fireEvent.click(within(dialog).getByRole("button", { name: "Not now" }));
-
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /AI account/ }));
-    await popUp();
+    const dialog = within(await popUp());
+    expect(await dialog.findByRole("alert")).toHaveTextContent(
+      "The provider finished sign-in, but this browser could not verify the connection. Try again.",
+    );
   });
 });
 
-describe("linking with an API key", () => {
-  it("explains why Claude has no sign-in button, rather than hiding the provider", async () => {
-    openApp();
-    const dialog = within(await popUp());
-
-    // Anthropic's terms bar third-party sign-in, so the reason is on screen next to the key field.
-    expect(
-      dialog.getByText(
-        "Claude plans can't sign in to other apps. Anthropic asks for an API key instead.",
-      ),
-    ).toBeInTheDocument();
-    expect(dialog.queryByRole("button", { name: /Claude/ })).not.toBeInTheDocument();
-  });
-
-  it("shows OpenRouter's free-tier limits once it is chosen", async () => {
-    openApp();
-    const dialog = within(await popUp());
-
-    fireEvent.change(dialog.getByLabelText("Provider"), { target: { value: "openrouter" } });
-
-    expect(dialog.getByText(/about 20 requests a minute/)).toBeInTheDocument();
-    // The key is checked before it is stored, and the form says so.
-    expect(dialog.getByText(/checks the key with OpenRouter before linking/)).toBeInTheDocument();
-  });
-
-  it("marks a model free and says when it cannot see", async () => {
-    // The picker is where a text-only free model has to be visible before it is chosen.
-    const account = {
-      providerId: "openrouter" as const,
-      method: "api_key" as const,
-      model: "google/gemma-4-31b-it:free",
-      models: [
-        {
-          id: "google/gemma-4-31b-it:free",
-          name: "Gemma 4 31B (free)",
-          input: ["text", "image"] as ("text" | "image")[],
-          free: true,
-        },
-        {
-          id: "liquid/lfm-2.5-2.6b:free",
-          name: "LFM2.5 (free)",
-          input: ["text"] as ("text" | "image")[],
-          free: true,
-        },
-      ],
-    };
-    window.localStorage.setItem("motif.link", TOKEN);
-    api.getLinkStatus.mockResolvedValue({
-      token: TOKEN,
-      signIn: null,
-      account: { ...account, models: [...account.models] },
-    });
-    openApp();
-    fireEvent.click(await screen.findByRole("button", { name: /AI account/ }));
-    const dialog = within(await popUp("Your AI account"));
-
-    const options = within(await dialog.findByLabelText("Model")).getAllByRole("option");
-
-    expect(options.map((option) => option.textContent)).toEqual([
-      "Gemma 4 31B (free) — Free · images",
-      "LFM2.5 (free) — Free · text only",
-    ]);
-  });
-
-  it("says how much of the free allowance is left after the key is checked", async () => {
-    // OpenRouter reports today's remaining free requests when the key is checked; a free-tier
-    // user runs into that ceiling long before anything else, so the pop-up says it up front.
+describe("connecting a provider", () => {
+  it("links an API key and shows the server's provider note", async () => {
     api.linkApiKey.mockResolvedValue({
       status: LINKED,
       error: null,
@@ -233,268 +141,77 @@ describe("linking with an API key", () => {
     openApp();
     const dialog = within(await popUp());
 
-    fireEvent.change(dialog.getByLabelText("Provider"), { target: { value: "openrouter" } });
-    fireEvent.change(dialog.getByLabelText(/API key/i), { target: { value: "sk-or-v1-test" } });
-    fireEvent.click(dialog.getByRole("button", { name: /Link/ }));
+    fireEvent.change(dialog.getByLabelText("OpenCode Zen API key"), { target: { value: KEY } });
+    fireEvent.click(dialog.getByRole("button", { name: "Link OpenCode Zen API key" }));
 
     expect(await dialog.findByRole("status")).toHaveTextContent(
       "Free models: 43 requests left today.",
     );
-  });
-
-  it("sends the key to the server once and keeps only the token it gets back", async () => {
-    api.linkApiKey.mockResolvedValue({ status: LINKED, error: null });
-    openApp();
-    const dialog = within(await popUp());
-
-    fireEvent.change(dialog.getByLabelText("Provider"), { target: { value: "opencode" } });
-    fireEvent.change(dialog.getByLabelText("API key"), { target: { value: KEY } });
-    fireEvent.click(dialog.getByRole("button", { name: "Link account" }));
-
-    expect(await dialog.findByText(/with an API key/)).toHaveTextContent(
-      "Linked to OpenCode Zen with an API key.",
-    );
     expect(api.linkApiKey).toHaveBeenCalledExactlyOnceWith({
-      data: { token: null, providerId: "opencode", apiKey: KEY },
+      data: { providerId: "opencode", apiKey: KEY },
     });
     expect(dialog.getByLabelText("Model")).toHaveValue("kimi-k2.7-code");
-    expect({ ...window.localStorage }).toEqual({ "motif.link": TOKEN });
-    expect(document.body.innerHTML).not.toContain(KEY);
-    expect(screen.getByText("OpenCode Zen · kimi-k2.7-code")).toBeInTheDocument();
   });
 
-  it("uses the chosen provider", async () => {
-    api.linkApiKey.mockResolvedValue({ status: NOTHING, error: null });
+  it("starts OpenRouter's official OAuth flow from its own button", async () => {
+    api.startOAuth.mockResolvedValue({ status: NOTHING, error: null });
     openApp();
     const dialog = within(await popUp());
 
-    fireEvent.change(dialog.getByLabelText("Provider"), { target: { value: "opencode-go" } });
-    fireEvent.change(dialog.getByLabelText("API key"), { target: { value: KEY } });
-    fireEvent.click(dialog.getByRole("button", { name: "Link account" }));
+    fireEvent.click(dialog.getByRole("button", { name: /Connect with OpenRouter/ }));
 
     await waitFor(() =>
-      expect(api.linkApiKey).toHaveBeenCalledExactlyOnceWith({
-        data: { token: null, providerId: "opencode-go", apiKey: KEY },
+      expect(api.startOAuth).toHaveBeenCalledExactlyOnceWith({
+        data: { providerId: "openrouter" },
       }),
     );
   });
 
-  it("says why the server refused, and that it did not answer", async () => {
-    const refusal =
-      "That doesn't look like an API key. Paste it exactly as your provider shows it.";
-    api.linkApiKey.mockResolvedValueOnce({ status: NOTHING, error: refusal });
-    api.linkApiKey.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  it("shows a provider rejection and keeps the dialog open", async () => {
+    const refusal = "Claude (API key) didn't accept that key. Check it and paste it again.";
+    api.linkApiKey.mockResolvedValue({ status: NOTHING, error: refusal });
     openApp();
     const dialog = within(await popUp());
-    fireEvent.change(dialog.getByLabelText("API key"), { target: { value: "!touch /tmp/x" } });
 
-    fireEvent.click(dialog.getByRole("button", { name: "Link account" }));
+    fireEvent.change(dialog.getByLabelText("Anthropic Claude API key"), { target: { value: KEY } });
+    fireEvent.click(dialog.getByRole("button", { name: "Link Anthropic Claude API key" }));
+
     expect(await dialog.findByRole("alert")).toHaveTextContent(refusal);
-
-    fireEvent.click(dialog.getByRole("button", { name: "Link account" }));
-    await waitFor(() =>
-      expect(dialog.getByRole("alert")).toHaveTextContent(
-        "Motif's server didn't answer. Try again.",
-      ),
-    );
-    expect(window.localStorage.getItem("motif.link")).toBeNull();
-  });
-
-  it("changes the model and unlinks", async () => {
-    window.localStorage.setItem("motif.link", TOKEN);
-    api.getLinkStatus.mockResolvedValue(LINKED);
-    const changed = { ...LINKED, account: { ...LINKED.account!, model: "big-pickle" } };
-    api.chooseModel.mockResolvedValue({ status: changed, error: null });
-    api.unlinkAccount.mockResolvedValue(NOTHING);
-    openApp();
-    fireEvent.click(await screen.findByRole("button", { name: /AI account/ }));
-    const dialog = within(await popUp("Your AI account"));
-    expect(dialog.getByRole("button", { name: "Done" })).toHaveFocus();
-
-    fireEvent.change(await dialog.findByLabelText("Model"), { target: { value: "big-pickle" } });
-
-    expect(await screen.findByText("OpenCode Zen · big-pickle")).toBeInTheDocument();
-    expect(api.chooseModel).toHaveBeenCalledExactlyOnceWith({
-      data: { token: TOKEN, model: "big-pickle" },
-    });
-
-    fireEvent.click(dialog.getByRole("button", { name: "Unlink" }));
-
-    expect(await dialog.findByRole("button", { name: "Link account" })).toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Link your AI account");
-    expect(dialog.getByRole("button", { name: "Connect ChatGPT" })).toHaveFocus();
-    expect(api.unlinkAccount).toHaveBeenCalledExactlyOnceWith({ data: { token: TOKEN } });
-    expect(window.localStorage.getItem("motif.link")).toBeNull();
-    expect(screen.getByText("Not linked")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });
 
-describe("linking with a provider sign-in", () => {
-  async function startSignIn(status: LinkStatus = WAITING_FOR_CODE) {
-    api.startSignIn.mockResolvedValue({ status, error: null });
-    api.getLinkStatus.mockResolvedValue(status);
-    openApp();
-    const dialog = within(await popUp());
-    fireEvent.click(dialog.getByRole("button", { name: "Connect ChatGPT" }));
-    // The click starts the sign-in; wait until the pop-up shows what it produced.
-    if (status.signIn?.code) await dialog.findByText(status.signIn.code.value);
-    else if (status.signIn?.url) await dialog.findByRole("link", { name: /^Open the ChatGPT/ });
-    else if (status.signIn?.error) await dialog.findByRole("alert");
-    return { dialog };
-  }
-
-  it("shows one code and a link, and asks for nothing to be pasted", async () => {
-    const { dialog } = await startSignIn();
-
-    // Two actions for the user: read the code, open the page. No field, no address to copy.
-    expect(dialog.getByText("WDJB-MJHT")).toBeInTheDocument();
-    const link = dialog.getByRole("link", { name: /Open the approval page/ });
-    expect(link).toHaveAttribute("href", DEVICE_PAGE);
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    expect(link).toHaveFocus();
-    expect(dialog.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(api.startSignIn).toHaveBeenCalledExactlyOnceWith({
-      data: { token: null, providerId: "openai-codex" },
-    });
-    expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
-      "Finish signing in to ChatGPT to link your account.",
-    );
-    expect(window.localStorage.getItem("motif.link")).toBe(TOKEN);
-    // Nothing in the pop-up mentions a callback, a redirect or a URL to copy.
-    expect(document.body.textContent).not.toMatch(/callback|redirect|paste/i);
-  });
-
-  it("keeps asking the server, and moves on when the sign-in is done", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const { dialog } = await startSignIn();
-    expect(api.getLinkStatus).not.toHaveBeenCalled();
-
-    await act(() => vi.advanceTimersByTimeAsync(2000));
-    expect(api.getLinkStatus).toHaveBeenCalledExactlyOnceWith({ data: { token: TOKEN } });
-    expect(dialog.getByText("WDJB-MJHT")).toBeInTheDocument();
-
-    api.getLinkStatus.mockResolvedValue(SIGNED_IN);
-    await act(() => vi.advanceTimersByTimeAsync(2000));
-
-    expect(await dialog.findByText(/with your subscription sign-in/)).toBeInTheDocument();
-    await act(() => vi.advanceTimersByTimeAsync(6000));
-    expect(api.getLinkStatus).toHaveBeenCalledTimes(2);
-  });
-
-  it("opens already connected when the provider approved before the pop-up drew", async () => {
-    // The server can return the account from startSignIn itself for a device-code sign-in.
-    api.startSignIn.mockResolvedValue({ status: SIGNED_IN, error: null });
-    openApp();
-    const dialog = within(await popUp());
-
-    fireEvent.click(dialog.getByRole("button", { name: "Connect ChatGPT" }));
-
-    expect(await dialog.findByText(/with your subscription sign-in/)).toBeInTheDocument();
-    expect(dialog.getByLabelText("Model")).toHaveValue("gpt-6.1-sol");
-    expect(api.getLinkStatus).not.toHaveBeenCalled();
-  });
-
-  it("ignores a status check that was already on its way when the visitor cancelled", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    api.cancelSignIn.mockResolvedValue(NOTHING);
-    const { dialog } = await startSignIn();
-    let answerCheck: (status: LinkStatus) => void = () => {};
-    api.getLinkStatus.mockReturnValue(new Promise((resolve) => (answerCheck = resolve)));
-    await act(() => vi.advanceTimersByTimeAsync(2000));
-    expect(api.getLinkStatus).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
-    await dialog.findByRole("button", { name: "Connect ChatGPT" });
-    await act(async () => answerCheck(WAITING_FOR_CODE));
-
-    expect(dialog.getByRole("button", { name: "Connect ChatGPT" })).toBeInTheDocument();
-    expect(dialog.queryByText("WDJB-MJHT")).not.toBeInTheDocument();
-    expect(window.localStorage.getItem("motif.link")).toBeNull();
-  });
-
-  it("gives the sign-in up when the pop-up is cancelled or closed", async () => {
-    api.cancelSignIn.mockResolvedValue(NOTHING);
-    const { dialog } = await startSignIn();
-
-    fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
-
-    expect(await dialog.findByRole("button", { name: "Connect ChatGPT" })).toBeEnabled();
-    expect(api.cancelSignIn).toHaveBeenCalledExactlyOnceWith({ data: { token: TOKEN } });
-    expect(window.localStorage.getItem("motif.link")).toBeNull();
-
-    api.startSignIn.mockResolvedValue({ status: WAITING_FOR_CODE, error: null });
-    fireEvent.click(dialog.getByRole("button", { name: "Connect ChatGPT" }));
-    await dialog.findByText("WDJB-MJHT");
-    fireEvent.click(dialog.getByRole("button", { name: "Close" }));
-
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(api.cancelSignIn).toHaveBeenCalledTimes(2);
-  });
-
-  it("shows why a sign-in failed, in the provider's words, and starts it again", async () => {
-    const failed: LinkStatus = {
-      token: TOKEN,
-      account: null,
-      signIn: {
-        providerId: "openai-codex",
-        kind: "device_code",
-        error: "OpenAI Codex device code login is not enabled for this server.",
+describe("managing a connection", () => {
+  it("changes the model and disconnects the provider", async () => {
+    api.getLinkStatus.mockResolvedValue(LINKED);
+    api.chooseModel.mockResolvedValue({
+      status: {
+        ...LINKED,
+        account: { ...ACCOUNT, model: "big-pickle" },
+        accounts: [{ ...ACCOUNT, model: "big-pickle" }],
       },
-    };
-    api.startSignIn.mockResolvedValueOnce({ status: failed, error: null });
-    openApp();
-    const dialog = within(await popUp());
-
-    fireEvent.click(dialog.getByRole("button", { name: "Connect ChatGPT" }));
-
-    expect(await dialog.findByRole("alert")).toHaveTextContent(
-      "OpenAI Codex device code login is not enabled for this server.",
-    );
-    expect(dialog.queryByText("WDJB-MJHT")).not.toBeInTheDocument();
-
-    api.startSignIn.mockResolvedValueOnce({ status: WAITING_FOR_CODE, error: null });
-    fireEvent.click(dialog.getByRole("button", { name: "Try again" }));
-
-    await dialog.findByText("WDJB-MJHT");
-    expect(api.startSignIn).toHaveBeenLastCalledWith({
-      data: { token: TOKEN, providerId: "openai-codex" },
+      error: null,
     });
-  });
-
-  it("dismisses a failed sign-in when the pop-up is closed", async () => {
-    const failed: LinkStatus = {
-      token: TOKEN,
-      account: null,
-      signIn: {
-        providerId: "openai-codex",
-        kind: "device_code",
-        error: "ChatGPT authorization failed: access_denied",
-      },
-    };
-    api.startSignIn.mockResolvedValue({ status: failed, error: null });
-    api.cancelSignIn.mockResolvedValue(NOTHING);
+    api.unlinkAccount.mockResolvedValue({ status: NOTHING, error: null });
     openApp();
-    const dialog = within(await popUp());
-    fireEvent.click(dialog.getByRole("button", { name: "Connect ChatGPT" }));
-    await dialog.findByRole("alert");
 
-    fireEvent.click(dialog.getByRole("button", { name: "Close" }));
+    fireEvent.click(await screen.findByRole("button", { name: /AI account/ }));
+    const dialog = within(await popUp("Your AI connections"));
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(api.cancelSignIn).toHaveBeenCalledExactlyOnceWith({ data: { token: TOKEN } });
-    await waitFor(() => expect(window.localStorage.getItem("motif.link")).toBeNull());
-  });
+    fireEvent.change(dialog.getByLabelText("Model"), { target: { value: "big-pickle" } });
+    expect(api.chooseModel).toHaveBeenCalledExactlyOnceWith({
+      data: { providerId: "opencode", model: "big-pickle" },
+    });
+    // The model action disables the dialog while it is in flight; wait for it to finish.
+    await waitFor(() =>
+      expect(dialog.getByRole("button", { name: "Disconnect OpenCode Zen" })).toBeEnabled(),
+    );
 
-  it("tells a visitor to wait when the server is busy with another sign-in", async () => {
-    const busy = "Someone else is signing in on this server right now. Try again in a minute.";
-    api.startSignIn.mockResolvedValue({ status: NOTHING, error: busy });
-    openApp();
-    const dialog = within(await popUp());
-
-    fireEvent.click(dialog.getByRole("button", { name: "Connect ChatGPT" }));
-
-    expect(await dialog.findByRole("alert")).toHaveTextContent(busy);
-    expect(dialog.getByRole("button", { name: "Connect ChatGPT" })).toBeEnabled();
+    fireEvent.click(dialog.getByRole("button", { name: "Disconnect OpenCode Zen" }));
+    await waitFor(() =>
+      expect(api.unlinkAccount).toHaveBeenCalledExactlyOnceWith({
+        data: { providerId: "opencode" },
+      }),
+    );
   });
 });
