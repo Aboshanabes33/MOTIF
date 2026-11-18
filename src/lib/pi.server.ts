@@ -6,7 +6,6 @@
 // read files or run commands. Provider OAuth is owned by MOTIF's own callback route
 // (routes/api/auth/$provider/callback.ts); the SDK's CLI sign-in flows are not exposed.
 
-import { ModelsError } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 import { credentialStoreFor } from "./connection-vault.server";
@@ -38,11 +37,12 @@ function neverReached(error: unknown): boolean {
 
 /** A Pi runtime for one principal. Its credentials live in MOTIF's encrypted store. */
 export async function createPiRuntime(principalId: string): Promise<ProviderRuntime> {
+  const store = credentialStoreFor(principalId);
   const runtime = await ModelRuntime.create({
     // MOTIF's encrypted store, not the SDK's auth.json: the file store expands the keys it reads
     // (a stored key starting with "!" runs as a shell command, "$NAME" reads the environment) and
     // is shared by every caller on the machine. Ours is scoped to this principal and encrypted.
-    credentials: credentialStoreFor(principalId),
+    credentials: store,
     // No models.json from the server's home directory, and no catalog download from pi.dev.
     modelsPath: null,
     allowModelNetwork: false,
@@ -79,7 +79,7 @@ export async function createPiRuntime(principalId: string): Promise<ProviderRunt
 
     async models(providerId): Promise<LinkModel[]> {
       // `input` is the SDK's per-model modality list; it is what the vision gate reads.
-      return (await runtime.getAvailable(providerId)).map(({ id, name, input }) => ({
+      return runtime.getModels(providerId).map(({ id, name, input }) => ({
         id,
         name,
         ...(Array.isArray(input) ? { input: [...input] } : {}),
@@ -88,22 +88,10 @@ export async function createPiRuntime(principalId: string): Promise<ProviderRunt
 
     async complete(providerId, modelId, prompt) {
       const model = runtime.getModel(providerId, modelId);
-      const stored = (await runtime.listCredentials()).some(
-        (credential) => credential.providerId === providerId,
-      );
-      // Without a stored credential the SDK falls back to the server's own environment
-      // (OPENAI_API_KEY and the like); MOTIF never spends the owner's account for a visitor.
-      if (!model || !stored) return { ok: false, reason: "not_linked", status: null };
-
-      try {
-        // Refreshes an expired OAuth credential if the provider rotates tokens; a revoked one is
-        // then told apart from other failures.
-        await runtime.getAuth(model);
-      } catch (error) {
-        const refused =
-          error instanceof ModelsError && error.code === "oauth" && !neverReached(error);
-        return { ok: false, reason: refused ? "rejected" : "failed", status: null };
-      }
+      // Pin the request to this owner's credential. Never let the SDK resolve an environment key.
+      const stored = await store.read(providerId);
+      if (!model || stored?.type !== "api_key" || !stored.key)
+        return { ok: false, reason: "not_linked", status: null };
 
       const seen: { status: number | null } = { status: null };
       const watchedFetch: typeof fetch = async (input, init) => {
@@ -116,14 +104,17 @@ export async function createPiRuntime(principalId: string): Promise<ProviderRunt
         message = await runtime.completeSimple(
           model,
           { messages: [{ role: "user", content: prompt, timestamp: Date.now() }] },
-          APIS_WITHOUT_CUSTOM_FETCH.has(model.api) ? {} : { fetch: watchedFetch },
+          {
+            apiKey: stored.key,
+            ...(APIS_WITHOUT_CUSTOM_FETCH.has(model.api) ? {} : { fetch: watchedFetch }),
+          },
         );
       } catch (error) {
         if (neverReached(error)) {
           console.error(UNREACHABLE);
           return { ok: false, reason: "failed", status: null };
         }
-        throw error;
+        return { ok: false, reason: reasonFor(seen.status), status: seen.status };
       }
       if (message.stopReason === "error" || message.stopReason === "aborted") {
         // The provider's own message is deliberately dropped: it can repeat part of the key.

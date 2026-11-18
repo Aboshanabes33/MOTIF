@@ -14,7 +14,9 @@ import {
   providerViews,
   type AiFailure,
   type ConnectionMethod,
-  type KeyProblem,
+  type ConnectionStatus,
+  type KeyCheck,
+  type ProviderDescriptor,
   type LinkModel,
   type LinkResult,
   type LinkStatus,
@@ -28,12 +30,16 @@ import {
   deleteConnection,
   getActiveProvider,
   getConnection,
+  generationFor,
   listConnections,
   listPendingFlows,
-  putConnection,
+  connect,
+  updateConnection,
+  type ConnectionMetadata,
   saveFlow,
   setActiveProvider,
 } from "./connection-vault.server";
+import { reportProviderFailure } from "./provider-events.server";
 import { checkApiKey, mergeModels, validKeyShape } from "./provider-validation.server";
 
 export type Completion =
@@ -46,7 +52,7 @@ export interface ProviderRuntime {
   unlink(providerId: string): Promise<void>;
   /** The providers that hold a credential. */
   linked(): Promise<{ providerId: string; method: ConnectionMethod }[]>;
-  /** The models the provider's credential can use, with what each accepts. */
+  /** Models supported by this runtime, to intersect with the provider response. */
   models(providerId: string): Promise<LinkModel[]>;
   /** Sends one prompt and returns the reply text. Fails without a credential for the provider. */
   complete(providerId: string, modelId: string, prompt: string): Promise<Completion>;
@@ -62,7 +68,16 @@ const OAUTH_TTL_MS = 10 * 60 * 1000;
 /** Absolute origin for server-side OAuth callbacks: configured first, otherwise this request. */
 function publicBaseUrl(): string {
   const configured = process.env["MOTIF_PUBLIC_BASE_URL"]?.replace(/\/+$/, "");
-  if (configured) return configured;
+  if (configured) {
+    const url = new URL(configured);
+    if (
+      url.protocol === "https:" ||
+      (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+    )
+      return url.origin;
+    throw new Error("OAuth callback requires HTTPS");
+  }
+  if (process.env["NODE_ENV"] === "production") throw new Error("OAuth callback not configured");
   try {
     return new URL(getRequest().url).origin;
   } catch {
@@ -102,7 +117,13 @@ export class AccountLinks {
   }
 
   private providerViews(): ProviderView[] {
-    return providerViews({ configuredEnv: Object.keys(process.env) });
+    let callbackAvailable = false;
+    try {
+      callbackAvailable = Boolean(publicBaseUrl());
+    } catch {
+      /* API-key methods remain available. */
+    }
+    return providerViews({ configuredEnv: Object.keys(process.env), callbackAvailable });
   }
 
   async status(principalId: string): Promise<LinkStatus> {
@@ -116,9 +137,9 @@ export class AccountLinks {
       metadata.map(async (meta) => ({
         providerId: meta.providerId,
         method: meta.method,
-        status: meta.status,
+        status: this.connectionStatus(meta),
         model: meta.modelId,
-        models: await this.safeModels(principalId, meta.providerId),
+        models: await this.connectionModels(principalId, meta),
         connectedAt: meta.connectedAt,
         updatedAt: meta.updatedAt,
         ...(meta.note ? { note: meta.note } : {}),
@@ -142,12 +163,56 @@ export class AccountLinks {
     };
   }
 
-  private async safeModels(principalId: string, providerId: ProviderId): Promise<LinkModel[]> {
-    try {
-      return await (await this.runtime(principalId)).models(providerId);
-    } catch {
-      return [];
-    }
+  private connectionStatus(meta: ConnectionMetadata) {
+    return meta.expiresAt !== undefined && meta.expiresAt <= this.now()
+      ? "needs_reconnect"
+      : meta.status;
+  }
+
+  private async connectionModels(
+    principalId: string,
+    meta: ConnectionMetadata,
+  ): Promise<LinkModel[]> {
+    if (this.connectionStatus(meta) === "needs_reconnect") return [];
+    if (meta.models) return meta.models;
+    // Older vaults didn't persist discovery. Retain their selected model until reconnection.
+    return (await (await this.runtime(principalId)).models(meta.providerId)).filter(
+      (m) => m.id === meta.modelId,
+    );
+  }
+
+  private async storeValidated(
+    principalId: string,
+    provider: ProviderDescriptor,
+    method: ConnectionMethod,
+    key: string,
+    check: Extract<KeyCheck, { ok: true }>,
+    generation?: string,
+  ): Promise<boolean> {
+    const now = this.now();
+    if (check.expiresAt !== undefined && check.expiresAt <= now) return false;
+    const models = mergeModels(
+      await (await this.runtime(principalId)).models(provider.id),
+      check.models,
+    );
+    const chosen = models.find((model) => model.id === provider.defaultModel) ?? models[0];
+    if (!chosen) return false;
+    return connect(
+      principalId,
+      key,
+      {
+        providerId: provider.id,
+        method,
+        modelId: chosen.id,
+        models,
+        status: "connected",
+        connectedAt: now,
+        updatedAt: now,
+        ...(check.expiresAt !== undefined ? { expiresAt: check.expiresAt } : {}),
+        ...(check.detail ? { note: check.detail } : {}),
+      },
+      generation,
+    );
   }
 
   async linkApiKey(
@@ -155,7 +220,6 @@ export class AccountLinks {
     providerIdRaw: string,
     apiKey: string,
   ): Promise<LinkResult> {
-    const providers = this.providerViews();
     const fail = (error: string): Promise<LinkResult> =>
       this.status(principalId).then((status) => ({ status, error }));
     const provider = providerById(providerIdRaw);
@@ -167,57 +231,27 @@ export class AccountLinks {
     const key = apiKey.trim();
     if (!validKeyShape(key)) return fail(KEY_WORDING.shape(provider.name));
 
+    const generation = await generationFor(principalId, providerId);
     const check = await checkApiKey(providerId, key);
     if (!check.ok) {
-      if (check.problem === "unreachable" || check.problem === "failed") {
-        console.error(
-          `Validating an API key for ${providerId} failed (${check.problem}). The key was not stored.`,
-        );
-      }
+      void reportProviderFailure(providerId, "validation", check.problem);
       return fail(KEY_WORDING[check.problem](provider.name));
     }
 
-    const runtime = await this.runtime(principalId);
     try {
-      await runtime.linkApiKey(providerId, key);
-    } catch (error) {
-      console.error(
-        "Storing a validated API key failed:",
-        error instanceof Error ? error.name : error,
-      );
-      await runtime.unlink(providerId).catch(() => {});
-      return fail("MOTIF couldn't store that key. Try again.");
+      if (!(await this.storeValidated(principalId, provider, "api_key", key, check, generation))) {
+        return fail(
+          "Couldn’t open a model with that key. Check its access and try connecting again.",
+        );
+      }
+    } catch {
+      return fail("MOTIF couldn't finish saving the connection. Try again.");
     }
-
-    try {
-      const models = mergeModels(await runtime.models(providerId), check.models);
-      const chosen =
-        models.find((candidate) => candidate.id === provider.defaultModel) ?? models[0];
-      if (!chosen) throw new Error("no available model");
-      const now = this.now();
-      await putConnection(principalId, {
-        providerId,
-        method: "api_key",
-        status: "connected",
-        modelId: chosen.id,
-        connectedAt: now,
-        updatedAt: now,
-        ...(check.detail ? { note: check.detail } : {}),
-      });
-      await setActiveProvider(principalId, providerId);
-      return {
-        status: await this.status(principalId),
-        error: null,
-        ...(check.detail ? { note: check.detail } : {}),
-      };
-    } catch (error) {
-      console.error(
-        "Finishing an API key connection failed:",
-        error instanceof Error ? error.name : error,
-      );
-      await runtime.unlink(providerId).catch(() => {});
-      return fail("MOTIF couldn't open a model on this account. Try again.");
-    }
+    return {
+      status: await this.status(principalId),
+      error: null,
+      ...(check.detail ? { note: check.detail } : {}),
+    };
   }
 
   /** Starts OpenRouter's official BYOAI PKCE flow. XAI/ChatGPT/Copilot have no equivalent exposed flow. */
@@ -235,10 +269,8 @@ export class AccountLinks {
     let redirectUri: string;
     try {
       redirectUri = `${publicBaseUrl()}/api/auth/openrouter/callback`;
-    } catch (error) {
-      return fail(
-        error instanceof Error ? error.message : "OAuth is not configured on this server.",
-      );
+    } catch {
+      return fail("Sign-in is not configured on this server. Use an API key instead.");
     }
     const verifier = base64url(randomBytes(32));
     const challenge = base64url(createHash("sha256").update(verifier).digest());
@@ -269,7 +301,7 @@ export class AccountLinks {
   /** Completes the OpenRouter PKCE flow. Called only by the server-side callback route. */
   async completeOpenRouterOAuth(
     principalId: string,
-    code: string,
+    code: string | null,
     state: string,
   ): Promise<{ ok: true; providerId: ProviderId } | { ok: false; error: string }> {
     const flow = await consumeFlow(principalId, state);
@@ -277,10 +309,12 @@ export class AccountLinks {
     if (flow.method !== "openrouter_pkce" || flow.providerId !== "openrouter") {
       return { ok: false, error: "invalid_state" };
     }
+    if (!code) return { ok: false, error: "denied" };
     let response: Response;
     try {
       response = await fetch("https://openrouter.ai/api/v1/auth/keys", {
         method: "POST",
+        redirect: "error",
         headers: { accept: "application/json", "content-type": "application/json" },
         body: JSON.stringify({
           code,
@@ -290,14 +324,19 @@ export class AccountLinks {
         signal: AbortSignal.timeout(20_000),
       });
     } catch {
+      void reportProviderFailure("openrouter", "exchange", "unreachable");
       return { ok: false, error: "unreachable" };
     }
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
-      return {
-        ok: false,
-        error: response.status === 400 || response.status === 401 ? "rejected" : "failed",
-      };
+      const reason =
+        response.status === 402 || response.status === 429
+          ? "limited"
+          : response.status === 400 || response.status === 401
+            ? "rejected"
+            : "failed";
+      void reportProviderFailure("openrouter", "exchange", reason);
+      return { ok: false, error: reason };
     }
     let key: unknown;
     try {
@@ -309,29 +348,27 @@ export class AccountLinks {
 
     // The minted key is validated exactly like a hand-entered key, then stored encrypted.
     const check = await checkApiKey("openrouter", key);
-    if (!check.ok) return { ok: false, error: check.problem };
-    try {
-      const runtime = await this.runtime(principalId);
-      await runtime.linkApiKey("openrouter", key);
-      const models = mergeModels(await runtime.models("openrouter"), check.models);
-      const chosen = models.find((candidate) => candidate.id === "openrouter/auto") ?? models[0];
-      if (!chosen) throw new Error("no available model");
-      const now = this.now();
-      await putConnection(principalId, {
-        providerId: "openrouter",
-        method: "openrouter_pkce",
-        status: "connected",
-        modelId: chosen.id,
-        connectedAt: now,
-        updatedAt: now,
-      });
-      await setActiveProvider(principalId, "openrouter");
-      return { ok: true, providerId: "openrouter" };
-    } catch {
-      const runtime = await this.runtime(principalId).catch(() => null);
-      await runtime?.unlink("openrouter").catch(() => {});
-      return { ok: false, error: "failed" };
+    if (!check.ok) {
+      void reportProviderFailure("openrouter", "validation", check.problem);
+      return { ok: false, error: check.problem };
     }
+    try {
+      if (
+        await this.storeValidated(
+          principalId,
+          providerById("openrouter")!,
+          "openrouter_pkce",
+          key,
+          check,
+          flow.generation,
+        )
+      ) {
+        return { ok: true, providerId: "openrouter" };
+      }
+    } catch {
+      // Never expose a provider or storage exception on the callback URL.
+    }
+    return { ok: false, error: "failed" };
   }
 
   async activate(principalId: string, providerIdRaw: string): Promise<LinkResult> {
@@ -356,7 +393,7 @@ export class AccountLinks {
     const provider = providerById(providerIdRaw);
     const connection = provider ? await getConnection(principalId, provider.id) : undefined;
     if (!provider || !connection) return fail("Connect that provider before choosing a model.");
-    const models = await this.safeModels(principalId, provider.id);
+    const models = await this.connectionModels(principalId, connection);
     const chosen = models.find((candidate) => candidate.id === model);
     if (!chosen) return fail("That model isn't available on this account.");
     if (needsVision && !acceptsImages(chosen)) {
@@ -364,14 +401,8 @@ export class AccountLinks {
         `${chosen.name} works on text only. Choose a model that accepts images, or send the prompt without one.`,
       );
     }
-    const now = this.now();
-    await putConnection(principalId, {
-      ...connection,
-      modelId: model,
-      status: "connected",
-      updatedAt: now,
-    });
-    await setActiveProvider(principalId, provider.id);
+    if (!(await updateConnection(principalId, connection, { modelId: model })))
+      return fail("The connection changed. Try again.");
     return { status: await this.status(principalId), error: null };
   }
 
@@ -379,15 +410,7 @@ export class AccountLinks {
   async unlink(principalId: string, providerIdRaw: string): Promise<LinkResult> {
     const provider = providerById(providerIdRaw);
     if (!provider) return { status: await this.status(principalId), error: null };
-    try {
-      await (await this.runtime(principalId)).unlink(provider.id);
-    } catch {
-      // The metadata must still go, so a broken provider cannot leave a ghost connection.
-    }
     await deleteConnection(principalId, provider.id);
-    const remaining = (await listConnections(principalId))[0];
-    const active = await getActiveProvider(principalId);
-    if (!active) await setActiveProvider(principalId, remaining?.providerId ?? null);
     this.runtimes.delete(principalId);
     return { status: await this.status(principalId), error: null };
   }
@@ -397,22 +420,34 @@ export class AccountLinks {
    * text-only model is refused before the request rather than answering badly.
    */
   async complete(principalId: string, prompt: string, images = 0): Promise<Completion> {
-    const configured = await getActiveProvider(principalId);
-    const connections = await listConnections(principalId);
-    const providerId = configured ?? connections[0]?.providerId ?? null;
+    const providerId =
+      (await getActiveProvider(principalId)) ?? (await listConnections(principalId))[0]?.providerId;
     const connection = providerId ? await getConnection(principalId, providerId) : undefined;
     if (!providerId || !connection) {
       return { ok: false, reason: "not_linked", status: null };
     }
+    if (this.connectionStatus(connection) === "needs_reconnect")
+      return { ok: false, reason: "rejected", status: null };
     if (images > 0) {
-      const models = await this.safeModels(principalId, providerId);
+      const models = await this.connectionModels(principalId, connection);
       const chosen = models.find((candidate) => candidate.id === connection.modelId);
-      if (chosen && !acceptsImages(chosen)) {
+      if (!acceptsImages(chosen)) {
         return { ok: false, reason: "no_vision", status: null };
       }
     }
     const runtime = await this.runtime(principalId);
-    return runtime.complete(providerId, connection.modelId, prompt);
+    const result = await runtime.complete(providerId, connection.modelId, prompt);
+    if (!result.ok) void reportProviderFailure(providerId, "inference", result.reason);
+    // A 403 can be model-specific; quota and transport failures are not expired keys.
+    const status: ConnectionStatus = result.ok
+      ? "connected"
+      : result.status === 401
+        ? "needs_reconnect"
+        : result.reason === "limited"
+          ? "limited"
+          : "request_failed";
+    if (status !== connection.status) await updateConnection(principalId, connection, { status });
+    return result;
   }
 }
 

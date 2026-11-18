@@ -17,6 +17,7 @@ import {
   providerById,
   type AuthMethodView,
   type LinkStatus,
+  type ConnectionStatus,
   type LinkedAccount,
   type ProviderId,
   type ProviderView,
@@ -56,6 +57,7 @@ function takeConnectionOutcome(): { connected?: string; error?: string } {
 
 const OAUTH_ERROR: Record<string, string> = {
   invalid_state: "That sign-in link expired or was already used. Start the connection again.",
+  forbidden: "The provider denied access. Check your permissions and try again.",
   rejected:
     "The provider refused the authorization. Check the request on the provider's page, then try again.",
   unreachable: "MOTIF's server couldn't reach the provider to finish signing in. Try again.",
@@ -65,12 +67,20 @@ const OAUTH_ERROR: Record<string, string> = {
   unsupported: "That provider doesn't support browser sign-in in this build.",
 };
 
+const STATUS_TEXT: Record<ConnectionStatus, string> = {
+  connected: "connected (last validated)",
+  needs_reconnect: "Reconnect using a new key or sign in again below.",
+  limited: "Quota or rate limit reached. Check provider credit or retry later.",
+  request_failed: "Last request failed. Retry or choose another model.",
+};
+
 /**
  * Asks the visitor to connect an AI provider when the app opens without one, and keeps the dialog
  * available afterwards through `useAccountLink().openLink`.
  */
 export function AccountLinkProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<LinkStatus | null>(null);
+  const [statusUnknown, setStatusUnknown] = useState(false);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,10 +92,13 @@ export function AccountLinkProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async (): Promise<LinkStatus | null> => {
     try {
+      setStatusUnknown(false);
       const next = await getLinkStatus();
       apply(next);
       return next;
     } catch {
+      setStatusUnknown(true);
+      setStatus(null);
       return null;
     }
   }, [apply]);
@@ -117,9 +130,9 @@ export function AccountLinkProvider({ children }: { children: ReactNode }) {
   // When the app opens: learn what this principal has connected, and ask when it is nothing.
   useEffect(() => {
     let left = false;
-    const outcome = takeConnectionOutcome();
     void refresh().then((next) => {
       if (left) return;
+      const outcome = takeConnectionOutcome();
       if (outcome.connected) {
         const connected = next?.accounts.find((item) => item.providerId === outcome.connected);
         setOpen(true);
@@ -134,7 +147,10 @@ export function AccountLinkProvider({ children }: { children: ReactNode }) {
       }
       if (outcome.error) {
         setOpen(true);
-        setError(OAUTH_ERROR[outcome.error] ?? "The provider connection didn't finish. Try again.");
+        setError(
+          (Object.hasOwn(OAUTH_ERROR, outcome.error) ? OAUTH_ERROR[outcome.error] : undefined) ??
+            "The provider connection didn't finish. Try again.",
+        );
         return;
       }
       if (!next?.account) setOpen(true);
@@ -172,7 +188,16 @@ export function AccountLinkProvider({ children }: { children: ReactNode }) {
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           {status === null ? (
-            <p className="text-sm text-muted-foreground">Checking your account…</p>
+            statusUnknown ? (
+              <div>
+                <p role="alert">Couldn’t check your connections.</p>
+                <Button onClick={() => void refresh()}>Retry</Button>
+              </div>
+            ) : (
+              <p role="status" className="text-sm text-muted-foreground">
+                Checking your account…
+              </p>
+            )
           ) : (
             <Connections
               status={status}
@@ -235,7 +260,7 @@ function Connections(props: {
     <div className="grid gap-5">
       {status.accounts.length > 0 && (
         <section className="grid gap-2">
-          <h3 className="text-sm font-semibold">Connected</h3>
+          <h3 className="text-sm font-semibold">Saved connections</h3>
           {status.accounts.map((linked) => (
             <ConnectedCard
               key={linked.providerId}
@@ -279,6 +304,7 @@ function ConnectedCard(props: {
   onUnlink: () => void;
 }) {
   const { account, active, busy } = props;
+  const [confirming, setConfirming] = useState(false);
   const provider = providerById(account.providerId);
   return (
     <div
@@ -289,7 +315,7 @@ function ConnectedCard(props: {
           <p className="text-sm font-medium">{provider?.name ?? account.providerId}</p>
           <p className="text-xs text-muted-foreground">
             {account.method === "api_key" ? "API key" : "OAuth (BYOAI)"} ·{" "}
-            {account.status === "connected" ? "connected" : "needs reconnect"}
+            {STATUS_TEXT[account.status]}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -303,12 +329,25 @@ function ConnectedCard(props: {
             variant="ghost"
             aria-label={`Disconnect ${provider?.name ?? account.providerId}`}
             disabled={busy}
-            onClick={props.onUnlink}
+            onClick={() => setConfirming(true)}
           >
             <Unlink className="size-4" />
           </Button>
         </div>
       </div>
+      {confirming && (
+        <div className="grid gap-2 text-sm" role="group" aria-label="Confirm disconnect">
+          <p>Forget this credential in MOTIF? This won’t revoke it at the provider.</p>
+          <div className="flex gap-2">
+            <Button size="sm" disabled={busy} onClick={props.onUnlink}>
+              Confirm disconnect
+            </Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
       <label className={FIELD_LABEL}>
         Model
         <select
@@ -429,9 +468,9 @@ export function AccountLinkButton() {
   const { account, ready, openLink } = useAccountLink();
   const provider = account ? providerById(account.providerId) : undefined;
   const detail = !ready
-    ? "…"
+    ? "Status unknown"
     : account
-      ? `${provider?.name ?? account.providerId} · ${account.model}`
+      ? `${provider?.name ?? account.providerId} · ${account.status === "needs_reconnect" ? "Reconnect needed" : account.model}`
       : "Not connected";
   return (
     <button

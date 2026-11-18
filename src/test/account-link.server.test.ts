@@ -50,7 +50,8 @@ function defaultNetwork({ url }: Sent): Response {
     return json({ data: { free_model_daily_requests: { remaining: 43 } } });
   }
   if (url === "https://openrouter.ai/api/v1/auth/keys") return json({ key: OR_KEY });
-  if (url === "https://openrouter.ai/api/v1/models") return json(catalogue(MODELS["openrouter"]!));
+  if (url === "https://openrouter.ai/api/v1/models/user")
+    return json(catalogue(MODELS["openrouter"]!));
   if (url === "https://api.openai.com/v1/models") return json(catalogue(MODELS["openai"]!));
   if (url.startsWith("https://api.anthropic.com/v1/models"))
     return json(catalogue(MODELS["anthropic"]!));
@@ -109,7 +110,7 @@ function setup(options: { respond?: (sent: Sent) => Response | Promise<Response>
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : {}));
       const raw = init?.body;
-      const body = typeof raw === "string" ? JSON.parse(raw) : raw;
+      const body = typeof raw === "string" && !raw.includes("\n") ? JSON.parse(raw) : raw;
       const request = { url, authorization: headers.get("authorization"), body };
       sent.push(request);
       if (options.respond) return options.respond(request);
@@ -159,7 +160,7 @@ describe("linking with an API key", () => {
   });
 
   it("checks the key and stores it without exposing it in status", async () => {
-    const { links, runtimes, vault } = setup();
+    const { links, vault } = setup();
 
     const { status, error, note } = await links.linkApiKey(principal("a"), "openrouter", KEY);
 
@@ -171,7 +172,10 @@ describe("linking with an API key", () => {
       model: "openrouter/auto",
     });
     expect(JSON.stringify(status)).not.toContain(KEY);
-    expect(runtimes[0]!.stored.get("openrouter")).toEqual({ method: "api_key", secret: KEY });
+    expect(await credentialStoreFor(principal("a")).read("openrouter")).toEqual({
+      type: "api_key",
+      key: KEY,
+    });
 
     await vault.cleanup();
   });
@@ -225,14 +229,14 @@ describe("linking with an API key", () => {
   });
 
   it("deletes the stored credential on disconnect", async () => {
-    const { links, runtimes, vault } = setup();
+    const { links, vault } = setup();
     const owner = principal("d");
     await links.linkApiKey(owner, "opencode", KEY);
 
     const result = await links.unlink(owner, "opencode");
 
     expect(result.status.accounts).toEqual([]);
-    expect(runtimes[0]!.stored.has("opencode")).toBe(false);
+    expect(await credentialStoreFor(owner).read("opencode")).toBeUndefined();
 
     await vault.cleanup();
   });
@@ -278,7 +282,7 @@ describe("OpenRouter OAuth (BYOAI PKCE)", () => {
   });
 
   it("exchanges the code, validates the minted key and connects", async () => {
-    const { links, runtimes, vault } = setup();
+    const { links, vault } = setup();
     const owner = principal("h");
     const started = await links.startOAuth(owner, "openrouter");
     const state = new URL(started.authorizationUrl!).searchParams.get("state")!;
@@ -286,9 +290,9 @@ describe("OpenRouter OAuth (BYOAI PKCE)", () => {
     const result = await links.completeOpenRouterOAuth(owner, "auth-code", state);
 
     expect(result).toEqual({ ok: true, providerId: "openrouter" });
-    expect(runtimes[0]!.stored.get("openrouter")).toEqual({
-      method: "api_key",
-      secret: OR_KEY,
+    expect(await credentialStoreFor(owner).read("openrouter")).toEqual({
+      type: "api_key",
+      key: OR_KEY,
     });
     expect((await links.status(owner)).account).toMatchObject({
       providerId: "openrouter",
@@ -316,4 +320,246 @@ describe("OpenRouter OAuth (BYOAI PKCE)", () => {
 
     await vault.cleanup();
   });
+});
+
+describe("credential lifecycle", () => {
+  it("offers only discovered runtime models, preserving a connection on an unusable replacement", async () => {
+    let models = MODELS["anthropic"]!.slice(1);
+    const { links, vault } = setup({ respond: () => json(catalogue(models)) });
+    const owner = principal("m");
+    try {
+      const first = await links.linkApiKey(owner, "anthropic", KEY);
+      expect(first.status.account?.models.map((m) => m.id)).toEqual(["claude-haiku-4-6"]);
+      expect((await links.chooseModel(owner, "anthropic", "claude-sonnet-4-6")).error).toBeTruthy();
+      models = [];
+      expect(
+        (await links.linkApiKey(owner, "anthropic", "fixture-replacement")).error,
+      ).toBeTruthy();
+      expect(await credentialStoreFor(owner).read("anthropic")).toEqual({
+        type: "api_key",
+        key: KEY,
+      });
+      expect(await links.complete(owner, "hello")).toMatchObject({ ok: true });
+    } finally {
+      vault.cleanup();
+    }
+  });
+
+  it("honors a known key expiry before inference; a replacement key restores access", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    let expiry = Date.now() + 60000;
+    const { links, vault } = setup({
+      respond: (request) =>
+        request.url.endsWith("/v1/key")
+          ? json({ data: { expires_at: new Date(expiry).toISOString() } })
+          : defaultNetwork(request),
+    });
+    const owner = principal("j");
+    try {
+      await links.linkApiKey(owner, "openrouter", KEY);
+      vi.setSystemTime(expiry);
+      expect((await links.status(owner)).account?.status).toBe("needs_reconnect");
+      expect(await links.complete(owner, "expired")).toMatchObject({
+        ok: false,
+        reason: "rejected",
+      });
+      expiry += 60000;
+      expect((await links.linkApiKey(owner, "openrouter", OR_KEY)).status.account?.status).toBe(
+        "connected",
+      );
+      expect(await links.complete(owner, "renewed")).toMatchObject({ ok: true });
+    } finally {
+      vi.useRealTimers();
+      vault.cleanup();
+    }
+  });
+
+  it("never lets another principal consume a flow; denial consumes only the matching attempt", async () => {
+    const { links, sent, vault } = setup();
+    try {
+      const owner = principal("k");
+      const { authorizationUrl } = await links.startOAuth(owner, "openrouter");
+      const state = new URL(authorizationUrl!).searchParams.get("state")!;
+      expect(await links.completeOpenRouterOAuth(principal("l"), "code", state)).toMatchObject({
+        error: "invalid_state",
+      });
+      expect(await links.completeOpenRouterOAuth(owner, null, state)).toMatchObject({
+        error: "denied",
+      });
+      expect((await links.status(owner)).pendingOAuth).toBeNull();
+      expect(await links.completeOpenRouterOAuth(owner, "code", state)).toMatchObject({
+        error: "invalid_state",
+      });
+      expect(sent).toHaveLength(0);
+    } finally {
+      vault.cleanup();
+    }
+  });
+
+  it("does not mark a replacement as rejected when an old inference finishes late", async () => {
+    const { links, runtimes, vault } = setup();
+    try {
+      const owner = principal("n");
+      await links.linkApiKey(owner, "openrouter", KEY);
+      let signalStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        signalStarted = resolve;
+      });
+      let rejectKey!: (value: Completion) => void;
+      const late = new Promise<Completion>((resolve) => {
+        rejectKey = resolve;
+      });
+      vi.spyOn(runtimes[0]!.runtime, "complete").mockImplementationOnce(() => {
+        signalStarted();
+        return late;
+      });
+      const inference = links.complete(owner, "hello");
+      await started;
+      await links.linkApiKey(owner, "openrouter", OR_KEY);
+      rejectKey({ ok: false, reason: "rejected", status: 401 });
+      await inference;
+      expect((await links.status(owner)).account?.status).toBe("connected");
+      expect(await credentialStoreFor(owner).read("openrouter")).toEqual({
+        type: "api_key",
+        key: OR_KEY,
+      });
+    } finally {
+      vault.cleanup();
+    }
+  });
+});
+
+it("never sends provider responses or secrets to optional Sentry reporting", async () => {
+  const { links, sent, vault } = setup({
+    respond: ({ url }) =>
+      url.startsWith("https://telemetry.test/") ? json({}) : json({ error: KEY }, 401),
+  });
+  vi.stubEnv("MOTIF_SENTRY_DSN", "https://public@telemetry.test/123");
+  // Sentry envelopes use newline-delimited JSON rather than a single JSON request.
+  try {
+    const result = await links.linkApiKey(principal("z"), "openai", KEY);
+    expect(result.error).not.toContain(KEY);
+    const event = sent.find((s) => s.url.startsWith("https://telemetry.test/"));
+    expect(event?.body).toEqual(expect.stringContaining('"reason":"rejected"'));
+    expect(JSON.stringify(event)).not.toContain(KEY);
+    expect(JSON.stringify(event)).not.toContain(principal("z"));
+  } finally {
+    vault.cleanup();
+  }
+});
+
+it("rejects provider-refused PKCE, redacting the exchange response and consuming state", async () => {
+  const { links, vault } = setup({ respond: () => json({ error: `secret ${OR_KEY}` }, 400) });
+  const owner = principal("p");
+  try {
+    const { authorizationUrl } = await links.startOAuth(owner, "openrouter");
+    const state = new URL(authorizationUrl!).searchParams.get("state")!;
+    expect(await links.completeOpenRouterOAuth(owner, "invalid-code", state)).toEqual({
+      ok: false,
+      error: "rejected",
+    });
+    expect(await links.completeOpenRouterOAuth(owner, "other-code", state)).toEqual({
+      ok: false,
+      error: "invalid_state",
+    });
+    expect((await links.status(owner)).account).toBeNull();
+  } finally {
+    vault.cleanup();
+  }
+});
+
+it.each(["openai", "anthropic", "google", "xai", "opencode", "opencode-go", "openrouter"])(
+  "connects %s using its supported API key method",
+  async (provider) => {
+    const { links, vault } = setup();
+    const owner = principal("o");
+    try {
+      const result = await links.linkApiKey(owner, provider, KEY);
+      expect(result.error).toBeNull();
+      expect(result.status.account?.providerId).toBe(provider);
+      const other = principal("v");
+      expect((await links.activate(other, provider)).error).toBeTruthy();
+      expect(
+        (await links.chooseModel(other, provider, result.status.account!.model)).error,
+      ).toBeTruthy();
+      expect(await links.complete(other, "hello")).toMatchObject({ reason: "not_linked" });
+      await links.unlink(other, provider);
+      expect((await links.complete(owner, "hello")).ok).toBe(true);
+    } finally {
+      vault.cleanup();
+    }
+  },
+);
+
+it("does not resurrect a disconnected provider when an earlier key check completes", async () => {
+  let start!: () => void, finish!: (response: Response) => void;
+  const started = new Promise<void>((resolve) => {
+    start = resolve;
+  });
+  const deferred = new Promise<Response>((resolve) => {
+    finish = resolve;
+  });
+  const { links, vault } = setup({
+    respond: () => {
+      start();
+      return deferred;
+    },
+  });
+  const owner = principal("x");
+  try {
+    const connecting = links.linkApiKey(owner, "openai", KEY);
+    await started;
+    await links.unlink(owner, "openai");
+    finish(json(catalogue(MODELS["openai"]!)));
+    expect((await connecting).error).toBeTruthy();
+    expect((await links.status(owner)).account).toBeNull();
+  } finally {
+    vault.cleanup();
+  }
+});
+
+it.each([
+  [403, /permissions/],
+  [429, /rate limited/],
+  [402, /credit/],
+  [503, /try again/i],
+  [0, /reach/],
+] as const)(
+  "does not connect or echo the key on validation failure (%s)",
+  async (status, wording) => {
+    const { links, vault } = setup({
+      respond: () => {
+        if (!status) throw new DOMException("test timeout", "TimeoutError");
+        return json({ error: KEY }, status);
+      },
+    });
+    try {
+      const result = await links.linkApiKey(principal("r"), "openai", KEY);
+      expect(result.error).toMatch(wording);
+      expect(result.status.accounts).toEqual([]);
+      expect(JSON.stringify(result)).not.toContain(KEY);
+    } finally {
+      vault.cleanup();
+    }
+  },
+);
+
+it("discovers an available Gemini model on a later page", async () => {
+  const { links, vault } = setup({
+    respond: ({ url }) =>
+      url.endsWith("?pageToken=next")
+        ? json({
+            models: [
+              { name: "models/gemini-3.8-flash", supportedGenerationMethods: ["generateContent"] },
+            ],
+          })
+        : json({ models: [], nextPageToken: "next" }),
+  });
+  try {
+    expect((await links.linkApiKey(principal("g"), "google", KEY)).status.account?.model).toBe(
+      "gemini-3.8-flash",
+    );
+  } finally {
+    vault.cleanup();
+  }
 });

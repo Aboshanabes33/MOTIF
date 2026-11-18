@@ -208,10 +208,33 @@ describe("managing a connection", () => {
     );
 
     fireEvent.click(dialog.getByRole("button", { name: "Disconnect OpenCode Zen" }));
+    expect(api.unlinkAccount).not.toHaveBeenCalled();
+    fireEvent.click(dialog.getByRole("button", { name: "Confirm disconnect" }));
     await waitFor(() =>
       expect(api.unlinkAccount).toHaveBeenCalledExactlyOnceWith({
         data: { providerId: "opencode" },
       }),
     );
   });
+});
+
+it("lets the owner retry an unknown status without claiming disconnection", async () => {
+  api.getLinkStatus.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(LINKED);
+  openApp();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Couldn’t check your connections");
+  expect(screen.queryByText("Not connected")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(await screen.findByLabelText("Model")).toHaveValue(ACCOUNT.model);
+});
+
+it.each([
+  ["needs_reconnect", /Reconnect using a new key/],
+  ["limited", /Quota or rate limit reached/],
+  ["request_failed", /Last request failed/],
+] as const)("presents actionable %s status", async (status, text) => {
+  const account = { ...ACCOUNT, status };
+  api.getLinkStatus.mockResolvedValue({ ...LINKED, account, accounts: [account] });
+  openApp();
+  fireEvent.click(await screen.findByRole("button", { name: /AI account/ }));
+  expect(await within(await popUp("Your AI connections")).findByText(text)).toBeInTheDocument();
 });

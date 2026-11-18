@@ -11,6 +11,7 @@ export function createTempVault(): { dir: string; file: string; cleanup: () => v
   const dir = mkdtempSync(join(tmpdir(), "motif-vault-test-"));
   const file = join(dir, "connections.enc");
   vi.stubEnv("MOTIF_SECRETS_FILE", file);
+  vi.stubEnv("MOTIF_SENTRY_DSN", "");
   vi.stubEnv("MOTIF_SESSION_SECRET", "test-session-secret-with-at-least-thirty-two-characters");
   vi.stubEnv("MOTIF_CREDENTIALS_KEY", Buffer.alloc(32, 7).toString("base64"));
   vi.stubEnv("MOTIF_PUBLIC_BASE_URL", "https://motif.test");

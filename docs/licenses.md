@@ -30,3 +30,5 @@ provider Motif does not offer.
 
 To repeat the review after an upgrade, compare the `license` fields of the entries that
 `package-lock.json` gained.
+
+`playwright-core` 1.65.1 (Apache-2.0) is a development-only browser driver for the provider-auth E2E test. No browser binary is redistributed with MOTIF. Preserve its LICENSE and NOTICE if redistributing the driver.
