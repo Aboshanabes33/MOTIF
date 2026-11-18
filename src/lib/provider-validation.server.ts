@@ -28,7 +28,8 @@ function neverReached(error: unknown): boolean {
 }
 
 function problemFor(status: number): KeyProblem {
-  if (status === 401 || status === 403) return "rejected";
+  if (status === 401) return "rejected";
+  if (status === 403) return "forbidden";
   if (status === 402 || status === 429) return "limited";
   return "failed";
 }
@@ -105,13 +106,13 @@ export function readCatalogue(providerId: string, body: unknown): LinkModel[] {
 /** Keeps Pi's runtime-capable models and enriches them with a validated provider catalogue. */
 export function mergeModels(runtimeModels: LinkModel[], discovered: LinkModel[]): LinkModel[] {
   const byId = new Map(discovered.map((model) => [model.id, model]));
-  return runtimeModels.map((model) => {
+  return runtimeModels.flatMap((model) => {
     const extra = byId.get(model.id);
-    if (!extra) return model;
+    if (!extra) return [];
     const input = model.input ?? extra.input;
     return {
       ...model,
-      name: extra.name || model.name,
+      // Use the trusted runtime label, not arbitrary provider text in a client response.
       ...(input ? { input } : {}),
       ...(extra.free ? { free: true } : {}),
     };
@@ -124,7 +125,11 @@ async function fetchCatalogue(
 ): Promise<{ ok: true; body: unknown } | { ok: false; problem: KeyProblem }> {
   let response: Response;
   try {
-    response = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
+    response = await fetch(url, {
+      headers,
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    });
   } catch (error) {
     return { ok: false, problem: neverReached(error) ? "unreachable" : "failed" };
   }
@@ -149,20 +154,49 @@ export async function checkApiKey(providerId: string, apiKey: string): Promise<K
   if (!check.ok) return { ok: false, problem: check.problem };
 
   let detail: string | undefined;
+  let expiresAt: number | undefined;
   let catalogueBody: unknown = check.body;
   if (providerId === "openrouter") {
-    const remaining = asRecord(asRecord(check.body)?.["data"])?.["free_model_daily_requests"];
+    const data = asRecord(asRecord(check.body)?.["data"]);
+    const expiration = data?.["expires_at"];
+    if (typeof expiration === "string" && Number.isFinite(Date.parse(expiration)))
+      expiresAt = Date.parse(expiration);
+    const remaining = data?.["free_model_daily_requests"];
     const count = asRecord(remaining)?.["remaining"];
     if (typeof count === "number") detail = `Free models: ${count} requests left today.`;
     if (spec.modelsUrl) {
-      const publicCatalogue = await fetchCatalogue(spec.modelsUrl, { Accept: "application/json" });
-      if (publicCatalogue.ok) catalogueBody = publicCatalogue.body;
-      else catalogueBody = undefined;
+      const catalogue = await fetchCatalogue(spec.modelsUrl, headers);
+      if (!catalogue.ok) return catalogue;
+      catalogueBody = catalogue.body;
     }
+  }
+  const models = readCatalogue(providerId, catalogueBody);
+  // Google and Anthropic paginate model discovery. Follow opaque cursors on the original
+  // approved endpoint only, never a URL supplied by a catalogue response.
+  const cursors = new Set<string>();
+  while (providerId === "google" || providerId === "anthropic") {
+    const page = asRecord(catalogueBody);
+    const token =
+      providerId === "google"
+        ? page?.["nextPageToken"]
+        : page?.["has_more"]
+          ? page["last_id"]
+          : null;
+    if (!token) break;
+    if (typeof token !== "string" || cursors.has(token) || cursors.size >= 20)
+      return { ok: false, problem: "failed" };
+    cursors.add(token);
+    const nextUrl = new URL(spec.checkUrl);
+    nextUrl.searchParams.set(providerId === "google" ? "pageToken" : "after_id", token);
+    const next = await fetchCatalogue(nextUrl.href, headers);
+    if (!next.ok) return next;
+    catalogueBody = next.body;
+    models.push(...readCatalogue(providerId, catalogueBody));
   }
   return {
     ok: true,
-    models: readCatalogue(providerId, catalogueBody),
+    models,
+    ...(expiresAt !== undefined ? { expiresAt } : {}),
     ...(detail ? { detail } : {}),
   };
 }

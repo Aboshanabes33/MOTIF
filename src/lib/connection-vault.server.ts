@@ -21,6 +21,7 @@ import type {
   AuthMethodId,
   ConnectionMethod,
   ConnectionStatus,
+  LinkModel,
   ProviderId,
 } from "./provider-registry";
 
@@ -33,6 +34,9 @@ export type ConnectionMetadata = {
   method: ConnectionMethod;
   status: ConnectionStatus;
   modelId: string;
+  models?: LinkModel[];
+  revision?: string;
+  expiresAt?: number;
   connectedAt: number;
   updatedAt: number;
   note?: string;
@@ -47,6 +51,7 @@ export type OAuthFlow = {
   redirectUri: string;
   createdAt: number;
   expiresAt: number;
+  generation?: string;
 };
 
 type StoredConnection = {
@@ -57,6 +62,7 @@ type StoredConnection = {
 type PrincipalRecord = {
   connections: Record<string, StoredConnection>;
   flows: Record<string, OAuthFlow>;
+  generations?: Partial<Record<ProviderId, string>>;
   /** The connection currently serving AI requests for this principal. */
   activeProviderId: string | null;
 };
@@ -218,8 +224,10 @@ async function inspect<T>(fn: (payload: VaultPayload) => T | Promise<T>): Promis
 async function mutate<T>(fn: (payload: VaultPayload) => T | Promise<T>): Promise<T> {
   return serialize(async (current) => {
     await ensureLoaded(current);
-    const result = await fn(current.payload!);
-    await persist(current);
+    const draft = { ...current, payload: clone(current.payload!) };
+    const result = await fn(draft.payload);
+    await persist(draft);
+    current.payload = draft.payload;
     return result;
   });
 }
@@ -353,9 +361,64 @@ export function putConnection(principalId: string, metadata: ConnectionMetadata)
   });
 }
 
+/** A disconnect invalidates even a validation/exchange that is still in flight. */
+export function generationFor(
+  principalId: string,
+  provider: ProviderId,
+): Promise<string | undefined> {
+  return inspect((payload) => principalRecord(payload, principalId).generations?.[provider]);
+}
+
+/** Publish a validated replacement, its discovered models and active selection together. */
+export function connect(
+  principalId: string,
+  key: string,
+  metadata: ConnectionMetadata,
+  generation?: string,
+): Promise<boolean> {
+  return mutate((payload) => {
+    const record = principalRecord(payload, principalId);
+    if (record.generations?.[metadata.providerId] !== generation) return false;
+    const revision = randomBytes(16).toString("hex");
+    (record.generations ??= {})[metadata.providerId] = revision;
+    record.connections[metadata.providerId] = {
+      credential: { type: "api_key", key },
+      metadata: { ...metadata, revision },
+    };
+    record.activeProviderId = metadata.providerId;
+    return true;
+  });
+}
+
+/** Ignore late results for a credential that was replaced or disconnected mid-request. */
+export function updateConnection(
+  principalId: string,
+  observed: ConnectionMetadata,
+  change: { status: ConnectionStatus } | { modelId: string },
+): Promise<boolean> {
+  return mutate((payload) => {
+    const record = principalRecord(payload, principalId);
+    const current = record.connections[observed.providerId]?.metadata;
+    if (!current || current.status === "needs_reconnect" || current.revision !== observed.revision)
+      return false;
+    if ("modelId" in change) {
+      if (current.expiresAt !== undefined && current.expiresAt <= Date.now()) return false;
+      record.activeProviderId = current.providerId;
+    }
+    Object.assign(current, change, { updatedAt: Date.now() });
+    return true;
+  });
+}
+
 export function deleteConnection(principalId: string, providerId: ProviderId): Promise<void> {
   return mutate((payload) => {
-    delete principalRecord(payload, principalId).connections[providerId];
+    const record = principalRecord(payload, principalId);
+    (record.generations ??= {})[providerId] = randomBytes(16).toString("hex");
+    delete record.connections[providerId];
+    if (record.activeProviderId === providerId)
+      record.activeProviderId = Object.keys(record.connections)[0] ?? null;
+    for (const flow of Object.values(record.flows))
+      if (flow.providerId === providerId) delete record.flows[flow.state];
   });
 }
 
@@ -365,7 +428,8 @@ export function saveFlow(principalId: string, flow: OAuthFlow): Promise<void> {
     for (const [state, existing] of Object.entries(record.flows)) {
       if (existing.expiresAt <= Date.now()) delete record.flows[state];
     }
-    record.flows[flow.state] = clone(flow);
+    const generation = record.generations?.[flow.providerId];
+    record.flows[flow.state] = { ...clone(flow), ...(generation ? { generation } : {}) };
   });
 }
 

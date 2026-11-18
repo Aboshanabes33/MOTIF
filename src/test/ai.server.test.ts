@@ -93,6 +93,12 @@ describe("ask", () => {
       reason: "rejected",
       message: "AI request failed: rejected, HTTP 401",
     });
+    expect((await scope[SHARED]!.status(OWNER)).account?.status).toBe("needs_reconnect");
+    expect(await scope[SHARED]!.complete(OWNER, "do not retry a rejected key")).toEqual({
+      ok: false,
+      reason: "rejected",
+      status: null,
+    });
   });
 });
 

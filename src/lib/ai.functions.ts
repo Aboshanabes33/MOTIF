@@ -43,7 +43,7 @@ Give 8-12 captions spread over the duration.`;
       const plan = parseJson<EditPlan>(await ask(prompt));
       return { plan, error: null, relink: false };
     } catch (e) {
-      console.error(e);
+      // Do not log raw SDK exceptions or parse errors containing provider output.
       return { plan: null, ...explainAiFailure(e, "The AI couldn't finish this edit. Try again.") };
     }
   });
@@ -77,7 +77,7 @@ ${source}`;
       const style = parseJson<ExtractedStyle>(await ask(prompt));
       return { style, error: null, relink: false };
     } catch (e) {
-      console.error(e);
+      // Do not log raw SDK exceptions or parse errors containing provider output.
       return { style: null, ...explainAiFailure(e, "Couldn't read that style. Try again.") };
     }
   });

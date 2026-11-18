@@ -21,7 +21,7 @@ export type ConnectionMethod = AuthMethodId;
 /** Legacy name used by the rest of the app. */
 export type LinkMethod = ConnectionMethod;
 
-export type KeyProblem = "shape" | "rejected" | "limited" | "unreachable" | "failed";
+export type KeyProblem = "forbidden" | "shape" | "rejected" | "limited" | "unreachable" | "failed";
 
 export type LinkModel = {
   id: string;
@@ -45,7 +45,7 @@ export function modelNote(model: LinkModel): string | null {
 export type ValidationSpec = {
   /** The endpoint that proves the key works. */
   checkUrl: string;
-  /** A separate public model catalogue, used by OpenRouter after its key check. */
+  /** A separate authenticated model catalogue, used by OpenRouter after its key check. */
   modelsUrl?: string;
   header: "bearer" | "anthropic" | "google";
   /** Provider-specific extra headers that contain no secret. */
@@ -159,7 +159,7 @@ export const PROVIDERS: readonly ProviderDescriptor[] = [
         note: API_KEY_SHAPE,
         validation: {
           checkUrl: "https://openrouter.ai/api/v1/key",
-          modelsUrl: "https://openrouter.ai/api/v1/models",
+          modelsUrl: "https://openrouter.ai/api/v1/models/user",
           header: "bearer",
         },
       },
@@ -317,6 +317,7 @@ export function apiKeyValidation(providerId: string): ValidationSpec | undefined
 export type ProviderCapabilities = {
   /** Environment variable names that are present server-side. */
   configuredEnv: readonly string[];
+  callbackAvailable?: boolean;
 };
 
 export type AuthMethodView = {
@@ -350,14 +351,16 @@ export function providerViews(capabilities: ProviderCapabilities): ProviderView[
       const missing = (method.requiresConfig ?? []).filter((name) => !configured.has(name));
       const unavailableReason = !method.implemented
         ? "This integration is researched but not enabled in this deployment."
-        : missing.length > 0
-          ? `Server configuration required: ${missing.join(", ")}.`
-          : undefined;
+        : method.id === "openrouter_pkce" && capabilities.callbackAvailable === false
+          ? "Browser sign-in is not configured. Use an API key instead."
+          : missing.length > 0
+            ? `Server configuration required: ${missing.join(", ")}.`
+            : undefined;
       return {
         id: method.id,
         label: method.label,
         kind: method.kind,
-        available: method.implemented && missing.length === 0,
+        available: unavailableReason === undefined,
         note: unavailableReason ?? method.note ?? "",
         docsUrl: method.docsUrl,
       };
@@ -374,7 +377,7 @@ export function availableApiKeyProviderIds(): ProviderId[] {
   );
 }
 
-export type ConnectionStatus = "connected" | "needs_reconnect";
+export type ConnectionStatus = "connected" | "needs_reconnect" | "limited" | "request_failed";
 
 export type LinkedAccount = {
   providerId: ProviderId;
@@ -419,6 +422,7 @@ export type KeyCheck =
   | {
       ok: true;
       models: LinkModel[];
+      expiresAt?: number;
       /** Safe provider detail, such as a free-tier allowance. */
       detail?: string;
     }
@@ -428,10 +432,10 @@ export type KeyCheck =
 export type AiFailure = "not_linked" | "no_vision" | "rejected" | "limited" | "failed";
 
 export const KEY_WORDING: Record<KeyProblem, (name: string) => string> = {
+  forbidden: (name) => `${name} denied access. Check the permissions on that key.`,
   shape: () => "That doesn't look like an API key. Paste it exactly as your provider shows it.",
   rejected: (name) => `${name} didn't accept that key. Check it and paste it again.`,
-  limited: (name) =>
-    `${name} accepted the account but is rate limited or out of credit. Try again later.`,
+  limited: (name) => `${name} is rate limited or out of credit. Try again later.`,
   unreachable: (name) =>
     `MOTIF's server couldn't reach ${name} to check the key. Try again in a moment.`,
   failed: () => "MOTIF couldn't check that key just now. Try again in a moment.",

@@ -67,6 +67,11 @@ function requestIsSecure(): boolean {
   }
 }
 
+/** OAuth callbacks must not mint a new owner when the initiating session is missing. */
+export function existingPrincipal(): string | null {
+  return PRINCIPAL_CONTEXT.getStore() ?? verifiedId(getCookie(COOKIE_NAME));
+}
+
 /**
  * Returns the caller's verified principal, creating a fresh signed cookie when necessary.
  * Never accepts a principal supplied by the browser as plain data.

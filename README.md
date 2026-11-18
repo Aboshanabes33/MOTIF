@@ -55,8 +55,8 @@ node .output/server/index.mjs    # http://localhost:3000, or the port in PORT
 ```
 
 The production server needs a random `MOTIF_SESSION_SECRET` (and may use `MOTIF_CREDENTIALS_KEY`
-and `MOTIF_SECRETS_FILE`). `MOTIF_PUBLIC_BASE_URL` should be the absolute public origin for the
-OpenRouter callback. See `.env.example` and `docs/provider-auth.md`.
+and `MOTIF_SECRETS_FILE`). `MOTIF_PUBLIC_BASE_URL` must be set to the public HTTPS origin to enable production
+OpenRouter sign-in. See `.env.example` and `docs/provider-auth.md`.
 
 `npm run preview` does not work: it answers HTTP 500 on every page.
 
@@ -93,6 +93,7 @@ this boundary.
 
 ```sh
 npm test            # Vitest, single run
+npm run test:e2e    # Production provider journey; Chromium setup in docs/provider-auth.md
 npx tsc --noEmit    # typecheck
 npm run lint        # ESLint, with Prettier as a rule
 npm run build

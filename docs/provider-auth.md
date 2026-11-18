@@ -1,8 +1,9 @@
 # MOTIF Unified Provider Authentication
 
-Status: implemented and unit-tested against mocked provider networks on 2026-11-16. No real
-provider account has been charged or called from this checkout, so an API key flow is verified
-to the request shaping, Pi SDK boundary and tests—not to a live billable account.
+**Verification boundary (2026-11-18):** audited revision `9e2fec4` against ABSH-10 and its
+sub-issues. The production web app, signed cookie, encrypted file and Pi run in the browser
+journey; only the external provider is simulated. This is not evidence of provider approval, live
+model entitlement or a successful charge. The authorized sandbox check is opt-in (below).
 
 ## Audit outcome
 
@@ -30,9 +31,7 @@ Convex-owned secret manager or an external KMS/secret store later.
 - **OpenAI / ChatGPT / Codex**
   - OpenAI's public API authenticates with API keys or workload identity, not with a
     third-party grant to a visitor's ChatGPT plan.
-  - OpenAI documents Sign in with ChatGPT for approved first-party/Codex use and preview
-    employers; MOTIF must not reuse Codex CLI's OAuth client or imply ChatGPT Plus/Pro is an
-    API entitlement.
+  - Identity-only sign-in does not consent to inference. The [integration cookbook](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt) directs remotely hosted/paid apps to request access for plan usage. No approval or registered client for MOTIF was established. Even approved preview access is not the full API (no video/audio inputs or Files API). Neither another app's OAuth registration nor its MIT license grants that access.
   - Sources: <https://developers.openai.com/api/reference/overview>,
     <https://platform.openai.com/docs/actions/authentication>,
     <https://developers.openai.com/siwc/quickstart>,
@@ -68,7 +67,7 @@ Convex-owned secret manager or an external KMS/secret store later.
     Cloud/ADC-style access and is not a consumer Gemini entitlement for an arbitrary hosted app.
   - Sources: <https://ai.google.dev/gemini-api/docs/api-key>,
     <https://ai.google.dev/gemini-api/docs/oauth>
-  - **Offered:** API key only.
+  - **Offered:** Gemini Developer API project key only, not a Google identity login or [Vertex AI cloud credentials](https://cloud.google.com/docs/authentication).
 
 - **GitHub Copilot**
   - GitHub documents an OAuth flow for multi-user apps with a registered GitHub OAuth App or
@@ -86,7 +85,7 @@ Convex-owned secret manager or an external KMS/secret store later.
   - OpenCode is open source (MIT), but its CLI/server stores provider credentials in the server's
     global SQLite database. Its line/`connect` UI and `/provider/{id}/oauth/*` endpoints are
     server/CLI features, not a portable client-secret-free library for per-user MOTIF credentials.
-  - MOTIF does not import or run the OpenCode runtime to obtain SSH/OAuth state.
+  - MOTIF has no OpenCode CLI/SDK dependency or child process. Compare the [upstream credential schema at audited revision bb01d3e](https://github.com/anomalyco/opencode/blob/bb01d3eeccbca4db324d5997db1507ca919a274c/packages/core/src/credential/sql.ts) with MOTIF’s `package.json`, `provider-registry.ts` and `pi.server.ts`. Only the gateways are used.
   - Sources: <https://opencode.ai/docs/providers/>, <https://opencode.ai/docs/sdk/>,
     <https://opencode.ai/v1/docs/server/>, <https://github.com/anomalyco/opencode>,
     <https://github.com/anomalyco/opencode/blob/dev/LICENSE>
@@ -132,8 +131,7 @@ browser dialog (AccountLink.tsx)
 
 ## Credential and OAuth security
 
-- Browser JavaScript never receives an API key, OAuth client secret, access token or refresh
-  token. The principal cookie contains an opaque signed id only.
+- Typed keys are transient password-field input. Server responses never include a stored key, OAuth client secret, access token or refresh token. The principal cookie contains an opaque signed id only.
 - Credentials and PKCE flows are serialized into an AES-256-GCM envelope in
   `.motif/connections.enc` by default (override with `MOTIF_SECRETS_FILE`), with atomic writes
   and `0600` permissions. Raw JSON is never written.
@@ -154,9 +152,7 @@ browser dialog (AccountLink.tsx)
 
 - Set `MOTIF_SESSION_SECRET` to at least 32 random characters and, if desired,
   `MOTIF_CREDENTIALS_KEY` to a base64 32-byte key.
-- Set `MOTIF_PUBLIC_BASE_URL` to the absolute public origin for stable OAuth callbacks. If unset,
-  the start server infers the origin from the incoming request; production deployments should set
-  it explicitly.
+- Set `MOTIF_PUBLIC_BASE_URL` on the server to the canonical HTTPS origin for production OAuth. Only development infers an origin from the request. Users never configure a redirect URL.
 - A single long-running Node.js process is supported. Vault writes are process-serialized but do
   not implement cross-process/distributed locking. Use Convex/KMS-backed shared secret storage
   before multiple replicas or serverless workers are used.
@@ -165,3 +161,27 @@ browser dialog (AccountLink.tsx)
   ABSH-43 remain the right work.
 - Provider API calls are made server-side by Pi. MOTIF intentionally has no proxy quotaing or
   rate limiting yet.
+
+## Epic 7 acceptance audit
+
+| Sub-issues | Evidence at `9e2fec4` | Outcome on this branch |
+|---|---|---|
+| 72–79, 81, 83–85, 87: products, policies, custody | `package.json`, `provider-registry.ts`, `pi.server.ts`, official findings above. Pi 1.5.2, not an OpenCode process, handles chat. | Retain supported methods. No ChatGPT inference grant, Claude consumer credential, Copilot registration, or Vertex integration assumed. Provider/security peer sign-off is external. |
+| 80, 82: keys, architecture, model/session selection | The existing dialog and signed principal worked. `mergeModels` returned **all** Pi models; `status` and `chooseModel` discarded the validation response. | Save the intersection with the validated catalogue, including modality and pricing metadata. OpenRouter uses its authenticated [user model list](https://github.com/OpenRouterTeam/typescript-sdk/blob/main/src/funcs/modelsListForUser.ts). A listing is not a guarantee of credit or inference permission. No billable validation prompt. |
+| 76, 86, 88: OAuth | S256 exchange and owner-bound state existed; a declined callback skipped state consumption. | A matching denial consumes that attempt without exchanging. Missing session, mismatch, expiry and replay cannot link. Redirect only to fixed local outcomes with no-store/no-referrer. Exclude callback query strings and submitted forms from proxy access logs. |
+| 90, 91, 93: errors, reconnect and status | `needs_reconnect` was defined but inference did not update it; a failed status fetch could leave “Checking…” indefinitely. | Last validation, known expiry, authentication rejection, transient failure, quota, unknown and retry are distinct. Reconnecting validates before replacing the old key. A stale inference cannot invalidate its replacement. Optional server-only `MOTIF_SENTRY_DSN` sends only provider ID, operation and classified reason, not request/response data. |
+| 89, 92, 94, 95: duplicates | Canonical scope is **56, 59, 61, 54** respectively. | Reuse the encrypted vault. Confirm local removal, invalidate pending connects and never claim remote revocation. OpenRouter BYOAI issues a key, **not a refresh token**. Honor `expires_at` when supplied; otherwise there is no invented expiration. None of the enabled methods authorizes an automatic refresh grant. A 403 can be model-specific, not an expired credential. |
+
+### Operational boundaries
+
+- The selected provider/model is saved for the signed browser principal across reloads and process restarts with stable secrets. This is not cross-device identity or persistence of the editor's demo transcript. Existing v1 vaults without discovered models retain their selected model; reconnect to populate the full filtered list.
+- Keys, including BYOAI-minted keys, consume the issuing provider's account balance, project quota or gateway allowance. If compromised, revoke at that provider first, disconnect in MOTIF, then issue a replacement. MOTIF does not request management keys for remote deletion. In-flight provider work already dispatched cannot be recalled.
+- The encrypted vault protects a stolen file, not a compromised running server or stolen principal cookie. Run one least-privileged service user, terminate TLS, keep the encryption key in a separate secret manager, and restrict backup access and retention. A restored **old** vault may contain disconnected keys: do not restore to serving traffic without reconciling revocations. Keep callback query strings, headers, form bodies and provider errors out of application, proxy and analytics capture.
+- New model/status fields are additive; no second database or migration is needed. For rollback stop the service first; do not roll back credential contents to roll back code. If a vault key is lost, the supported recovery is a fresh vault and owner reconnection. For a compromised encryption key, revoke affected provider keys before provisioning new vault material. Managed re-encryption, verified account identity and multi-replica coordination remain Epic 6 deployment decisions, not features of this single-process vault.
+
+### Reproduce the checks
+
+1. `npm ci && npm test` runs the server/vault, Pi and component tests without live provider credentials. `npx tsc --noEmit` checks types.
+2. Install a compatible headless Chromium (`npx playwright-core install chromium` or set `CHROMIUM_PATH` to an installed executable). `npm run test:e2e` builds and runs a fresh production server with a temporary vault, a real browser, isolated provider HTTP fixtures and no production secrets. It covers consent denial, PKCE exchange, callback return, selection surviving reload, inference through Pi, quota, confirmed disconnect and API-key reconnect.
+3. **Authorized sandbox only:** provision a restricted, nonproduction key and allowed model via a local secret manager. Set `MOTIF_RUN_PROVIDER_SANDBOX=1`, `MOTIF_SANDBOX_PROVIDER` (registry ID), `MOTIF_SANDBOX_MODEL` and `MOTIF_SANDBOX_API_KEY`, then `npx vitest run src/test/provider-sandbox.test.ts`. This makes one short inference and may spend provider credit. Without opt-in the check is skipped. Never submit secrets in issues, test output or chat.
+4. A real consent screen requires a human-approved test tenant: on the staging HTTPS origin, decline first, restart, approve, select a listed model and run one authorized request. Confirm local disconnect and revoke the sandbox key at the provider. Record only provider, date, model and outcome. Do not enable ChatGPT plan usage to run this check.
