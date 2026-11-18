@@ -1,60 +1,92 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountLinks, type Completion, type ProviderRuntime } from "@/lib/account-link.server";
 import { AiError, ask, explainAiFailure } from "@/lib/ai.server";
+import { credentialStoreFor } from "@/lib/connection-vault.server";
+import { withPrincipal } from "@/lib/principal.server";
+
+import { json, principal, createTempVault } from "./test-vault";
 
 const SHARED = Symbol.for("motif.accountLinks");
 const scope = globalThis as { [SHARED]?: AccountLinks };
+const OWNER = principal("a");
 
-/** Installs the server's links with a provider library that answers every prompt with `reply`. */
-function useLinks(reply: (prompt: string, model: string) => Completion) {
-  const runtime: ProviderRuntime = {
-    linkApiKey: async () => {},
-    checkApiKey: async () => ({ ok: true, models: [] }),
-    signIn: async () => {},
-    unlink: async () => {},
-    linked: async () => [{ providerId: "opencode", method: "api_key" }],
-    models: async () => [{ id: "kimi-k2.7-code", name: "Kimi K2.7 Code" }],
-    complete: async (_providerId, modelId, prompt) => reply(prompt, modelId),
-  };
-  const links = new AccountLinks({ createRuntime: async () => runtime });
-  scope[SHARED] = links;
-  return links;
-}
+let vault: ReturnType<typeof createTempVault>;
+
+beforeEach(() => {
+  vault = createTempVault();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url === "https://opencode.ai/inference/v1/models") {
+        return json({ data: [{ id: "kimi-k2.7-code", display_name: "Kimi K2.7 Code" }] });
+      }
+      return json({ error: { message: "unstubbed" } }, 404);
+    }),
+  );
+});
 
 afterEach(() => {
   delete scope[SHARED];
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  vault.cleanup();
 });
 
-describe("ask", () => {
-  it("answers on the account the caller's token names", async () => {
-    const links = useLinks((prompt, model) => ({ ok: true, text: `${model} read: ${prompt}` }));
-    const { token } = (await links.linkApiKey(null, "opencode", "sk-zen-Qm81TESTKEYq7Lm")).status;
+/** Installs the server's connection manager with a provider runtime that answers from memory. */
+function useLinks(reply: (prompt: string, model: string) => Completion) {
+  scope[SHARED] = new AccountLinks({
+    createRuntime: async (principalId) => {
+      const store = credentialStoreFor(principalId);
+      const runtime: ProviderRuntime = {
+        linkApiKey: async (providerId, apiKey) => {
+          await store.modify(providerId, async () => ({ type: "api_key", key: apiKey }));
+        },
+        unlink: async (providerId) => {
+          await store.delete(providerId);
+        },
+        linked: async () => [{ providerId: "opencode", method: "api_key" }],
+        models: async () => [{ id: "kimi-k2.7-code", name: "Kimi K2.7 Code" }],
+        complete: async (_providerId, modelId, prompt) => reply(prompt, modelId),
+      };
+      return runtime;
+    },
+  });
+}
 
-    await expect(ask(token, "Extract a style")).resolves.toBe(
+describe("ask", () => {
+  it("answers on the calling principal's connected account", async () => {
+    useLinks((prompt, model) => ({ ok: true, text: `${model} read: ${prompt}` }));
+    await scope[SHARED]!.linkApiKey(OWNER, "opencode", "sk-zen-Qm81TESTKEYq7Lm");
+
+    await expect(withPrincipal(OWNER, () => ask("Extract a style"))).resolves.toBe(
       "kimi-k2.7-code read: Extract a style",
     );
   });
 
-  it("fails as not linked for a caller without a link", async () => {
+  it("fails as not linked for a principal without a connection", async () => {
     useLinks(() => ({ ok: true, text: "never reached" }));
 
-    for (const token of [null, undefined, "made-up-token"]) {
-      const error: unknown = await ask(token, "hello").catch((e: unknown) => e);
-      expect(error).toBeInstanceOf(AiError);
-      expect(error).toMatchObject({
-        reason: "not_linked",
-        message: "AI request failed: not_linked",
-      });
-    }
+    const error: unknown = await withPrincipal(principal("b"), () =>
+      ask("hello").catch((caught: unknown) => caught),
+    );
+
+    expect(error).toBeInstanceOf(AiError);
+    expect(error).toMatchObject({
+      reason: "not_linked",
+      message: "AI request failed: not_linked",
+    });
   });
 
   it("fails with the reason and the status only", async () => {
-    const links = useLinks(() => ({ ok: false, reason: "rejected", status: 401 }));
-    const { token } = (await links.linkApiKey(null, "opencode", "sk-zen-Qm81TESTKEYq7Lm")).status;
+    useLinks(() => ({ ok: false, reason: "rejected", status: 401 }));
+    await scope[SHARED]!.linkApiKey(OWNER, "opencode", "sk-zen-Qm81TESTKEYq7Lm");
 
-    const error: unknown = await ask(token, "hello").catch((e: unknown) => e);
+    const error: unknown = await withPrincipal(OWNER, () =>
+      ask("hello").catch((caught: unknown) => caught),
+    );
 
     expect(error).toBeInstanceOf(AiError);
     expect(error).toMatchObject({
@@ -67,24 +99,23 @@ describe("ask", () => {
 describe("explainAiFailure", () => {
   const fallback = "The AI couldn't finish this edit. Try again.";
 
-  it("asks for a link when none exists, and offers the pop-up", () => {
+  it("asks for a connection when none exists, and offers the dialog", () => {
     expect(explainAiFailure(new AiError("not_linked", null), fallback)).toEqual({
-      error: "Link an AI account to use this.",
+      error: "Connect an AI provider to use this.",
       relink: true,
     });
   });
 
   it("points at the account when the provider turned the request down", () => {
     expect(explainAiFailure(new AiError("rejected", 401), fallback)).toEqual({
-      error:
-        "Your linked AI account turned the request down. Link it again, or pick another model.",
+      error: "Your connected account turned the request down. Reconnect it, or pick another model.",
       relink: true,
     });
   });
 
-  it("does not offer the pop-up for a quota or rate limit", () => {
+  it("does not offer the dialog for a quota or rate limit", () => {
     expect(explainAiFailure(new AiError("limited", 429), fallback)).toEqual({
-      error: "Your linked AI account is out of quota or rate limited. Try again later.",
+      error: "Your connected account is out of quota or rate limited. Try again later.",
       relink: false,
     });
   });

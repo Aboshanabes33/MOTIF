@@ -1,7 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { ask, explainAiFailure } from "./ai.server";
 
-type StyleIn = { name: string; colors: string[]; display: string; body: string; logo?: string | undefined; motion: string[] };
+type StyleIn = {
+  name: string;
+  colors: string[];
+  display: string;
+  body: string;
+  logo?: string | undefined;
+  motion: string[];
+};
 
 function parseJson<T>(s: string): T {
   const m = s.match(/\{[\s\S]*\}/);
@@ -18,7 +25,9 @@ export type EditPlan = {
 };
 
 export const chatEdit = createServerFn({ method: "POST" })
-  .inputValidator((d: { link: string | null; style: StyleIn; history: { role: string; text: string }[]; files: string[] }) => d)
+  .inputValidator(
+    (d: { style: StyleIn; history: { role: string; text: string }[]; files: string[] }) => d,
+  )
   .handler(async ({ data }) => {
     const s = data.style;
     const prompt = `You are Motif, an AI video editor. The user's saved style is ALWAYS applied — never ask them for references or clarifying questions; decide yourself.
@@ -31,7 +40,7 @@ Respond in the same language as the user's last message. Return ONLY valid JSON 
 {"reply":"one or two sentence summary of the finished edit (mention it's a sample preview, no real video rendered)","steps":[{"title":"Style applied","detail":"..."},{"title":"Brand layer","detail":"..."},{"title":"Pacing","detail":"..."},{"title":"Captions","detail":"..."}],"filename":"kebab-case-name.mp4","duration":"mm:ss","cuts":number,"captions":[{"t":"mm:ss","text":"..."}]}
 Give 8-12 captions spread over the duration.`;
     try {
-      const plan = parseJson<EditPlan>(await ask(data.link, prompt));
+      const plan = parseJson<EditPlan>(await ask(prompt));
       return { plan, error: null, relink: false };
     } catch (e) {
       console.error(e);
@@ -39,10 +48,16 @@ Give 8-12 captions spread over the duration.`;
     }
   });
 
-export type ExtractedStyle = { name: string; colors: string[]; display: string; body: string; motion: string[] };
+export type ExtractedStyle = {
+  name: string;
+  colors: string[];
+  display: string;
+  body: string;
+  motion: string[];
+};
 
 export const extractStyle = createServerFn({ method: "POST" })
-  .inputValidator((d: { link: string | null; kind: "md" | "url" | "video"; content: string }) => d)
+  .inputValidator((d: { kind: "md" | "url" | "video"; content: string }) => d)
   .handler(async ({ data }) => {
     let source = data.content;
     if (data.kind === "url") {
@@ -59,7 +74,7 @@ Return ONLY JSON: {"name":"short style name","colors":["#RRGGBB" x5, most import
 SOURCE:
 ${source}`;
     try {
-      const style = parseJson<ExtractedStyle>(await ask(data.link, prompt));
+      const style = parseJson<ExtractedStyle>(await ask(prompt));
       return { style, error: null, relink: false };
     } catch (e) {
       console.error(e);

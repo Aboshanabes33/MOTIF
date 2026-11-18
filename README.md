@@ -22,8 +22,8 @@ real media processing and rendering.
 - **AI edit plans:** each message goes to the AI with the active style attached, so you never
   repeat your references. The AI answers with an edit plan: the style it applied, the brand
   layer, the pacing and the captions.
-- **Your own AI account:** when the app opens, it asks you to link an AI account, and the AI
-  features run on it. See [Link your AI account](#link-your-ai-account).
+- **Your own AI provider:** when the app opens, it asks you to connect an AI provider, and the AI
+  features run on it. See [Connect an AI provider](#connect-an-ai-provider).
 - **Timeline editor:** select a clip, play, move the playhead, zoom the timeline, split a clip
   and jump to a caption.
 
@@ -47,46 +47,47 @@ npm ci
 npm run dev        # http://localhost:8080
 ```
 
-No environment variable is needed.
-
-To run the production build:
+No environment variable is needed in development. To run the production build:
 
 ```sh
 npm run build
 node .output/server/index.mjs    # http://localhost:3000, or the port in PORT
 ```
 
+The production server needs a random `MOTIF_SESSION_SECRET` (and may use `MOTIF_CREDENTIALS_KEY`
+and `MOTIF_SECRETS_FILE`). `MOTIF_PUBLIC_BASE_URL` should be the absolute public origin for the
+OpenRouter callback. See `.env.example` and `docs/provider-auth.md`.
+
 `npm run preview` does not work: it answers HTTP 500 on every page.
 
-## Link your AI account
+## Connect an AI provider
 
-The two AI features, edit plans and reading a style from a file or a website, run on your own AI
-account, and their use counts against that account. The app's server has no AI key of its own.
-When the app opens, a pop-up asks you to link an account:
+The two AI features, edit plans and reading a style from a file or a website, run on a provider
+connection you choose in the app, and usage is billed/contracted to that account. MOTIF has no AI
+key of its own. When the app opens, a dialog asks you to connect a supported provider:
 
-| Provider     | How you link it                                                           | Model it starts on |
-| ------------ | ------------------------------------------------------------------------- | ------------------ |
-| OpenAI       | Sign in with ChatGPT, which uses your ChatGPT subscription, or an API key | `gpt-6.1-sol`      |
-| OpenCode Zen | An OpenCode API key                                                       | `kimi-k2.7-code`   |
-| OpenCode Go  | An OpenCode API key                                                       | `kimi-k3.1-pro`    |
+| Provider       | Supported connection          | Default model      |
+| -------------- | ------------------------------ | ------------------ |
+| OpenAI         | OpenAI API key                | `gpt-6.1-sol`      |
+| Anthropic      | Anthropic API key             | `claude-sonnet-4-6`|
+| OpenRouter     | OpenRouter key or official BYOAI PKCE | `openrouter/auto` |
+| xAI Grok       | xAI API key                   | `grok-4.7`         |
+| Google Gemini  | Gemini API key                | `gemini-3.8-flash` |
+| OpenCode Zen   | OpenCode Zen API key          | `kimi-k2.7-code`   |
+| OpenCode Go    | OpenCode Go API key           | `kimi-k3.1-pro`    |
 
-- **Not now** closes the pop-up, and the app still runs. **AI account** in the sidebar opens it
-  again. There you can also pick another model, or unlink.
-- A key is not tested when you link it. A wrong key shows on your first AI edit.
-- The server keeps your key or sign-in in its memory and never sends it to the browser.
-  Restarting the server forgets every link, and a link unused for 24 hours is dropped. You then
-  link again.
-- Sign in with ChatGPT finishes by itself when your browser and the server are on the same
-  computer. When they are not, the last page of the sign-in fails to load: copy its address from
-  the address bar and paste it into the pop-up.
+- **Not connected** opens the dialog from the sidebar. There you can connect, validate, choose a
+  model, make one connection active, or disconnect it.
+- Keys are checked with the provider before they are encrypted and stored; the browser never
+  receives the stored value. A rejected key is not kept.
+- ChatGPT/Claude subscription sign-in is not presented as a MOTIF option. GitHub Copilot stays
+  disabled until MOTIF owns a documented GitHub OAuth App and token exchange.
+- Provider model availability is merged from Pi's installed catalogue and the provider's validated
+  catalogue; a text-only model is refused for an image prompt.
 
-Linking has been tested against simulated OpenAI and OpenCode services, not yet with a real
-ChatGPT subscription or a real OpenCode key. Whether OpenAI's terms allow using a ChatGPT
-subscription from an app like this has not been checked either.
-
-Linking is built on the [Pi SDK](https://github.com/earendil-works/pi).
-[`docs/plans/pi-sdk-account-linking.md`](docs/plans/pi-sdk-account-linking.md) explains how it
-works, what was checked and what is left.
+[`docs/provider-auth.md`](docs/provider-auth.md) records the official-source audit, security
+model, deployment limits and what was and was not live-tested. It is the source of truth for
+this boundary.
 
 ## Check a change
 
@@ -97,9 +98,10 @@ npm run lint        # ESLint, with Prettier as a rule
 npm run build
 ```
 
-The tests and the build pass. The typecheck reports one known error, and lint reports known
-formatting errors; [`AGENTS.md`](AGENTS.md) lists both under "Commands". A change should add no
-new failure. Do not run `npm run format` as part of other work: it rewrites most files.
+The tests and the production build pass, and `npx tsc --noEmit` is clean. Lint still reports
+pre-existing formatting errors in untouched files; [`AGENTS.md`](AGENTS.md) lists the real
+baseline under "Commands". A change should add no new failure. Do not run `npm run format` as
+part of other work: it rewrites most files.
 
 ## How the code is organized
 
@@ -109,18 +111,18 @@ Tailwind CSS v4 and shadcn/ui.
 | Path                                               | What is there                                                       |
 | -------------------------------------------------- | ------------------------------------------------------------------- |
 | `src/routes/`                                      | The four screens, as file routes                                    |
-| `src/components/`                                  | The app shell, the composer, the result card and the account pop-up |
+| `src/components/`                                  | The app shell, the composer, the result card and the connection dialog |
 | `src/components/ui/`                               | shadcn/ui components                                                |
 | `src/lib/store.tsx`                                | The state the page keeps in memory, with its sample data            |
 | `src/lib/ai.functions.ts`, `src/lib/ai.server.ts`  | The two AI features, which run on the server                        |
-| `src/lib/account-link*.ts`, `src/lib/pi.server.ts` | Account linking, on the Pi SDK                                      |
+| `src/lib/account-link*.ts`, `src/lib/provider-registry.ts`, `src/lib/provider-validation.server.ts`, `src/lib/connection-vault.server.ts`, `src/lib/principal.server.ts`, `src/lib/pi.server.ts` | Provider connection and inference, on the Pi SDK |
 | `src/test/`                                        | The tests                                                           |
 
 ## Deploying
 
 MOTIF has no host yet, and which one to use is not decided. It needs one long-running Node.js
-process, version 22.19 or later. A serverless or edge platform will not work: the account links
-live in the server's memory, and Sign in with ChatGPT listens on a port of the server.
+process, version 22.19 or later. Serverless or edge platforms are not supported yet: the
+encrypted provider vault is local and process-serialized.
 
 ## Documents
 
@@ -129,8 +131,10 @@ live in the server's memory, and Sign in with ChatGPT listens on a port of the s
 - [`AGENTS.md`](AGENTS.md): the rules for coding agents, and the real state of the repository.
   [`CLAUDE.md`](CLAUDE.md) loads it for Claude Code.
 - [`docs/decisions.md`](docs/decisions.md): what the owner has settled.
-- [`docs/plans/pi-sdk-account-linking.md`](docs/plans/pi-sdk-account-linking.md): the plan for
-  account linking.
+- [`docs/provider-auth.md`](docs/provider-auth.md): the provider authentication audit and
+  implementation boundary.
+- [`docs/plans/pi-sdk-account-linking.md`](docs/plans/pi-sdk-account-linking.md): the earlier
+  Pi account-linking plan; it is superseded by `docs/provider-auth.md`.
 - [`docs/licenses.md`](docs/licenses.md): the licenses of the dependencies added since
   2026-11-14.
 - [`motif-ai-video-editing-app-no-login-no-saving-2026-11-14.md`](motif-ai-video-editing-app-no-login-no-saving-2026-11-14.md):

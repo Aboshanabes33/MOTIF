@@ -22,19 +22,14 @@ Phase 1 of 6, the repository audit. Its deliverable is a written audit and plan,
 (brief §14). It has not been delivered or approved, and phases 2 to 6 (backend foundation, agent
 foundation, creative intelligence, media pipeline, production readiness) have not started.
 
-One piece of phase 3 exists ahead of the plan, at the owner's instruction: linking an AI account
-through the Pi SDK. `docs/plans/pi-sdk-account-linking.md` describes it and what it leaves open.
+One piece of phase 3 exists ahead of the plan, at the owner's instruction: linking a provider
+account through the Pi SDK. `docs/provider-auth.md` is the implemented 2026-11-16 boundary and the
+current source of truth. `docs/plans/pi-sdk-account-linking.md` and
+`docs/plans/oauth-account-connection.md` are now historical research, superseded where they differ.
 
-`docs/plans/oauth-account-connection.md` (2026-11-14) is the owner's requested audit and design for
-one-click, consumer-friendly account connection without callback URLs or pasted redirects. It records
-which flows the installed SDK actually supports, which are impossible in a remote multi-user
-deployment, and a six-phase plan. It settles nothing: its §7 lists five decisions that are the
-owner's. Until they are made, do not start its phases 2–4 (backend routes, encrypted credential
-store, OpenCode adapter); they depend on Whop identity and on the repository layout decision below.
-
-Until the owner approves the plan, do not restructure the repository, add a backend, auth, a
-database or the agent runtime (the Pi SDK's `createAgentSession`), or install the packages those
-would need. Three questions are also waiting on the owner: see "Open decisions".
+The 2026-11-16 task authorized implementation of unified provider authentication. It did not
+approve the rest of phases 2–6, a production identity provider, a database migration, Electron,
+or OpenCode as a runtime. Do not add those just because they appear in the brief.
 
 ## Rules that always apply
 
@@ -77,37 +72,39 @@ it exists yet.
 
 ## The code today
 
-Verified on 2026-11-14.
+Verified on 2026-11-16.
 
 - **Stack:** TanStack Start (React 19, Vite 8, server-side rendering), strict TypeScript,
   Tailwind CSS v4, shadcn/ui.
 - **Routes** (`src/routes/`): `/` new session, `/session/$id` chat, `/session/$id/edit`
   timeline editor, `/styles` style library.
 - **UI:** in `src/components/`, `Shell.tsx` (app shell, sidebar, style panel), `Composer.tsx`,
-  `ResultCard.tsx` and `AccountLink.tsx` (the account pop-up and its sidebar entry). Of the 46
+  `ResultCard.tsx` and `AccountLink.tsx` (the provider connection dialog and its sidebar entry). Of the 46
   shadcn components in `src/components/ui/`, only `button`, `dialog`, `dropdown-menu`, `input`
   and `sonner` are used; reuse the rest before adding a UI dependency.
 - **State:** one React context store, `src/lib/store.tsx`, seeded with sample data. It lives in
   memory and resets on refresh. There is no auth, database or persistence, and attached media
-  is never uploaded: only its file name is used. The one thing the browser keeps is the token of
-  its account link, in local storage.
+  is never uploaded: only its file name is used. The browser holds no provider credential or
+  plain link token; the server sets a signed HttpOnly `motif.principal` cookie scoped to this
+  browser. It is not a signed-in user identity.
 - **AI features:** two server functions in `src/lib/ai.functions.ts`, `chatEdit` and
   `extractStyle`. Each sends one prompt through `ask()` in `src/lib/ai.server.ts`, which runs it
-  on the AI account the calling browser linked. Without a linked account both return an error
-  and the UI reopens the pop-up. Results, thumbnails and timelines are mock visuals; no video is
+  on the provider connection the calling browser linked. Without a connection both return an
+  error and the UI reopens the dialog. Results, thumbnails and timelines are mock visuals; no video is
   rendered or exported.
-- **Account linking:** when the app opens, a pop-up asks each visitor to link their own AI
-  account, with an API key or a provider sign-in. `src/lib/account-link.server.ts` keeps one
-  link per browser in the server's memory, so a restart forgets them all, and
-  `account-link.functions.ts` serves the pop-up. `src/lib/pi.server.ts` does the provider work
-  with the Pi SDK's `ModelRuntime`. The server has no AI credential of its own and reads no
-  provider key from its environment.
+- **Provider authentication:** when the app opens, a dialog asks each visitor to connect an AI
+  provider using an officially supported method. `provider-registry.ts` is the single offered-method
+  and docs registry; `account-link.server.ts` validates and stores credentials;
+  `connection-vault.server.ts` is their AES-256-GCM, principal-isolated local vault;
+  `principal.server.ts` owns the browser cookie; `account-link.functions.ts` serves the dialog.
+  `src/lib/pi.server.ts` does Pi inference with a per-principal `CredentialStore`. The server has
+  no AI credential of its own and reads no provider key from its environment at request time.
 - **Build target:** a Node.js server (Nitro preset `node-server`), started with
   `node .output/server/index.mjs`. It must stay one long-running Node.js process, version 22.19
-  or later: the account links live in its memory. Nothing deploys the app: it has no host and no
-  CI.
-- **Missing:** there is no Supabase client or migration. Zod is installed but never imported, and
-  TanStack Query is wired up but runs no queries.
+  or later: the local encrypted vault is process-serialized. Nothing deploys the app, it has no
+  host and no CI, and a shared/distributed secret store is not implemented.
+- **Missing:** there is no Supabase or Convex client/migration. Provider metadata and credentials
+  are in the local encrypted vault, not a schema. TanStack Query is wired up but runs no queries.
 
 ## Open decisions
 
@@ -125,11 +122,9 @@ raise the question instead. When one is settled, delete it here and record it in
    move files or introduce pnpm before that is approved.
 3. **Vocabulary.** The demo models a `Style` and a `Session`; the brief models brand profiles,
    projects and agent sessions. Agree the mapping before designing a schema or renaming UI.
-4. **OpenRouter's own sign-in.** OpenRouter offers a PKCE flow that would let it connect with a
-   button, no pasted key, and a hosted callback — the same shape as the ChatGPT code. Its terms do
-   not settle whether a third-party app should present that sign-in, and the flow has not been
-   verified against a live account. OpenRouter connects with a checked API key until this is
-   settled. See `docs/plans/claude-openrouter-opencode.md`.
+4. **GitHub Copilot OAuth.** GitHub documents a multi-user flow, but it requires a MOTIF-owned
+   OAuth App/GitHub App, per-user token exchange and a Copilot subscription. The owner must decide
+   when to register and configure that app; MOTIF must not show a button until then.
 
 ## Commands
 
@@ -142,16 +137,18 @@ npx tsc --noEmit   # typecheck; there is no npm script for it
 npm run lint       # ESLint, with Prettier as a rule
 ```
 
-No environment variable is needed: the AI features run on the account each visitor links in the
-app. To run a production build locally, use `npm run build` and then
-`node .output/server/index.mjs`; it listens on port 3000 unless `PORT` says otherwise.
+Production requires a random `MOTIF_SESSION_SECRET` (and optionally `MOTIF_CREDENTIALS_KEY` and
+`MOTIF_SECRETS_FILE`); set `MOTIF_PUBLIC_BASE_URL` to the public origin for the OpenRouter callback.
+The AI features run on the connection each browser principal links in the app. To run a production
+build locally, use `npm run build` and then `node .output/server/index.mjs`; it listens on port 3000
+unless `PORT` says otherwise.
 
-Baseline on 2026-11-14 with Node.js 22.19 or later: the build and the 100 tests pass. The tests
-cover account linking, the Pi SDK adapter, the pop-up and routing. The adapter tests run the
-real SDK with the network replaced, and they listen on port 1455, so they fail while a sign-in is
-running on the same machine. The typecheck fails with 1 error (`src/routes/styles.tsx:28`,
-TS7030). Lint fails with 216 `prettier/prettier` formatting errors and 9 warnings.
-`npm run preview` answers HTTP 500 on every page: `vite.config.ts` loads Nitro for builds only.
+Baseline on 2026-11-16 with Node.js 22.19 or later: the production build and 38 tests pass, and
+`npx tsc --noEmit` is clean. The tests cover provider connection management, the encrypted vault,
+the Pi SDK adapter, AI entry points, the connection dialog and routing. Pi adapter tests run the real SDK
+with the network replaced. Lint fails with 203 pre-existing `prettier/prettier` formatting errors
+and 9 warnings in untouched files; changed provider-auth files pass targeted lint. `npm run
+preview` answers HTTP 500 on every page: `vite.config.ts` loads Nitro for builds only.
 
 - Before reporting a code change as finished, run the tests, the typecheck and the build. Add no
   new failures, report against this baseline, and never call a failing run clean.
@@ -190,7 +187,8 @@ Brief §5 and §9 are binding. In this codebase that means:
   `.env.example`.
 - Never hand the Pi SDK's default credential store, the file `auth.json`, a value a user typed:
   it runs a key that starts with `!` as a shell command and expands `$NAME` from the server's
-  environment. Use its in-memory store, as `src/lib/pi.server.ts` does.
+  environment. MOTIF passes a `CredentialStore` scoped to the calling principal's encrypted vault,
+  as `src/lib/pi.server.ts` does.
 - Every server entry point validates input with a Zod schema, checks that the caller owns the
   data, and validates model output before using it.
 - Never trust a path or URL from a user or a model. Keep file operations inside the authorized
@@ -203,11 +201,11 @@ Brief §5 and §9 are binding. In this codebase that means:
   informed consent. Ask for confirmation before a destructive operation or an overwriting export.
 - Rate-limit expensive operations (AI calls, media processing).
 
-Known gaps in the demo, to close when the backend is built and never to copy: nothing is rate
-limited, and an account link belongs to a token in the browser's local storage, not to a
-signed-in user. The validators of the two AI functions are identity casts, model output is
-parsed without a schema, `extractStyle` fetches any URL without a timeout, size cap or address
-filter, and user text is interpolated straight into prompts.
+Known gaps, to close when the backend is built and never to copy: nothing is rate limited; the
+`motif.principal` cookie is an isolated browser identity, not a Whop/Convex user; the local
+encrypted vault is not shared/distributed or RLS; and provider tokens cannot be revoked by
+disconnecting. The validators of the AI functions still interpolate user text without schema-parsed
+output, and `extractStyle` fetches any URL without a timeout, size cap or private-address filter.
 
 ## Git
 
@@ -219,6 +217,6 @@ filter, and user text is interpolated straight into prompts.
 - Update "Status", "Open decisions", "The code today" and the baseline in the same change that
   makes them stale. Keep the file short; detail belongs in `product-brif.md` or `docs/`.
 - `README.md` tells people what the demo does, what is not real yet, how to run it and how to
-  link an AI account. Update it in the same change that makes it stale.
+  connect an AI provider. Update it in the same change that makes it stale.
 - Write scoped package names in backticks: `CLAUDE.md` imports this file, and Claude Code reads
   a bare `@path` as a file to import.
