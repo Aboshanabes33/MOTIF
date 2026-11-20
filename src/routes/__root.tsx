@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { AppearanceSettings } from "../components/Appearance";
 import appCss from "../styles.css?url";
 import { StoreProvider } from "../lib/store";
 import { AccountLinkProvider } from "../components/AccountLink";
@@ -110,7 +111,7 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {children}
+        <AppearanceSettings>{children}</AppearanceSettings>
         <Scripts />
       </body>
     </html>

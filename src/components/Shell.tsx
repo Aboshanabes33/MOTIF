@@ -4,6 +4,8 @@ import { useState, type ReactNode } from "react";
 import { AccountLinkButton } from "@/components/AccountLink";
 import { useStore, useStyle, type Style } from "@/lib/store";
 
+import { AppearanceSelect } from "./Appearance";
+
 export function Logo() {
   return (
     <div className="grid grid-cols-2 gap-[2px] size-4">
@@ -60,6 +62,7 @@ function Sidebar() {
         ))}
       </div>
       <AccountLinkButton />
+      <AppearanceSelect />
       <div className="flex items-center gap-2 px-2 pt-3 text-sm">
         <span className="grid size-6 place-items-center rounded-full bg-secondary"><User className="size-3.5" /></span> My Studio
       </div>
