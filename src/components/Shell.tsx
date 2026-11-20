@@ -40,7 +40,7 @@ function Sidebar() {
         <Palette className="size-4" /> Style Library
       </Link>
       <div className="mt-5 px-3 text-xs text-muted-foreground">Workspace</div>
-      <div className="mt-2 flex items-center gap-2 px-3 py-1.5 text-sm"><Folder className="size-4 text-muted-foreground" /> Default workspace</div>
+      <Link to="/projects" search={{}} className="mt-2 flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent"><Folder className="size-4 text-muted-foreground" /> Projects</Link>
       <div className="flex flex-col overflow-y-auto">
         {sessions.map((s) => (
           <Link key={s.id} to="/session/$id" params={{ id: s.id }}

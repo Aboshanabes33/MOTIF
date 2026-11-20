@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as StylesRouteImport } from './routes/styles'
 import { Route as SessionIdRouteImport } from './routes/session.$id'
 import { Route as SessionIdEditRouteImport } from './routes/session.$id_.edit'
@@ -18,6 +19,11 @@ import { Route as ApiAuthProviderCallbackRouteImport } from './routes/api/auth/$
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsRoute = ProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StylesRoute = StylesRouteImport.update({
@@ -43,6 +49,7 @@ const ApiAuthProviderCallbackRoute = ApiAuthProviderCallbackRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/projects': typeof ProjectsRoute
   '/styles': typeof StylesRoute
   '/session/$id': typeof SessionIdRoute
   '/session/$id/edit': typeof SessionIdEditRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/projects': typeof ProjectsRoute
   '/styles': typeof StylesRoute
   '/session/$id': typeof SessionIdRoute
   '/session/$id/edit': typeof SessionIdEditRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/projects': typeof ProjectsRoute
   '/styles': typeof StylesRoute
   '/session/$id': typeof SessionIdRoute
   '/session/$id_/edit': typeof SessionIdEditRoute
@@ -67,6 +76,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/projects'
     | '/styles'
     | '/session/$id'
     | '/session/$id/edit'
@@ -74,6 +84,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/projects'
     | '/styles'
     | '/session/$id'
     | '/session/$id/edit'
@@ -81,6 +92,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/projects'
     | '/styles'
     | '/session/$id'
     | '/session/$id_/edit'
@@ -89,6 +101,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ProjectsRoute: typeof ProjectsRoute
   StylesRoute: typeof StylesRoute
   SessionIdRoute: typeof SessionIdRoute
   SessionIdEditRoute: typeof SessionIdEditRoute
@@ -102,6 +115,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/projects': {
+      id: '/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/styles': {
@@ -137,6 +157,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ProjectsRoute: ProjectsRoute,
   StylesRoute: StylesRoute,
   SessionIdRoute: SessionIdRoute,
   SessionIdEditRoute: SessionIdEditRoute,
