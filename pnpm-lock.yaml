@@ -9349,8 +9349,8 @@ importers:
         specifier: workspace:*
         version: link:../browser-use-runtime
       chrome-devtools-mcp:
-        specifier: 1.9.0
-        version: 1.9.0
+        specifier: 1.11.0
+        version: 1.11.0
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -24603,8 +24603,8 @@ packages:
   chrome-devtools-frontend@1.0.1638082:
     resolution: {integrity: sha512-KfbM5kZrgseWciU9Y6ic6hDtYWKY7SY6L8jkeq23KF5CgZ1cU7P+janhysDLN+XZr6U4Ro5V+2W7YOHjKW4PAw==}
 
-  chrome-devtools-mcp@1.9.0:
-    resolution: {integrity: sha512-RnzXoJiUQ44hpOihWk90uOhLD/CnwDkDy0ldHMZONJ2nYQ+dWN1fq1luHHqyd+7FuYnyIlCY6uTThbN5ut9kSQ==}
+  chrome-devtools-mcp@1.11.0:
+    resolution: {integrity: sha512-CytJ/5tnzrS+J/74be2P5aCOsS/mmGRHys/Si+IYC4ucrbnWAmES/dYdxGJjeUCECRcoFUilZAysdjlwqUjXIA==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=23}
     hasBin: true
     peerDependencies:
@@ -32162,7 +32162,7 @@ snapshots:
 
   chrome-devtools-frontend@1.0.1638082: {}
 
-  chrome-devtools-mcp@1.9.0: {}
+  chrome-devtools-mcp@1.11.0: {}
 
   chromium-pickle-js@0.2.0: {}
 
