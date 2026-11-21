@@ -2169,6 +2169,54 @@ export interface Config extends ProtocolConfig, ModelListingConfig {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-llm-deepseek-api-key -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-llm-motif-relay -->
+<a id="deepseek-aidsh-llm-motif-relay"></a>
+
+## `@deepseek-ai/dsh-llm-motif-relay`
+
+- `inject`: `llm` · `agents` · `subagents`
+- `source`: [`packages/llm/llm-motif-relay/src/index.ts:36`](../packages/llm/llm-motif-relay/src/index.ts)
+
+```ts config-catalog
+/**
+ * Deployment-owned relay settings. Model, permission mode, and every other
+ * command-line option belong to the subagent provider instance; this plugin
+ * fixes only the route, the backend, the Brand files, and the budgets.
+ */
+export interface Config {
+  /** Model-route name registered on `ctx.llm` (default `motif-relay`). */
+  providerName?: string
+  /** Registered subagent backend that runs each send (default `claude-code`; `codex` is the sibling). */
+  backend?: string
+  /** Model id this route advertises and the Session selects (default: the backend name). */
+  model?: string
+  /** Selector label for this route (default: the backend name). */
+  displayName?: string
+  /** Brand definition file relative to the Brand folder (default `brand.md`). */
+  brandFile?: string
+  /** Timeline directory relative to the Brand folder (default `timeline`). */
+  timelineDir?: string
+  /** Timeline file extensions carried into the task (default `['.md', '.json']`). */
+  timelineExtensions?: string[]
+  /** Timeline files carried by one task (default `20`). */
+  maxTimelineFiles?: number
+  /** Timeline text bytes carried by one task (default `64000`). */
+  maxTimelineBytes?: number
+  /** Earlier conversation messages carried into the task (default `6`). */
+  conversationMessages?: number
+  /** Earlier conversation characters carried into the task (default `4000`). */
+  conversationChars?: number
+  /** Deadline for one send in milliseconds (default `900000`, fifteen minutes). */
+  timeoutMs?: number
+  /**
+   * Native sign-in preflight (default `auto`). `skip` assumes a sign-in the Host
+   * cannot see — for example credentials supplied through the provider row's `env`.
+   */
+  signInCheck?: 'auto' | 'skip'
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-llm-motif-relay -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-llm-pi-ai -->
 <a id="deepseek-aidsh-llm-pi-ai"></a>
 

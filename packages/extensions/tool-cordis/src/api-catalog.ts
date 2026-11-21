@@ -5871,6 +5871,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'name', description: 'the configured `servers` key or registered name.' }, { name: 'status', description: 'the status now current for that server.' }],
   },
   {
+    name: 'motif-relay/status',
+    mode: 'emit',
+    signature: '\'motif-relay/status\'(event: RelayStatusEvent): void',
+    summary: 'One relay send reached a coarse state.',
+    description: 'One relay send reached a coarse state. `finished` and `failed` are terminal; a cancelled send emits no terminal state because the turn itself reports it.',
+    parameters: [{ name: 'event', description: 'Session, backend, and state reached.' }],
+  },
+  {
     name: 'permission-presets/catalog-changed',
     mode: 'emit',
     signature: '\'permission-presets/catalog-changed\'(): void',
@@ -9265,6 +9273,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RelayPublishView',
     declaration: 'export interface RelayPublishView {\n    readonly ok: boolean;\n    readonly blocking: boolean;\n    readonly error?: string;\n}',
+  },
+  {
+    name: 'RelayStatus',
+    declaration: 'export type RelayStatus = \'started\' | \'working\' | \'finished\' | \'failed\';',
+  },
+  {
+    name: 'RelayStatusEvent',
+    declaration: 'export interface RelayStatusEvent {\n    readonly sessionId: SessionId;\n    readonly backend: string;\n    readonly status: RelayStatus;\n}',
   },
   {
     name: 'Reload',
