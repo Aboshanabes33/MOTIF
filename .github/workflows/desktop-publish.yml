@@ -46,8 +46,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node apps/desktop-publisher/src/preflight-desktop-publish.mjs
-      - uses: pnpm/action-setup@v5.0.0
-      - uses: actions/setup-node@v7
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version: '24'
       - run: pnpm install --frozen-lockfile
@@ -81,7 +81,7 @@ jobs:
           persist-credentials: false
           clean: false
           path: desktop-publisher
-      - uses: pnpm/action-setup@v5.0.0
+      - uses: pnpm/action-setup@v5
         with:
           package_json_file: desktop-publisher/package.json
           dest: ${{ runner.temp }}/publish-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
@@ -126,7 +126,7 @@ jobs:
           persist-credentials: false
           clean: false
           path: desktop-publisher
-      - uses: pnpm/action-setup@v5.0.0
+      - uses: pnpm/action-setup@v5
         with:
           package_json_file: desktop-publisher/package.json
           dest: ${{ runner.temp }}/publish-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
@@ -152,7 +152,7 @@ jobs:
       - name: Create short-lived tag token
         if: needs.prepare.outputs.preset == 'production'
         id: app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
         with:
           client-id: ${{ steps.check.outputs.app-client-id }}
           private-key: ${{ steps.key.outputs.private-key }}
@@ -193,7 +193,7 @@ jobs:
           persist-credentials: false
           clean: false
           path: website-publisher
-      - uses: pnpm/action-setup@v5.0.0
+      - uses: pnpm/action-setup@v5
         with:
           package_json_file: website-publisher/package.json
           dest: ${{ runner.temp }}/website-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
@@ -237,7 +237,7 @@ jobs:
           persist-credentials: false
           clean: false
           path: website-publisher
-      - uses: pnpm/action-setup@v5.0.0
+      - uses: pnpm/action-setup@v5
         with:
           package_json_file: website-publisher/package.json
           dest: ${{ runner.temp }}/website-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
