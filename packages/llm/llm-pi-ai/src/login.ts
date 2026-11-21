@@ -14,32 +14,25 @@ import { isCredentialKeySegment } from '@deepseek-ai/dsh-credentials'
 import { catalogProvider, catalogProviderIds } from './catalog.ts'
 import { recordKeyFor } from './auth.ts'
 import type { PiAiAuthInjection } from './adapter.ts'
+import { resolveOrCreateInstallationId } from './installation-id.ts'
 import { createModels } from './models.ts'
 
-/**
- * Catalog providers whose OAuth login this adapter does not offer. pi-ai's Sign
- * in with ChatGPT (`openai`) identifies the installation to OpenAI with a
- * stable UUID that the app supplies through `LoginOptions.getDeviceId`, and it
- * refuses to start without one. The harness keeps no installation ID meant for
- * a third-party account sign-in, so the route signs in with an API key.
- */
-const UNSERVED_OAUTH: ReadonlySet<string> = new Set(['openai'])
+/** Product name passed to pi-ai login flows as `LoginOptions.agentName`. */
+const AGENT_NAME = 'Motif'
 
 /**
  * The login methods one catalog provider offers.
  *
- * A method appears only when pi-ai can actually run it: `oauth` carries a
- * `login` that runs without app-supplied login options except for the
- * providers in {@link UNSERVED_OAUTH}, while an api-key method has one only
- * when the provider collects its key interactively — which every installed one
- * currently does, so a key is typed into pi-ai's own prompt rather than into
- * the settings form.
+ * A method appears only when pi-ai can run it: `oauth` when the provider
+ * declares an OAuth flow, and `api-key` when the provider collects its key
+ * interactively through pi-ai's prompt rather than relying solely on ambient
+ * environment discovery.
  * @param provider - the installed catalog provider, if pi-ai ships one.
  * @returns its methods, most preferred first; empty when it offers no login.
  */
 function loginMethods(provider: Provider | undefined): AuthorizationMethod[] {
   const methods: AuthorizationMethod[] = []
-  const oauth = provider === undefined || UNSERVED_OAUTH.has(provider.id) ? undefined : provider.auth.oauth
+  const oauth = provider?.auth.oauth
   if (oauth !== undefined) methods.push({ id: 'oauth', label: oauth.loginLabel ?? oauth.name })
   const apiKey = provider?.auth.apiKey
   if (apiKey?.login !== undefined) methods.push({ id: 'api-key', label: apiKey.name })
@@ -151,6 +144,10 @@ export function registerPiAiFlows(ctx: Context, auth: PiAiAuthInjection): void {
       label: provider.name,
       methods: [first, ...rest],
       async run(session) {
+        // Resolve the persisted installation UUID asynchronously before calling
+        // pi-ai so the synchronous `LoginOptions.getDeviceId` callback closes
+        // over the stored value.
+        const deviceId = await resolveOrCreateInstallationId({ signal: session.signal })
         // A collection of its own, holding only the provider being signed
         // into: login is not serving requests, and the credential it produces
         // lands in the shared store either way.
@@ -161,11 +158,19 @@ export function registerPiAiFlows(ctx: Context, auth: PiAiAuthInjection): void {
         const type: AuthType = session.method === 'oauth' ? 'oauth' : 'api_key'
         // pi-ai persists what the login returns through that same store, which
         // is what makes it the single writer of this record.
-        await models.login(providerId, type, {
-          signal: session.signal,
-          notify: (event) => { relay(event, session) },
-          prompt: prompt => session.prompt(restate(prompt)),
-        })
+        await models.login(
+          providerId,
+          type,
+          {
+            signal: session.signal,
+            notify: (event) => { relay(event, session) },
+            prompt: prompt => session.prompt(restate(prompt)),
+          },
+          {
+            getDeviceId: () => deviceId,
+            agentName: AGENT_NAME,
+          },
+        )
       },
     })
   }

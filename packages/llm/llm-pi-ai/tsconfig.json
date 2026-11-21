@@ -12,7 +12,13 @@
       "path": "../../util/launch-environment"
     },
     {
+      "path": "../../util/atomic-write"
+    },
+    {
       "path": "../../util/brand"
+    },
+    {
+      "path": "../../util/home-paths"
     },
     {
       "path": "../../../vendor/cosmokit"

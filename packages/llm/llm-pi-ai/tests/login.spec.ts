@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -6,8 +6,9 @@ import { Context } from '@deepseek-ai/cordis'
 import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import type { AuthorizationInteraction, AuthorizationNotice, AuthorizationPrompt } from '@deepseek-ai/dsh-authorization'
 import LocalCredentialProvider from '@deepseek-ai/dsh-credentials-local'
-import type { CredentialKey } from '@deepseek-ai/dsh-credentials'
-import type { AuthEvent, AuthInteraction, AuthPrompt, AuthType, Credential } from '@earendil-works/pi-ai'
+import { credentialKey, type CredentialKey } from '@deepseek-ai/dsh-credentials'
+import { HarnessError, LlmError } from '@deepseek-ai/dsh-llm'
+import type { AuthEvent, AuthInteraction, AuthPrompt, AuthType, Credential, LoginOptions } from '@earendil-works/pi-ai'
 
 const login = vi.hoisted(() => vi.fn())
 
@@ -24,17 +25,20 @@ const { catalogProvider } = await import('../src/catalog.ts')
 const { registerPiAiFlows } = await import('../src/login.ts')
 
 const CODEX = recordKeyFor('openai-codex')
+const OPENAI = recordKeyFor('openai')
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const dirs: string[] = []
 
 /** A context with the record store, the seam, and every pi-ai login flow. */
-async function harness(): Promise<Context> {
-  const dir = await mkdtemp(join(tmpdir(), 'dsh-pi-login-'))
-  dirs.push(dir)
+async function harness(dshHome?: string): Promise<{ ctx: Context; home: string }> {
+  const dir = dshHome ?? await mkdtemp(join(tmpdir(), 'dsh-pi-login-'))
+  if (dshHome === undefined) dirs.push(dir)
+  vi.stubEnv('DSH_HOME', dir)
   const ctx = new Context()
   await ctx.plugin(LocalCredentialProvider, { path: join(dir, '.credentials.yaml'), watch: false })
   await ctx.plugin(AuthorizationService)
   registerPiAiFlows(ctx, { credentials: credentialStoreFrom(ctx), authContext: authContextFrom(ctx) })
-  return ctx
+  return { ctx, home: dir }
 }
 
 /** An interaction recording everything a flow says, answering every question. */
@@ -78,12 +82,13 @@ async function attempt(
 
 afterEach(async () => {
   login.mockReset()
+  vi.unstubAllEnvs()
   await Promise.all(dirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
 describe('pi-ai login flows', () => {
   it('offers one flow per installed provider, with the methods that provider ships', async () => {
-    const ctx = await harness()
+    const { ctx } = await harness()
     const offered = ctx.authorization.list()
 
     // The OAuth-only provider is exactly the case this exists for: nothing
@@ -97,25 +102,99 @@ describe('pi-ai login flows', () => {
     // through its own prompt rather than leaving it to the settings form.
     expect(offered.find(entry => entry.key === recordKeyFor('deepseek'))?.methods.map(one => one.id))
       .toEqual(['api-key'])
-    // pi-ai ships Sign in with ChatGPT for `openai`, which needs an
-    // installation ID the harness does not supply; only the key login is offered.
+    // OpenAI offers Sign in with ChatGPT (OAuth) first, followed by API key.
     expect(catalogProvider('openai')?.auth.oauth?.loginLabel).toBe('Sign in with ChatGPT')
-    expect(offered.find(entry => entry.key === recordKeyFor('openai'))?.methods.map(one => one.id))
-      .toEqual(['api-key'])
+    expect(offered.find(entry => entry.key === OPENAI)?.methods).toEqual([
+      { id: 'oauth', label: 'Sign in with ChatGPT' },
+      { id: 'api-key', label: expect.any(String) as string },
+    ])
   })
 
   it('runs the pi-ai auth type the chosen method names', async () => {
-    const ctx = await harness()
+    const { ctx } = await harness()
 
     await attempt(ctx, () => Promise.resolve())
-    expect(login).toHaveBeenLastCalledWith('openai-codex', 'oauth', expect.anything())
+    expect(login).toHaveBeenLastCalledWith('openai-codex', 'oauth', expect.anything(), {
+      getDeviceId: expect.any(Function) as () => string,
+      agentName: 'Motif',
+    })
 
     await attempt(ctx, () => Promise.resolve(), { key: recordKeyFor('anthropic'), method: 'api-key' })
-    expect(login).toHaveBeenLastCalledWith('anthropic', 'api_key', expect.anything())
+    expect(login).toHaveBeenLastCalledWith('anthropic', 'api_key', expect.anything(), {
+      getDeviceId: expect.any(Function) as () => string,
+      agentName: 'Motif',
+    })
+
+    await attempt(ctx, () => Promise.resolve(), { key: OPENAI, method: 'oauth' })
+    expect(login).toHaveBeenLastCalledWith('openai', 'oauth', expect.anything(), {
+      getDeviceId: expect.any(Function) as () => string,
+      agentName: 'Motif',
+    })
+  })
+
+  it('supplies a stable Motif installation UUID across calls and runs without reading DeepSeek account identity', async () => {
+    const { ctx, home } = await harness()
+    const deepseekDeviceId = '11111111-1111-4111-8111-111111111111'
+    await ctx.credentials.modifyRecord(
+      credentialKey('deepseek-account-platform', 'device'),
+      () => Promise.resolve({ kind: 'grant', payload: { id: deepseekDeviceId } }),
+    )
+    const getDeviceIdentity = vi.fn(() => Promise.resolve({ deviceId: deepseekDeviceId, osVersion: 'test' }))
+    ctx.provide('deepseekAccount', { getDeviceIdentity } as never)
+
+    const seenInRun1: string[] = []
+    login.mockImplementationOnce(async (providerId: string, _type: AuthType, _interaction: AuthInteraction, options?: LoginOptions) => {
+      expect(options?.agentName).toBe('Motif')
+      seenInRun1.push(options!.getDeviceId!(), options!.getDeviceId!())
+      const granted: Credential = { type: 'oauth', access: 'at-1', refresh: 'rt-1', expires: 1 }
+      await credentialStoreFrom(ctx).modify(providerId, () => Promise.resolve(granted))
+      return granted
+    })
+    await expect(ctx.authorization.begin({ key: OPENAI, method: 'oauth', interaction: surface() }))
+      .resolves.toEqual({ status: 'authorized' })
+
+    expect(seenInRun1[0]).toMatch(UUID_PATTERN)
+    expect(seenInRun1[1]).toBe(seenInRun1[0])
+    expect(seenInRun1[0]).not.toBe(deepseekDeviceId)
+    expect(getDeviceIdentity).not.toHaveBeenCalled()
+
+    // Second run on a fresh Context sharing the same Motif home reuses the persisted UUID.
+    const { ctx: ctx2 } = await harness(home)
+    let seenInRun2: string | undefined
+    login.mockImplementationOnce(async (providerId: string, _type: AuthType, _interaction: AuthInteraction, options?: LoginOptions) => {
+      expect(options?.agentName).toBe('Motif')
+      seenInRun2 = options?.getDeviceId?.()
+      const granted: Credential = { type: 'oauth', access: 'at-2', refresh: 'rt-2', expires: 2 }
+      await credentialStoreFrom(ctx2).modify(providerId, () => Promise.resolve(granted))
+      return granted
+    })
+    await expect(ctx2.authorization.begin({ key: OPENAI, method: 'oauth', interaction: surface() }))
+      .resolves.toEqual({ status: 'authorized' })
+
+    expect(seenInRun2).toBe(seenInRun1[0])
+    const persisted = await readFile(join(home, 'state', 'llm-pi-ai', 'installation-id'), 'utf8')
+    expect(persisted.trim()).toBe(seenInRun1[0])
+  })
+
+  it('fails loudly instead of inventing a throwaway UUID when the persisted installation ID is corrupt', async () => {
+    const { ctx, home } = await harness()
+    const idFile = join(home, 'state', 'llm-pi-ai', 'installation-id')
+    await mkdir(join(home, 'state', 'llm-pi-ai'), { recursive: true })
+    await writeFile(idFile, 'not-a-uuid\n')
+
+    await expect(ctx.authorization.begin({ key: OPENAI, method: 'oauth', interaction: surface() }))
+      .rejects.toSatisfy((error: unknown) => (
+        error instanceof HarnessError
+        && error instanceof LlmError
+        && error.code === 'AUTH'
+        && error.message.includes('invalid installation ID')
+      ))
+    expect(login).not.toHaveBeenCalled()
+    await expect(readFile(idFile, 'utf8')).resolves.toBe('not-a-uuid\n')
   })
 
   it('commits what the login produced, where the adapter reads it back', async () => {
-    const ctx = await harness()
+    const { ctx } = await harness()
 
     await attempt(ctx, () => Promise.resolve())
 
@@ -126,7 +205,7 @@ describe('pi-ai login flows', () => {
   })
 
   it('restates every pi-ai login event in the neutral vocabulary', async () => {
-    const ctx = await harness()
+    const { ctx } = await harness()
     const events: AuthEvent[] = [
       { type: 'info', message: 'Read this first', links: [{ url: 'https://help.example' }] },
       { type: 'info', message: 'Nothing to open' },
@@ -160,7 +239,7 @@ describe('pi-ai login flows', () => {
   })
 
   it('restates every pi-ai prompt, carrying the per-prompt withdrawal signal', async () => {
-    const ctx = await harness()
+    const { ctx } = await harness()
     const withdraw = new AbortController()
     const prompts: AuthPrompt[] = [
       { type: 'text', message: 'Your workspace', placeholder: 'acme' },
@@ -185,7 +264,7 @@ describe('pi-ai login flows', () => {
   })
 
   it('hands the flow the attempt-wide cancellation signal', async () => {
-    const ctx = await harness()
+    const { ctx } = await harness()
     let seen: AbortSignal | undefined
     const controller = new AbortController()
     login.mockImplementation((_id: string, _type: AuthType, interaction: AuthInteraction) => {
