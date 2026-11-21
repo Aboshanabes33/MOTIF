@@ -1,222 +1,190 @@
-# MOTIF: project rules for coding agents
+# AGENTS.md
 
-MOTIF is an AI creative-workflow app for video editors, motion designers and marketers: teach it
-a brand or style once, and every AI-assisted edit follows it without re-sending references or
-prompts. This repository holds a working demo. The job is to evolve that demo into the
-production application defined in `product-brif.md`. It is an engineering task, not a redesign.
+DeepSeek Harness is an all-plugin Cordis agent harness. Read [docs/architecture.md](docs/architecture.md) before changing `packages/`; follow [docs/AGENTS.md](docs/AGENTS.md) for documentation.
 
-## Read first
+## Pre-stable APIs and released Session data
 
-- `product-brif.md` (the brief) is the source of truth for the target architecture, the phases
-  and the working rules. Read it in full before planning or architectural work. This file adds
-  what the brief cannot know: the real state of the repository, and where the two disagree.
-- The existing UI under `src/` is the source of truth for visual design and user experience.
-- `motif-ai-video-editing-app-no-login-no-saving-2026-11-14.md` is the plan the demo was
-  generated from. It is historical: where it differs from the code, trust the code.
-- `docs/decisions.md` records what the owner has already settled. Do not reopen those questions.
-- An explicit instruction from the owner in the current task overrides these project rules.
+Public APIs are pre-stable; update every consumer. Follow [version/status](docs/session-format-status.md) and [type acknowledgements](docs/cookbook/reviewing-persistence-type-changes.md). [Adjacent migration](.agents/notes/implemented/architecture/2026-08-31-released-session-format-migrations.md) may add a version-named successor but never move, overwrite, or delete committed generations; predecessors imply neither fallback nor downgrade support. SQLite uses monotonic `SCHEMA_VERSION`.
 
-## Status
+Acknowledge [declared persistence-type changes](docs/cookbook/reviewing-persistence-type-changes.md).
 
-Phase 1 of 6, the repository audit. Its deliverable is a written audit and plan, not code
-(brief §14). It has not been delivered or approved, and phases 2 to 6 (backend foundation, agent
-foundation, creative intelligence, media pipeline, production readiness) have not started.
+Record each externally perceptible breaking change immediately in an [upgrade guide](.agents/skills/dsh-create-upgrade-guide/SKILL.md).
 
-One piece of phase 3 exists ahead of the plan, at the owner's instruction: linking a provider
-account through the Pi SDK. `docs/provider-auth.md` is the implemented 2026-11-16 boundary and the
-current source of truth. `docs/plans/pi-sdk-account-linking.md` and
-`docs/plans/oauth-account-connection.md` are now historical research, superseded where they differ.
+**Application launch.** Only `dsh` profiles launch supported Node apps; package bins, demos, and public SDK argv escapes are forbidden ([rule](docs/architecture.md#application-launch)).
 
-The 2026-11-16 task authorized implementation of unified provider authentication. It did not
-approve the rest of phases 2–6, a production identity provider, a database migration, Electron,
-or OpenCode as a runtime. Do not add those just because they appear in the brief.
+## Repository layout
 
-## Rules that always apply
+```
+vendor/      Vendored Cordis (vendor/README.md)
+packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
+  core/                 agent/session API
+  api/                  remote BFF
+  typert/               type graphs
+  llm/                  model providers
+  shell/                command execution
+  subprocess/           child-process management
+  ssh/                  SSH execution providers
+  terminal/             persistent terminals
+  ptc-runtime/          PTC execution
+  sandbox/              process confinement
+  deliverables/         turn deliverables
+  fs/                   filesystem access
+  lsp/                  language servers
+  skill/                skill loading
+  web/                  search/fetch tools
+  computer-use/         computer interaction
+  browser-use/          browser interaction
+  compaction/           context compaction
+  context/              request context
+  subagent/             delegated agents
+  team/                 shared task coordination
+  jobs/                 background jobs
+  bundle/               profile bundles
+  workflow/             workflow execution
+  todo/                 todo_write tool
+  plan/                 logged planning
+  goal/                 session goals
+  schedule/             scheduled follow-ups
+  preset/               agent composition
+  guard/                loop/tool guards
+  extensions/           runtime self-modification
+  session/              durable sessions
+  session-query/        browsing/search/export
+  attachment/           binary attachments
+  spill/                output spill
+  storage/              non-session storage
+  workspace/            workspace entities
+  feedback/             human feedback
+  identity/             anonymous identity
+  settings/             user settings
+  credentials/          credentials/authorization
+  account/              DeepSeek
+  acp/                  automation-only ACP
+  interaction/          human interaction
+  boot/                 application boot
+  sdk/                  JSON-RPC SDK
+  host/                 GUI host
+  client/               GUI client
+  mcp/                  external tools
+  experimental/         evaluated capabilities without a product-support commitment
+  test-support/         test infrastructure
+  util/                 zero-dependency utilities
+python/      Python SDK/runtime (python/README.md)
+native/      @deepseek-ai/node-addon-system source (native/README.md)
+benchmarks/  performance gates
+.agents/     Agent workflows/notes
+docs/        Documentation (docs/AGENTS.md)
+scripts/     gates and generators
+website/     VitePress documentation projection
+```
 
-Condensed from the brief.
-
-1. Inspect before you modify: read the code you are changing, and its callers, first.
-2. Preserve the UI: no redesign, no restyling, no product features beyond the brief.
-3. Do not replace working code without a stated technical reason. Migrate one phase at a time.
-4. Keep backend logic out of React components. Keep the agent runtime, AI providers and media
-   tools behind MOTIF-owned interfaces, so each can be replaced without touching the rest.
-5. Stay web-first. Draw boundaries a future Electron app could reuse; do not build Electron.
-6. Add no infrastructure cost (a VPS, cloud media processing) without written justification and
-   the owner's approval.
-7. Add a dependency only in the phase that uses it, after checking that its license permits
-   commercial use. Record the license in `docs/licenses.md` (brief §12).
-8. "The UI renders" is not done. New auth, ownership, provider, agent, tool-validation, media
-   and API-error code ships with tests that use small, realistic fixtures (brief §11).
-9. End each phase by running the checks under "Commands" and reporting what was completed, what
-   failed and what is blocked.
-10. Put long-form output (the audit, plans, decision records, the license inventory) in `docs/`.
-
-## Target architecture
-
-Decided by the brief (§3 to §8), which holds the details. Apart from the frontend base, none of
-it exists yet.
-
-- **Frontend:** the existing React, Vite, TypeScript and Tailwind app, with Zustand for client
-  state, TanStack Query for server state and Zod for validation.
-- **Backend:** Node.js with Hono (`@hono/node-server`), handling auth verification,
-  authorization, agent sessions, AI provider integrations, streaming and project operations.
-- **Identity and data:** Whop for identity and membership, verified server-side. Supabase
-  PostgreSQL for `profiles`, `brands`, `projects`, `user_preferences` and `onboarding_progress`,
-  changed only through migrations.
-- **Agent:** the Pi SDK (`@earendil-works/pi-coding-agent`) on the server, behind a MOTIF agent
-  abstraction, using each user's own provider credentials (OAuth or API key).
-- **Media:** FFmpeg (transcoding, probing), Mediabunny (in-browser media), whisper.cpp
-  (transcription) and HyperFrames (rendering), behind a dedicated media service interface.
-- **MOTIF Core:** brand intelligence, reference analysis, project management and validated
-  creative agent tools.
-
-## The code today
-
-Verified on 2026-11-16.
-
-- **Stack:** TanStack Start (React 19, Vite 8, server-side rendering), strict TypeScript,
-  Tailwind CSS v4, shadcn/ui.
-- **Routes** (`src/routes/`): `/` new session, `/session/$id` chat, `/session/$id/edit`
-  timeline editor, `/styles` style library.
-- **UI:** in `src/components/`, `Shell.tsx` (app shell, sidebar, style panel), `Composer.tsx`,
-  `ResultCard.tsx` and `AccountLink.tsx` (the provider connection dialog and its sidebar entry). Of the 46
-  shadcn components in `src/components/ui/`, only `button`, `dialog`, `dropdown-menu`, `input`
-  and `sonner` are used; reuse the rest before adding a UI dependency.
-- **State:** one React context store, `src/lib/store.tsx`, seeded with sample data. It lives in
-  memory and resets on refresh. There is no auth, database or persistence, and attached media
-  is never uploaded: only its file name is used. The browser holds no provider credential or
-  plain link token; the server sets a signed HttpOnly `motif.principal` cookie scoped to this
-  browser. It is not a signed-in user identity.
-- **AI features:** two server functions in `src/lib/ai.functions.ts`, `chatEdit` and
-  `extractStyle`. Each sends one prompt through `ask()` in `src/lib/ai.server.ts`, which runs it
-  on the provider connection the calling browser linked. Without a connection both return an
-  error and the UI reopens the dialog. Results, thumbnails and timelines are mock visuals; no video is
-  rendered or exported.
-- **Provider authentication:** when the app opens, a dialog asks each visitor to connect an AI
-  provider using an officially supported method. `provider-registry.ts` is the single offered-method
-  and docs registry; `account-link.server.ts` validates and stores credentials;
-  `connection-vault.server.ts` is their AES-256-GCM, principal-isolated local vault;
-  `principal.server.ts` owns the browser cookie; `account-link.functions.ts` serves the dialog.
-  `src/lib/pi.server.ts` does Pi inference with a per-principal `CredentialStore`. The server has
-  no AI credential of its own and reads no provider key from its environment at request time.
-- **Build target:** a Node.js server (Nitro preset `node-server`), started with
-  `node .output/server/index.mjs`. It must stay one long-running Node.js process, version 22.19
-  or later: the local encrypted vault is process-serialized. Nothing deploys the app, it has no
-  host and no CI, and a shared/distributed secret store is not implemented.
-- **Missing:** there is no Supabase or Convex client/migration. Provider metadata and credentials
-  are in the local encrypted vault, not a schema. TanStack Query is wired up but runs no queries.
-
-## Open decisions
-
-Only the owner can settle these. Do not pick a side or start work that depends on an answer;
-raise the question instead. When one is settled, delete it here and record it in
-`docs/decisions.md`.
-
-1. **Which host runs MOTIF.** The app needs one long-running Node.js process (settled on
-   2026-11-14, see `docs/decisions.md`), and server-side FFmpeg and whisper.cpp are native
-   programs. It has no host yet, and a server host is a new cost that brief §13 allows only with
-   explicit justification.
-2. **Repository layout and package manager.** Today there is one app, with `package-lock.json`
-   and `bun.lock` both committed; the two pin about 190 packages at different versions. The
-   brief suggests `apps/` and `packages/` on pnpm workspaces if a monorepo is justified. Do not
-   move files or introduce pnpm before that is approved.
-3. **Vocabulary.** The demo models a `Style` and a `Session`; the brief models brand profiles,
-   projects and agent sessions. Agree the mapping before designing a schema or renaming UI.
-4. **GitHub Copilot OAuth.** GitHub documents a multi-user flow, but it requires a MOTIF-owned
-   OAuth App/GitHub App, per-user token exchange and a Copilot subscription. The owner must decide
-   when to register and configure that app; MOTIF must not show a button until then.
+Package groups: [packages/README.md](packages/README.md). [Experimental status](packages/experimental/README.md#status) is independent of optional delivery; nonexperimental packages need product use or an explicit [classification](scripts/product-package-policy.ts).
 
 ## Commands
 
 ```sh
-npm ci             # install from package-lock.json
-npm run dev        # dev server at http://localhost:8080; add `-- --host` to expose it
-npm run build      # production build into .output/
-npm test           # Vitest, single run
-npx tsc --noEmit   # typecheck; there is no npm script for it
-npm run lint       # ESLint, with Prettier as a rule
+pnpm install            # pnpm workspaces, node >=24.9
+pnpm run clean           # remove build outputs and safe residue from deleted packages
+pnpm run test           # unit tests
+pnpm run test:coverage  # CI coverage gate: per-file 100% on packages/*/*/src
+pnpm run test:e2e       # real-API tests; self-skip without DEEPSEEK_API_KEY
+pnpm run test:expected  # owner-local process expectations
+pnpm run test:snapshot  # keyless recorded-session replay through shipped profiles; filter: -t <name>
+pnpm run test:snapshot:record  # re-record expected outputs (needs key)
+pnpm run typecheck
+pnpm run lint
+pnpm run duplication    # cross-file TypeScript clone detection
+pnpm run build          # build:artifacts + build:check, concurrently
+pnpm run build:artifacts # artifacts: tsc emits lib/types, tsdown bundles runtime, Web
+pnpm run build:check    # typecheck aggregate tests/scripts against current build:artifacts output
+pnpm run hygiene        # publint + workspace/package/dependency checks + NodeNext consumer check
+pnpm run check:windows-wine  # ONLY when diagnosing a known Windows failure (needs wine); CI owns this signal
+pnpm run doc-sync       # documentation gates (scripts/run-gates.ts)
+pnpm run test:docs      # quick documentation checks (no build; doc-quick aggregate)
+pnpm run website:build  # VitePress build (doubles as dead-link check)
+pnpm dsh --profile headless "task"  # run one task from source (needs DEEPSEEK_API_KEY)
+pnpm run demo:ptc -- "task"  # headless PTC mode run (needs key)
+pnpm run dev:web | dev:desktop  # build:artifacts, then launch; Web also rebuilds client bundles on edits. start:web | start:desktop skip the build
+make web|dev-web|desktop|dev-desktop|build  # the same commands; ARGS='--no-open' forwards options
 ```
 
-Production requires a random `MOTIF_SESSION_SECRET` (and optionally `MOTIF_CREDENTIALS_KEY` and
-`MOTIF_SECRETS_FILE`); set `MOTIF_PUBLIC_BASE_URL` to the public origin for the OpenRouter callback.
-The AI features run on the connection each browser principal links in the app. To run a production
-build locally, use `npm run build` and then `node .output/server/index.mjs`; it listens on port 3000
-unless `PORT` says otherwise.
+### Host sandbox failures
 
-Baseline on 2026-11-16 with Node.js 22.19 or later: the production build and 38 tests pass, and
-`npx tsc --noEmit` is clean. The tests cover provider connection management, the encrypted vault,
-the Pi SDK adapter, AI entry points, the connection dialog and routing. Pi adapter tests run the real SDK
-with the network replaced. Lint fails with 203 pre-existing `prettier/prettier` formatting errors
-and 9 warnings in untouched files; changed provider-auth files pass targeted lint. `npm run
-preview` answers HTTP 500 on every page: `vite.config.ts` loads Nitro for builds only.
+If a required `gh`, `pnpm`, build, test, or generator command fails because the sandbox blocks credentials, network, IPC, watching, or nested `sandbox-exec`, retry unchanged with the narrowest host escalation. Require sandbox evidence; never bypass test failures or the product sandbox.
 
-- Before reporting a code change as finished, run the tests, the typecheck and the build. Add no
-  new failures, report against this baseline, and never call a failing run clean.
-- Do not run `npm run format` as part of other work: it rewrites most files. New files must pass
-  `npx eslint <file>`. In a file that already fails formatting, keep the diff minimal. Clearing
-  the baseline is its own formatting-only commit and needs the owner's go-ahead.
-- A dependency change must update both lockfiles until the package manager is settled. Write
-  `package-lock.json` with npm 11 or later (`npx npm@11 install`; npm 10 strips its `libc`
-  fields) and `bun.lock` with `npx bun install --lockfile-only`. `bunfig.toml` refuses package
-  versions published in the last 24 hours.
+### Run relevant checks locally
+
+Before pushing, follow [dsh-pre-push-checks](.agents/skills/dsh-pre-push-checks/SKILL.md); report only commands run. After `gh stack sync`, validate immediately; do not merge before checks pass.
+
+- Match evidence to the surface: focused behavior tests, model/user-output snapshots, `doc-sync` for docs, built smokes for published paths, and real-API e2e for providers.
+- Never default to the full suite or repeat a passing check for commit or push. CI owns exhaustive coverage and the platform matrix; rehearse all locally only by explicit request, for CI diagnosis, or for an irreducibly repository-wide change.
+- `test:coverage`, not `test`, is the CI coverage gate ([why](docs/testing.md)).
+- Develop with `build:artifacts`; before claiming completion, run `build:check` after the latest `build:artifacts`, or `build` ([layout](docs/development.md#typescript-project-layout)).
+- **Web browser automation and GIF recording:** launch with `pnpm dsh web --patch apps/web/tests/pin-browse-picker.overlay.yml` to use the [in-page directory picker](apps/web/tests/pin-browse-picker.overlay.yml); omit this override only when testing native picker behavior explicitly.
+
+## Secrets / .env
+
+Windows packaging/signing: [required reading](apps/desktop/windows-signing/README.md).
+
+Real-API tests/demos read `DEEPSEEK_API_KEY`, optional `DEEPSEEK_BASE_URL`, and root `.env`. cordis.yml allows `!!js` (never `!js`) under plugin `config` and entry `disabled`; other metadata stays literal, so conditional composition also uses overlays ([primer](docs/cordis-primer.md#loader-configuration)). Never commit credentials. CI e2e skips without a key; [testing.md](docs/testing.md) owns key policy.
 
 ## Conventions
 
-- TypeScript is `strict` with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
-  Import from `src/` through the `@/` alias. Prettier: 100 columns, double quotes, semicolons.
-- Never hand-edit the generated `src/routeTree.gen.ts`.
-- Before editing `vite.config.ts`, `src/styles.css` or `src/start.ts`, read the comments in that
-  file; before adding a route, read `src/routes/README.md`. They state constraints that break
-  the build, change the CSS that ships, or remove a protection (CSRF, server-only imports) when
-  ignored.
-- Style with the semantic Tailwind tokens defined in `src/styles.css` (`bg-background`,
-  `text-brand-yellow`, `bg-track-video`), not raw colors. The theme is dark only.
-- Server functions use `createServerFn` in `*.functions.ts`. Server-only modules are named
-  `*.server.ts` or live in a `server/` directory: the build fails when browser code imports one.
-- Only `src/lib/pi.server.ts` imports the Pi SDK (`@earendil-works/*`). Everything else uses the
-  `ProviderRuntime` interface in `src/lib/account-link.server.ts`.
+- Packages use `@deepseek-ai/dsh-<name>`; vendor is [rescoped](docs/rescope.md) and `private: true`. Harness packages declare `@deepseek-ai/cordis` in `peerDependencies`/`devDependencies`. Workspace dependency sections use DSH `workspace:*`, vendor/native `workspace:~` ([rules](.agents/notes/implemented/process/2026-08-10-npm-release-sequences.md)).
+- ESM everywhere (`"type": "module"`). Use package names across packages and `.ts` in local relative imports. Config subprocesses run built `lib/` under plain Node; source regressions use their declared launcher ([testing policy](docs/testing.md#test-subprocess-launch-modes)). The `dsh` CLI source launch runs through tsx's ESM-only hook (`node --import tsx/esm`); modules it reaches must stay ESM (no CJS-only exports) ([source-launch contract](.agents/notes/implemented/architecture/2026-07-29-dsh-source-launch-tsx-esm.md)). Raw/Web `cordis.yml` bare plugins must appear in their resolver manifest's `dependencies`; `verify-cordis-config` enforces it.
+- **Registrations are effects**: every contribution goes through `ctx.effect()` / `ctx.on()`; a registry's `register()` returns the disposer, directly or through its documented registration handle.
+- **Typed events use declaration merging** and merge-extensible maps. Event JSDoc needs `@mode` and payload `@param`. Public service methods document parameters and non-void returns. `SessionEventMap` members are required-on-read unless the envelope carries `ignorable: true`. Bump `SESSION_FORMAT_VERSION` only when existing discriminators cannot prevent unsafe interpretation; same-version changes require safe reader behavior ([review](.agents/notes/implemented/process/2026-10-08-session-reader-compatibility-review.md)).
+- **Switch on discriminant tags.** Closed unions end in `assertNever`; merge-extensible unions fall through a documented default.
+- **Waterfall listeners MUST call `next()`** to delegate; returning without it short-circuits the chain ([semantics](docs/cordis-primer.md#cordis-waterfall-semantics)).
+- **Model-visible ⟺ logged**: anything that reaches a model request must be reconstructable from the session log; a new model-visible input requires a session event.
+- **Session projections:** follow [dsh-session-projection](.agents/skills/dsh-session-projection/SKILL.md) when creating, extending, or reviewing one, or migrating a fold helper to one.
+- **Plugins, not loop changes**: new behavior goes on documented extension points; changing `agent-loop` requires updating docs/architecture.md.
+- **A capability seam comprises Service Definition / Service Provider / Consumer roles.** It is complete, never one role; split only when roles evolve independently ([glossary](docs/glossary.md#capability-seam)).
+- **Prefer maintained dependencies over hand-rolling** when they genuinely delete owned code and tests ([policy](.agents/notes/implemented/process/2026-07-26-dependencies-over-hand-rolling.md)).
+- **Explicit > implicit at package boundaries**: defaulting is an explicit `resolve(request): Spec` step in the owning implementation, never a hidden `?? default` inside `run()` (the `dsh-shell` request/spec split is the template).
+- **No hardcoded tunables in plugins**: deployment-varying choices are validated `Config` fields changeable from cordis.yml; a `DEFAULT_*` constant or test hook is not configurability. Protocol constants, external specs, and security invariants stay fixed.
+- **Misconfiguration fails loud** at load when self-contained, otherwise at the earliest resolvable point; never silently skip a missing referent.
+- **Opaque cross-boundary ids are branded** (`Branded<B>` from `dsh-brand`), never bare `string`.
+- **Trust TypeScript at typed same-process boundaries.** Do not add runtime validation, fallback behavior, or hostile-input tests solely for values the static interface requires; validate at parser/config, queued, model/tool JSON, durable/file, worker, process, and wire boundaries.
+- **No new assertions to `unknown`** (`as unknown` or `<unknown>`). Preserve or reduce the exact legacy baseline; use typed values or validation for replacements ([rule](.agents/notes/implemented/process/2026-09-19-no-unknown-casts.md)).
+- **Source plane vs artifact plane, never mixed.** Static gates and tests resolve workspace imports through tsconfig `paths` to `src` and pass on a clean tree; gates consuming built `lib/` declare that dependency ([layout](docs/development.md#typescript-project-layout)).
+- **Keep compiler faces explicit.** A package with both Host and Client programs exposes face-specific leaf configs and a solution-only root; repo-wide programs seed a face config, never the root solution ([layout](docs/development.md#typescript-project-layout)).
+- **Error handling:** use typed, structured failures and localized, actionable reports. Coded errors and expected tool failures use `HarnessError`. Define handling ownership, containment, and failure guarantees; stop dependent work and visibly report untrusted state or unknown outcomes. Follow [dsh-error-handling](.agents/skills/dsh-error-handling/SKILL.md).
+- **An empty `catch` names the error** and why; keep its `try` to one statement ([checker](scripts/verify-empty-catch.ts)).
+- **Keep comments local.** Do not restate code, expand unrelated comments, or explain distant behavior without local need ([rationale](.agents/skills/dsh-prose-standard/SKILL.md)).
+- **Ban `prove` + `nance`** ([rule](.agents/notes/implemented/process/2026-08-26-ban-ambiguous-origin-label.md)).
+- **Prefer symmetry for parallel values**; unexplained asymmetry usually signals a missed extraction.
+- **Tests describe behavior, not correctness.** Change obsolete behavior with its tests; explain why in the PR.
+- **Create Agent Notes only for durable decision rationale;** mechanical/local edits are exempt, including local UI changes ([scope](.agents/notes/README.md#when-to-write-one)). Archived notes are frozen: never edit or treat them as current authority ([archive policy](.agents/notes/README.md#archiving-and-deletion)).
+- **Official plugin artwork:** use [dsh-official-plugin-artwork](.agents/skills/dsh-official-plugin-artwork/SKILL.md) for official and official experimental plugin icons; obtain designer approval before landing new glyphs.
+- **Client UI copy is locale-owned.** Route product text through typed dictionaries and `t` or localized primitive props; `verify-client-ui-i18n` rejects hardcoded copy ([decision](.agents/notes/implemented/architecture/2026-08-23-locale-owned-client-ui-copy.md)). English copy, including plugin titles, uses sentence case ([rule](.agents/skills/dsh-prose-standard/SKILL.md#required-coverage-by-prose-location)).
+- **UI changes:** use [dsh-client-ui-ux](.agents/skills/dsh-client-ui-ux/SKILL.md) as the design and review entry point; load its references only as needed.
+- **Testing policy** — [docs/testing.md](docs/testing.md). Every non-trivial model- or product-user-visible change updates a keyless recorded-session snapshot; [snapshot ownership](snapshots/AGENTS.md) reserves the top-level tree for session-driven cases and keeps other expected output owner-local. Fixtures replay on macOS/Linux; fix fixtures, not normalizers.
+- **Design each tool's UI presentation up front.** Host presenters stay pure; Web cards derive from raw events and persisted result metadata ([cookbook](docs/cookbook/adding-a-tool.md)).
+- **Plan unit, e2e, and snapshot coverage** for capability seams, lifecycle paths, and transcript output; include missing snapshot-harness support in the same change.
+- **Both SDKs project the loop.** Agent-loop, session-lifecycle, and `SessionEventMap` changes update the TypeScript and Python SDK expected outputs in the same PR; `pnpm run test` covers neither ([surfaces](docs/testing.md#when-a-snapshot-test-is-required)).
+- **Choose PR history deliberately.** Split independent changes and fix the introducing PR before propagation. Standalone/stack branches may merge-forward or rebase. Rewrites use `--force-with-lease`, abort on remote movement, never raw `--force`; preserve an in-progress merge-forward checkpoint before taking a newer base ([rationale](.agents/notes/implemented/process/2026-08-02-native-github-stacks-and-optional-rebases.md)).
+- **Labels:** one PR `kind/*`, all material `area/*`, and native Issue Type ([taxonomy](.agents/notes/implemented/process/2026-08-08-unified-github-label-taxonomy.md)).
+- **PR descriptions:** write and update every PR description with [dsh-pr-description](.agents/skills/dsh-pr-description/SKILL.md).
+- TODO markers: `FIXME`/`TODO`/`XXX` by urgency ([semantics](docs/development.md)).
+- Files end with exactly one trailing newline; `git diff --cached --check` (pre-commit) gates it.
 
-## Security
+## Defensive patterns
 
-Brief §5 and §9 are binding. In this codebase that means:
+Read [docs/defensive-patterns/README.md](docs/defensive-patterns/README.md) before changing a package surface, remote service, client component or state, conversation or Session behavior, or lifecycle, concurrency, subprocess, and teardown code. Its [review principles](docs/defensive-patterns/README.md#why-these-rules) apply per artifact.
 
-- Secrets (users' provider keys and sign-in tokens, the Supabase service-role key, Whop
-  credentials) exist only on the server: never in the repository, a log, an error message, the
-  browser, or a `VITE_`-prefixed variable, which the build injects into the browser bundle.
-  Secrets of the server itself go in `.env` locally, which git ignores; commit only
-  `.env.example`.
-- Never hand the Pi SDK's default credential store, the file `auth.json`, a value a user typed:
-  it runs a key that starts with `!` as a shell command and expands `$NAME` from the server's
-  environment. MOTIF passes a `CredentialStore` scoped to the calling principal's encrypted vault,
-  as `src/lib/pi.server.ts` does.
-- Every server entry point validates input with a Zod schema, checks that the caller owns the
-  data, and validates model output before using it.
-- Never trust a path or URL from a user or a model. Keep file operations inside the authorized
-  project directory. A server-side fetch of a user URL needs a scheme allowlist, a block on
-  private addresses, a timeout and a size cap.
-- Agent tools never run arbitrary shell commands. Start FFmpeg and whisper.cpp with a fixed
-  binary and an argument array, with a timeout and cancellation.
-- Isolate provider credentials and agent sessions per user, and encrypt credentials at rest.
-- Never send a user's brand documents or media to an external AI provider without their
-  informed consent. Ask for confirmation before a destructive operation or an overwriting export.
-- Rate-limit expensive operations (AI calls, media processing).
+## Type safety and documentation
 
-Known gaps, to close when the backend is built and never to copy: nothing is rate limited; the
-`motif.principal` cookie is an isolated browser identity, not a Whop/Convex user; the local
-encrypted vault is not shared/distributed or RLS; and provider tokens cannot be revoked by
-disconnecting. The validators of the AI functions still interpolate user text without schema-parsed
-output, and `extractStyle` fetches any URL without a timeout, size cap or private-address filter.
+Everything compiles under `strict: true` with `noImplicitAny`; every remaining `any` explains why narrowing is infeasible. Every module and export has concise JSDoc for its non-obvious contract; function-like exports include `@param`/`@returns`, as enforced by `verify-export-jsdoc`. Heritage-declared members, plugin-protocol slots, and constructors keep their docs at the declaring Service Definition, protocol, or class.
 
-## Git
+Comments and docs state complete contracts and context, not reasoning transcripts. Use direct, concrete terms. Do not use metaphors. Before writing `contract`, `boundary`, or `shape`, ask whether a more exact term names the subject: write `response fields`, `JSON validation`, or `ESM exports` instead of `response shape`, `validation boundary`, or `module shape`. Keep `contract` for preconditions, postconditions, invariants, compatibility promises, and other obligations that callers, callees, implementers, providers, producers, or consumers rely on. Keep a literal process, wire, security, transaction, or lifecycle boundary. Do not narrate control flow or tests, preserve review history, or restate code. Keep behavior, failure, timing, ownership, and safe-use facts; link the rationale. Use [dsh-prose-standard](.agents/skills/dsh-prose-standard/SKILL.md) for decisions. Wire mechanically checkable invariants into an executed top-level gate and prove each changed acceptance path rejects an invalid case. Use narrow, justified exceptions instead of disabling a rule globally.
 
-- Never rewrite pushed history. Keep `main` building and passing its tests.
-- Keep commits small and single-purpose; never mix formatting with behavior changes.
+Docs accompany every code change: update affected README and JSDoc contracts together. Routine bilingual work follows [docs/AGENTS.md](docs/AGENTS.md); only explicit user invocation may run `dsh-translate-docs`. Current-state prose, one physical line per paragraph, one home per fact, and word budgets live there.
 
-## Maintaining this file
+## Editing these instructions
 
-- Update "Status", "Open decisions", "The code today" and the baseline in the same change that
-  makes them stale. Keep the file short; detail belongs in `product-brif.md` or `docs/`.
-- `README.md` tells people what the demo does, what is not real yet, how to run it and how to
-  connect an AI provider. Update it in the same change that makes it stale.
-- Write scoped package names in backticks: `CLAUDE.md` imports this file, and Claude Code reads
-  a bare `@path` as a file to import.
+`CLAUDE.md` symlinks `AGENTS.md` at root and `packages/`; edit the real file. Keep each rule self-contained while linking high-level docs. Condense when clarity survives; raise a `verify-doc-budgets` ceiling when the required content genuinely needs more space.
+
+## Vendoring policy
+
+`vendor/` packages are pinned source copies (manifest with upstream SHAs in [vendor/README.md](vendor/README.md)). Update via the sync procedure there; re-apply or retire the logged local modifications; rerun `pnpm run test && pnpm run build`.
