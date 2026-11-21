@@ -28,6 +28,7 @@ The llm group provides the harness's model-call capability: one provider-neutral
 | [`llm-deepseek/`](llm-deepseek/README.md) | Shared Messages protocol, request configuration, and model capabilities | — |
 | [`llm-deepseek-api-key/`](llm-deepseek-api-key/README.md) | API-key authentication and discovery for the official route | `ctx.llm` |
 | [`llm-deepseek-account/`](llm-deepseek-account/README.md) | Account-token authentication, invalidation, and discovery | `ctx.llm` |
+| [`llm-motif-relay/`](llm-motif-relay/README.md) | Relays a Motif Session message to a Claude Code or Codex command-line agent in the Brand folder and returns only its final answer | registers on `ctx.llm` |
 | [`llm-pi-ai/`](llm-pi-ai/README.md) | Serves configured provider routes through pi-ai catalogs and wire protocols, including hand-declared gateways | registers on `ctx.llm` |
 | [`deepseek-llm-api-extensions/`](deepseek-llm-api-extensions/README.md) | Registers lifecycle-owned top-level fields on official DeepSeek requests | `ctx.deepseekLlmApiExtensions` |
 | [`plugin-package-inventory-deepseek/`](plugin-package-inventory-deepseek/README.md) | Contributes the active Loader package inventory to official DeepSeek requests | contributes `dsh_plugin_packages` |

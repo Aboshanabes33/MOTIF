@@ -35,6 +35,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/session/session-persistence-sqlite': { category: 'optional', reason: 'Selected through global or profile Cordis patches; imports retained JSONL history on first open.' },
   'packages/subagent/subagent-acp': { category: 'optional', reason: 'Requires a configured external ACP agent command.' },
   'packages/subagent/subagent-claude-code': { category: 'optional', reason: 'Separately installed native Claude Code agent integration.' },
+  'packages/llm/llm-motif-relay': { category: 'optional', reason: 'Relay model route that requires an installed and signed-in Claude Code or Codex subagent backend.' },
   'packages/subagent/subagent-codex': { category: 'optional', reason: 'Separately installed native Codex agent integration.' },
   'packages/subagent/subagent-dsh-sdk': { category: 'optional', reason: 'Requires an explicitly configured external DSH home.' },
   'packages/connector/linear': { category: 'optional', reason: 'Separately installed app plugin that requires the user to authorize a Linear account.' },

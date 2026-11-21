@@ -1289,4 +1289,28 @@ Prepare headers for one pi-ai inference call, excluding model discovery. Listene
 ```
 
 Source: [`packages/llm/llm-pi-ai/src/index.ts`](../../packages/llm/llm-pi-ai/src/index.ts)
+
+<a id="motif-relay-events"></a>
+
+### `motif-relay/*` events
+
+<a id="motif-relaystatus--emit"></a>
+
+#### `motif-relay/status` — emit
+
+One relay send reached a coarse state. `finished` and `failed` are terminal; a cancelled send emits no terminal state because the turn itself reports it.
+
+```ts cordis-catalog
+/**
+ * One relay send reached a coarse state. `finished` and `failed` are terminal;
+ * a cancelled send emits no terminal state because the turn itself reports it.
+ * @mode emit
+ * @param event - Session, backend, and state reached.
+ */
+'motif-relay/status'(event: RelayStatusEvent): void
+```
+
+Types: [RelayStatusEvent](../../packages/llm/llm-motif-relay/README.zh.md#status-and-failures)
+
+Source: [`packages/llm/llm-motif-relay/src/index.ts`](../../packages/llm/llm-motif-relay/src/index.ts)
 <!-- END GENERATED cordis-surface -->
