@@ -63,12 +63,15 @@ function harness(options: {
       }))
     },
     readBrand,
-    status: (_sessionId, status) => { statuses.push(status) },
+    status: (_sessionId, _backend, status) => { statuses.push(status) },
   }
   return {
     adapter: new RelayAdapter({
-      backend: 'claude-code',
-      model: 'claude-code',
+      models: [
+        { id: 'sonnet', provider: 'motif-relay-claude-sonnet', name: 'Claude Sonnet', backend: 'claude-code' },
+        { id: 'opus', provider: 'motif-relay-claude-opus', name: 'Claude Opus', backend: 'claude-code' },
+      ],
+      defaultModel: 'sonnet',
       displayName: 'Claude Code',
       host,
       limits: {
@@ -90,10 +93,10 @@ function harness(options: {
   }
 }
 
-function request(messages: GenerateOptions['messages'], signal?: AbortSignal): GenerateOptions {
+function request(messages: GenerateOptions['messages'], signal?: AbortSignal, model = 'sonnet'): GenerateOptions {
   return {
     provider: 'motif-relay',
-    model: 'claude-code',
+    model,
     messages,
     sessionId: SESSION,
     ...signal === undefined ? {} : { signal },
@@ -125,7 +128,37 @@ describe('RelayAdapter', () => {
     expect(chunks.at(-1)).toEqual({ type: 'finish', reason: { kind: 'stop' } })
     expect(fixture.statuses).toEqual(['started', 'working', 'finished'])
     expect(fixture.starts).toHaveLength(1)
+    expect(fixture.starts[0]?.provider).toBe('motif-relay-claude-sonnet')
     expect(taskText(fixture.starts[0])).toContain('Cut the intro to four seconds.')
+  })
+
+  it('lists the models the route offers', async () => {
+    const fixture = harness()
+
+    await expect(fixture.adapter.listModels('motif-relay')).resolves.toEqual([
+      { provider: 'motif-relay', id: 'sonnet', name: 'Claude Sonnet' },
+      { provider: 'motif-relay', id: 'opus', name: 'Claude Opus' },
+    ])
+  })
+
+  it('runs the provider instance of the model the request selected', async () => {
+    const fixture = harness()
+
+    await collect(fixture.adapter, request([user('Edit.')], undefined, 'opus'))
+
+    expect(fixture.starts[0]?.provider).toBe('motif-relay-claude-opus')
+  })
+
+  it('refuses a model the route does not offer instead of switching', async () => {
+    const fixture = harness()
+
+    const error = await collect(fixture.adapter, request([user('Edit.')], undefined, 'gpt-5'))
+      .catch((caught: unknown) => caught)
+
+    expect((error as LlmError).code).toBe('INVALID_REQUEST')
+    expect((error as LlmError).message).toContain('sonnet, opus')
+    expect(fixture.starts).toHaveLength(0)
+    expect(fixture.statuses).toEqual([])
   })
 
   it('carries the earlier conversation so a follow-up needs no Session continuity', async () => {
@@ -217,7 +250,7 @@ describe('RelayAdapter', () => {
 
     const error = await collect(fixture.adapter, {
       provider: 'motif-relay',
-      model: 'claude-code',
+      model: 'sonnet',
       messages: [user('Edit.')],
     }).catch((caught: unknown) => caught)
 

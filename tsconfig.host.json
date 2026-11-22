@@ -302,6 +302,9 @@
     "scripts/client-bundle-purity.spec.ts"
   ],
   "references": [
+    {
+      "path": "./packages/motif/motif-core"
+    },
     { "path": "./packages/experimental/action-cards" },
     { "path": "./packages/experimental/creation-recommendations" },
     { "path": "./packages/experimental/plugin-recommendations" },
