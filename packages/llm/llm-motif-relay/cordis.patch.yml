@@ -1,0 +1,24 @@
+# The Motif relay bundle layer. Enabling the bundle in the Plugins page is what
+# puts a `Claude Code (relay)` route in the model selector: one Claude Code
+# provider row plus the relay route over it. The provider starts no native
+# process until a Session sends a message, so the layer stays dormant while the
+# route is unselected.
+#
+# A deployment that relays to Codex instead of Claude Code replaces these two
+# rows: mount `@deepseek-ai/dsh-subagent-codex` and the relay with
+# `backend: codex`. Mounting both pairs gives the user a visible choice of
+# backends; nothing switches automatically.
+- insert:
+    # The one-shot Claude Code provider the relay delegates to. Its own row
+    # carries the native model, permission mode, and environment; this layer
+    # sets none of them, so the native sign-in and settings stay authoritative.
+    - id: motif-relay-claude-code
+      name: '@deepseek-ai/dsh-subagent-claude-code'
+
+    # The relay route itself. Model selection is locked to this one route, and
+    # every send is one fresh Claude Code run in the Brand folder.
+    - id: motif-relay
+      name: '@deepseek-ai/dsh-llm-motif-relay'
+      config:
+        backend: claude-code
+        displayName: Claude Code

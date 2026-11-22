@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Motif-Relay",
+    "description": "Senden Sie jede Anfrage an Ihren eigenen Claude-Code-Kommandozeilenagenten und lesen Sie in der Sitzung nur dessen endgültige Antwort."
+  }
+}

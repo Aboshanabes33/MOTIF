@@ -59,6 +59,7 @@ export const MORE_BUNDLES: readonly string[] = [
   '@deepseek-ai/dsh-experimental-badge-skill-bundle',
   '@deepseek-ai/dsh-experimental-ralph-bundle',
   '@deepseek-ai/dsh-deepseek-chat-import',
+  '@deepseek-ai/dsh-llm-motif-relay',
   '@deepseek-ai/dsh-subagent-codex',
   '@deepseek-ai/dsh-subagent-claude-code',
 ]
