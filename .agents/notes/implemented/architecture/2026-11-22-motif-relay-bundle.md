@@ -12,11 +12,11 @@ The repository's own admission rule for product surface is the Profile Bundle: a
 
 ## Decision
 
-The relay is now a Profile Bundle. `packages/llm/llm-motif-relay/cordis.patch.yml` inserts two Host rows: the one-shot Claude Code provider, and the relay route over it with `backend: claude-code`. Enabling the bundle in the Plugins page is what puts `Claude Code (relay)` in the model selector; switching it off deselects the layer and returns the selector to its previous routes. The package gains `dsh.bundle.patch`, an `icon`, eight `locale/<language>.json` dictionaries, the patch and locale files in `files`/`exports`, and a dependency on `@deepseek-ai/dsh-subagent-claude-code` so the provider its layer mounts is installed with it.
+The relay is now a Profile Bundle. `packages/llm/llm-motif-relay/cordis.patch.yml` inserts four Host rows: the one-shot Claude Code provider, the one-shot Codex provider, and one relay route over each backend, so `Claude Code (relay)` and `Codex (relay)` both appear in the model selector once the bundle is enabled. Enabling the bundle in the Plugins page is what puts `Claude Code (relay)` in the model selector; switching it off deselects the layer and returns the selector to its previous routes. The package gains `dsh.bundle.patch`, an `icon`, eight `locale/<language>.json` dictionaries, the patch and locale files in `files`/`exports`, and a dependency on `@deepseek-ai/dsh-subagent-claude-code` so the provider its layer mounts is installed with it.
 
 It stays in `ON_DEMAND_BUNDLES` rather than any shipped template. `packages/util/official-bundles/src/bundles.ts` therefore keeps the relay out of every profile until a person asks for it, and the catalog generator still enforces that an on-demand provider is never installed by the distribution itself. The plugin manager lists it in `MORE_BUNDLES` beside the two subagent providers it composes.
 
-The layer mounts the provider itself instead of telling the user to enable two bundles. One switch that produces a working route is the smallest honest product surface; the relay's own failure classification still reports a missing native sign-in or an unavailable runtime, so a half-configured machine fails with an actionable message rather than a silent no-op. A deployment that relays to Codex replaces the two rows, as the package README documents; no automatic backend switch exists in either direction.
+The layer mounts both providers itself instead of telling the user to enable three bundles. One switch that produces two selectable routes is the smallest honest product surface; the relay's own failure classification still reports a missing native sign-in or an unavailable runtime, so a machine with only one agent signed in fails on that route with an actionable message rather than a silent no-op. The two routes carry distinct `providerName` values because that name is the registry key on `ctx.llm`, and each advertises only its own backend as a model, so the picker shows a labelled choice and no automatic backend switch exists in either direction. A deployment that wants one backend deletes the other pair of rows by id.
 
 ## Alternatives considered
 
@@ -28,7 +28,7 @@ Leaving the package unmounted and documenting a hand-written `cordis.patch.yml` 
 
 ## Consequences
 
-The relay is discoverable and reversible through the Plugins page instead of through a hand-edited profile. Installing it pulls the Claude Code provider and its Agent SDK, so the install is no longer dependency-free — that is the cost of a layer that actually routes. Nothing starts until a Session sends a message, so the idle cost stays zero.
+The relay is discoverable and reversible through the Plugins page instead of through a hand-edited profile. Installing it pulls both providers and their Agent SDKs, so the install is no longer dependency-free — that is the cost of a layer that actually routes. Nothing starts until a Session sends a message, so the idle cost stays zero.
 
 `packages/llm/llm-motif-relay/tests/bundle-layer.spec.ts` pins the wiring: the manifest declares the layer, icon, and locale files; composing the shipped patch yields both rows with `backend: claude-code`; every row the layer mounts is a declared dependency; every shipped locale carries a title and description; and the bundle appears in the on-demand list, the plugin manager, and the generated offline catalog. The generated catalog is regenerated rather than hand-edited, so the entry cannot drift from the package's own metadata.
 

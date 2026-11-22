@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-llm-motif-relay",
-  "description": "Motif relay model route that delegates each Edit Request to a Claude Code or Codex command-line agent in the Brand folder",
+  "description": "Motif relay model routes that delegate each Edit Request to a Claude Code or Codex command-line agent in the Brand folder",
   "version": "0.2.2-rc.5",
   "icon": "./icon.svg",
   "publishConfig": {
@@ -45,7 +45,8 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:~",
-    "@deepseek-ai/dsh-subagent-claude-code": "workspace:*"
+    "@deepseek-ai/dsh-subagent-claude-code": "workspace:*",
+    "@deepseek-ai/dsh-subagent-codex": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

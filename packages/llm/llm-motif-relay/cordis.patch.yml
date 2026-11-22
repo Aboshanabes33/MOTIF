@@ -1,24 +1,41 @@
 # The Motif relay bundle layer. Enabling the bundle in the Plugins page is what
-# puts a `Claude Code (relay)` route in the model selector: one Claude Code
-# provider row plus the relay route over it. The provider starts no native
-# process until a Session sends a message, so the layer stays dormant while the
-# route is unselected.
+# puts `Claude Code (relay)` and `Codex (relay)` in the model selector: one
+# provider row per command-line agent, and one relay route over each. A provider
+# starts no native process until a Session sends a message, so the layer stays
+# dormant while its routes are unselected.
 #
-# A deployment that relays to Codex instead of Claude Code replaces these two
-# rows: mount `@deepseek-ai/dsh-subagent-codex` and the relay with
-# `backend: codex`. Mounting both pairs gives the user a visible choice of
-# backends; nothing switches automatically.
+# Two routes, not two bundles: the relay is the same package in both, and the
+# only difference is the backend name it delegates to. Each route registers its
+# own name on `ctx.llm` (the default `motif-relay` cannot be shared), advertises
+# its own backend as the single model, and labels itself after that backend.
+# Choosing one is the user's backend choice; nothing switches automatically, and
+# a missing `claude login` or `codex login` fails with that agent's instruction.
+#
+# A deployment that wants only one backend deletes the other pair of rows here
+# or in its own profile patch, addressed by id.
 - insert:
-    # The one-shot Claude Code provider the relay delegates to. Its own row
-    # carries the native model, permission mode, and environment; this layer
+    # The one-shot Claude Code provider the first route delegates to. Its own
+    # row carries the native model, permission mode, and environment; this layer
     # sets none of them, so the native sign-in and settings stay authoritative.
     - id: motif-relay-claude-code
       name: '@deepseek-ai/dsh-subagent-claude-code'
 
-    # The relay route itself. Model selection is locked to this one route, and
-    # every send is one fresh Claude Code run in the Brand folder.
+    # The one-shot Codex provider the second route delegates to.
+    - id: motif-relay-codex-provider
+      name: '@deepseek-ai/dsh-subagent-codex'
+
+    # Route one: every send is one fresh Claude Code run in the Brand folder.
     - id: motif-relay
       name: '@deepseek-ai/dsh-llm-motif-relay'
       config:
+        providerName: motif-relay-claude-code
         backend: claude-code
         displayName: Claude Code
+
+    # Route two: every send is one fresh Codex thread in the Brand folder.
+    - id: motif-relay-codex
+      name: '@deepseek-ai/dsh-llm-motif-relay'
+      config:
+        providerName: motif-relay-codex
+        backend: codex
+        displayName: Codex

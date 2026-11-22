@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Motif 中继",
-    "description": "把每个请求交给自己的 Claude Code 命令行代理，会话中只显示它的最终回答。"
+    "description": "把每个请求交给自己的 Claude Code 或 Codex 命令行代理，会话中只显示它的最终回答。"
   }
 }
