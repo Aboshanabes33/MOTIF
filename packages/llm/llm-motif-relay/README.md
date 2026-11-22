@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Mount this model route when a Motif Session should run a command-line agent: the Edit Request becomes one fresh Claude Code or Codex run in the Brand folder, and only that run's final answer returns as the assistant reply. It composes the existing `dsh-subagent-claude-code` and `dsh-subagent-codex` providers, so native settings, authentication, permission mode, and model stay as the provider instance configures them. Each send is fresh and unattended: the route streams no progress, shows four coarse states, never retries on another backend, and keeps Session model options fixed by configuration.
+Mount this model route when a Motif Session should run a command-line agent: the Edit Request becomes one fresh Claude Code or Codex run in the Brand folder, and only that run's final answer returns as the assistant reply. It composes the existing `dsh-subagent-claude-code` and `dsh-subagent-codex` providers, so native settings, authentication, and permission mode stay as the provider instance configures them. The route offers the native models its provider rows pin, and the Session selects one explicitly; each send is fresh and unattended, streams no progress, shows four coarse states, and never retries on another backend or model.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ Mount this model route when a Motif Session should run a command-line agent: the
 <a id="use-this-package"></a>
 ## Use this package
 
-Enable **Motif relay** in the Web or Desktop Plugins page. Its bundle layer mounts one Claude Code provider, one Codex provider, and a relay route over each, so `Claude Code (relay)` and `Codex (relay)` both appear in the model selector; choosing one sends every Edit Request through that route and backend. The route adds no tool, requires no local MCP server, and starts no native process until a Session sends a message. The user's only choice is the Brand: the Session's working directory is the Brand folder, and every other option comes from this configuration and the provider row.
+Enable **Motif relay** in the Web or Desktop Plugins page. Its bundle layer mounts four Claude Code provider instances (native default, Sonnet, Opus, and Haiku), one Codex provider, and a relay route over each backend, so `Claude Code (relay)` and `Codex (relay)` appear in the model selector and the Claude route lists Sonnet, Opus, and Haiku. Choosing a model sends every Edit Request through that route and that provider instance. The route adds no tool, requires no local MCP server, and starts no native process until a Session sends a message. The user chooses the model; the Session's working directory is the Brand folder.
 
 ### Installing the Bundle
 
@@ -33,20 +33,29 @@ The Official entry is visible offline. Enabling it installs this package togethe
 
 ### Configuration
 
-The imported layer inserts four rows: `@deepseek-ai/dsh-subagent-claude-code`, `@deepseek-ai/dsh-subagent-codex`, and one `@deepseek-ai/dsh-llm-motif-relay` row per backend. The two routes need distinct `providerName` values, because that name is the registry key on `ctx.llm`; the layer uses `motif-relay-claude-code` and `motif-relay-codex`. A deployment that offers only one backend deletes the other provider row and its route row by id in its own profile patch. The `backend` value must match the provider instance registered by the installed bundle (`claude-code` or `codex`).
+The imported layer inserts seven rows: four `@deepseek-ai/dsh-subagent-claude-code` provider instances (native default, `sonnet`, `opus`, `haiku`), one `@deepseek-ai/dsh-subagent-codex` provider, and one `@deepseek-ai/dsh-llm-motif-relay` row per backend. The two routes need distinct `providerName` values, because that name is the registry key on `ctx.llm`; the layer uses `motif-relay-claude-code` and `motif-relay-codex`. Each `models` entry names the provider instance that runs it, and the route passes that provider name to `startActivation`; this is how a real model choice reaches a provider that otherwise fixes its model statically. A deployment that offers only one backend deletes the other provider rows and route row by id in its own profile patch.
 
 ```yaml
 - name: '@deepseek-ai/dsh-subagent-claude-code'
+  config:
+    model: sonnet
 - name: '@deepseek-ai/dsh-llm-motif-relay'
   config:
     backend: claude-code
+    model: sonnet
+    models:
+      - id: sonnet
+        provider: motif-relay-claude-sonnet
+        name: Claude Sonnet
+        backend: claude-code
 ```
 
 | Field | Default | Meaning |
 |---|---|---|
 | `providerName` | `motif-relay` | Model-route name on `ctx.llm`; the Session selects this provider |
-| `backend` | `claude-code` | Registered subagent backend that runs each send (`codex` is the sibling) |
-| `model` | the backend name | Model id this route advertises; the Session selects it once by configuration |
+| `backend` | `claude-code` | Registered subagent backend that runs sends when `models` is omitted (`codex` is the sibling) |
+| `model` | the first offered model | Model id selected when a request carries none; must appear in `models` |
+| `models` | one model from `backend` | Models this route offers. Each entry is `{ id, provider, name, description?, backend? }`; `provider` must name a registered subagent provider instance |
 | `displayName` | the backend name | Selector label for the route |
 | `brandFile` | `brand.md` | Brand definition file relative to the Brand folder |
 | `timelineDir` | `timeline` | Timeline directory relative to the Brand folder |
@@ -58,7 +67,7 @@ The imported layer inserts four rows: `@deepseek-ai/dsh-subagent-claude-code`, `
 | `timeoutMs` | `900000` | Deadline for one send, after which the child is disposed |
 | `signInCheck` | `auto` | `auto` probes the native credential file; `skip` assumes a sign-in the Host cannot see |
 
-Locking model and permission mode is deliberate: `model`, `permissionMode`, and `env` belong to the subagent provider row, and this package never overrides them per call. A profile that mounts two relay routes with different backends gives the user a visible choice of backends; nothing switches automatically.
+Keeping permission mode and environment fixed is deliberate: they belong to the subagent provider row, and this package never overrides them per call. Model choice works differently: the deployment declares the provider instances and this route advertises them, so a request can select one by id. Because each provider instance pins its native model, the list is real rather than cosmetic. A profile that mounts two relay routes with different backends gives the user a visible choice of backends and models; nothing switches automatically.
 
 ### Authentication
 
@@ -173,7 +182,7 @@ Independent of the parent.
 
 - **No continuation** — every send is a fresh run; continuity comes only from the composed conversation digest.
 - **No progress stream** — reasoning and tool activity are unavailable, so surfaces show four coarse states.
-- **Fixed Session options** — the route advertises one model, and model, permission mode, and environment come from configuration rather than the UI.
+- **Deployment-owned model list** — the route offers exactly the provider instances a profile mounts; it cannot discover native models. Add a provider row with `model` and a matching `models` entry to expose another choice. Permission mode and environment remain configuration-owned.
 - **No side-effect rollback** — a timeout or cancel leaves files the child already changed.
 - **No local MCP server** — the child uses only its own native tools and configuration.
 - **Timeline budget is silent** — files beyond the byte or file-count budget are omitted from the task; the README states the budgets rather than reporting omissions per send.

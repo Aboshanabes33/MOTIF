@@ -46,10 +46,26 @@ export interface RelayTarget {
   readonly brandRoot: string
 }
 
+/** One model a relay route offers; each maps to its own subagent provider instance. */
+export interface RelayModel {
+  /** Model id the Session stores and the request carries. */
+  readonly id: string
+  /** Registered subagent provider instance that runs this model. */
+  readonly provider: string
+  /** Selector label. */
+  readonly name: string
+  /** Optional user-facing distinction between otherwise similar models. */
+  readonly description?: string
+  /** Command-line backend the provider runs (`claude-code` or `codex`), for sign-in instructions and status. */
+  readonly backend: string
+}
+
 /** One delegation accepted by the configured backend. */
 export interface RelayStartSpec {
   /** Delegating parent Agent, used for origin, directory, and depth. */
   readonly parent: Agent
+  /** Subagent provider instance selected for this send. */
+  readonly provider: string
   /** The single composed task text. */
   readonly prompt: readonly ContentBlock[]
   /** Cancellation owned by this send; it aborts before publication only. */
@@ -65,8 +81,8 @@ export interface RelayHost {
    */
   resolve(sessionId: SessionId): RelayTarget | undefined
   /**
-   * Start one caller-delivered child under the configured backend.
-   * @param spec - parent, task text, and cancellation.
+   * Start one caller-delivered child under the selected provider instance.
+   * @param spec - parent, provider, task text, and cancellation.
    * @returns the accepted activation.
    */
   start(spec: RelayStartSpec): Promise<SubagentActivation>
@@ -79,9 +95,10 @@ export interface RelayHost {
   /**
    * Publish one coarse status fact.
    * @param sessionId - Session whose turn is delegating.
+   * @param backend - command-line backend that ran the send.
    * @param status - state reached.
    */
-  status(sessionId: SessionId, status: RelayStatus): void
+  status(sessionId: SessionId, backend: string, status: RelayStatus): void
 }
 
 /** Fixed budgets applied to every relay send. */
@@ -96,10 +113,10 @@ export interface RelayAdapterLimits {
 
 /** Construction inputs for {@link RelayAdapter}. */
 export interface RelayAdapterOptions {
-  /** Registered subagent backend name (`claude-code` or `codex`). */
-  readonly backend: string
-  /** Model id this route advertises; the Session selects it once by configuration. */
-  readonly model: string
+  /** Models this route offers, each backed by its own subagent provider instance. */
+  readonly models: readonly RelayModel[]
+  /** Model id selected when the request carries none. */
+  readonly defaultModel: string
   /** Human-readable route name for selectors and diagnostics. */
   readonly displayName: string
   /** Host capabilities the adapter delegates through. */
@@ -143,12 +160,17 @@ export class RelayAdapter extends LlmAdapter {
   }
 
   /**
-   * Advertise exactly the configured backend as the single selectable model.
-   * @param _provider - route this adapter registered.
-   * @returns the one model this deployment's Session configuration selects.
+   * Advertise every model this route was configured with.
+   * @param provider - route this adapter registered.
+   * @returns the configured models in declaration order.
    */
   override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
-    return Promise.resolve([{ provider, id: this.options.model, name: this.options.model }])
+    return Promise.resolve(this.options.models.map(model => ({
+      provider,
+      id: model.id,
+      name: model.name,
+      ...model.description === undefined ? {} : { description: model.description },
+    })))
   }
 
   /**
@@ -186,16 +208,23 @@ export class RelayAdapter extends LlmAdapter {
       throw new LlmError('motif-relay: the request carries no Edit Request text', 'INVALID_REQUEST')
     }
 
+    const selected = this.options.models.find(model => model.id === (options.model ?? this.options.defaultModel))
+    if (selected === undefined) {
+      throw new LlmError(
+        `motif-relay: model ${JSON.stringify(options.model ?? this.options.defaultModel)} is not offered by ${this.options.displayName}; configured: ${this.options.models.map(model => model.id).join(', ')}`,
+        'INVALID_REQUEST',
+      )
+    }
     const context: RelayFailureContext = {
-      backend: this.options.backend,
+      backend: selected.backend,
       timeoutMs: this.options.limits.timeoutMs,
-      signIn: detectSignInState(this.options.backend, this.options.signIn),
+      signIn: detectSignInState(selected.backend, this.options.signIn),
     }
     if (context.signIn === 'absent') {
       throw failureError(missingSignInFailure(context))
     }
 
-    this.options.host.status(sessionId, 'started')
+    this.options.host.status(sessionId, selected.backend, 'started')
     const brand = await this.options.host.readBrand(target.brandRoot)
     const task = buildRelayTask({
       editRequest,
@@ -225,15 +254,16 @@ export class RelayAdapter extends LlmAdapter {
     try {
       activation = await this.options.host.start({
         parent: target.agent,
+        provider: selected.provider,
         prompt: [{ type: 'text', text: task }],
         signal: controller.signal,
       })
     } catch (error: unknown) {
       release()
-      this.options.host.status(sessionId, 'failed')
+      this.options.host.status(sessionId, selected.backend, 'failed')
       throw failureError(failureFromError(error, context))
     }
-    this.options.host.status(sessionId, 'working')
+    this.options.host.status(sessionId, selected.backend, 'working')
 
     const cancelled = new Promise<never>((_resolve, reject) => {
       controller.signal.addEventListener('abort', () => {
@@ -247,17 +277,17 @@ export class RelayAdapter extends LlmAdapter {
       await activation.dispose().then(() => undefined, () => undefined)
       release()
       const failure = isRelayFailure(error) ? error : failureFromError(error, context)
-      if (failure.kind !== 'cancelled') this.options.host.status(sessionId, 'failed')
+      if (failure.kind !== 'cancelled') this.options.host.status(sessionId, selected.backend, 'failed')
       throw failureError(failure)
     }
     release()
 
     const failure = failureFromResult(result, context)
     if (failure !== undefined) {
-      if (failure.kind !== 'cancelled') this.options.host.status(sessionId, 'failed')
+      if (failure.kind !== 'cancelled') this.options.host.status(sessionId, selected.backend, 'failed')
       throw failureError(failure)
     }
-    this.options.host.status(sessionId, 'finished')
+    this.options.host.status(sessionId, selected.backend, 'finished')
 
     const answer = textOf(result)
     yield { type: 'block-start', index: 0, blockType: 'text' }

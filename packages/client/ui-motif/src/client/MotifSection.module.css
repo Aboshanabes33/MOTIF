@@ -1,0 +1,766 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 1040px;
+  color: var(--dsh-text, #f4f1ec);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.headerCopy h1 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.headerCopy p {
+  margin: 8px 0 0;
+  max-width: 560px;
+  color: #a8a5a0;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.primary, .secondary, .ghost {
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  background: #ff5a36;
+  color: #fff;
+}
+
+.primary:disabled, .secondary:disabled, .ghost:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.secondary {
+  background: #2a2a2d;
+  color: #f4f1ec;
+}
+
+.ghost {
+  background: transparent;
+  color: #a8a5a0;
+  border: 1px solid #333336;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.brandCard {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #2b2b2e;
+  border-radius: 14px;
+  background: #18181a;
+}
+
+.brandArt {
+  min-height: 130px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.brandArtTitle {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 4px 9px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.brandArtTag {
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.brandArtArabic {
+  align-self: flex-end;
+  margin-top: 14px;
+  font-size: 17px;
+  direction: rtl;
+}
+
+.brandBody {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid #262629;
+}
+
+.brandName {
+  font-weight: 650;
+}
+
+.brandMeta {
+  color: #8f8c87;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.cardActions {
+  display: flex;
+  gap: 6px;
+}
+
+.startGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.startCard {
+  text-align: left;
+  border: 1px dashed #3a3a3e;
+  border-radius: 14px;
+  background: #141416;
+  padding: 18px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.startCard:hover {
+  border-color: #ff5a36;
+}
+
+.startCard strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.startCard span {
+  color: #8f8c87;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 20px;
+}
+
+.aiLayout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(360px, 1.4fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 22px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.stepNumber {
+  flex: 0 0 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #2a2a2d;
+  color: #f4f1ec;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.step strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.step span {
+  color: #94918c;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.warning {
+  border: 1px solid #6b5a2a;
+  border-radius: 10px;
+  background: #2b2412;
+  color: #e5d9b8;
+  padding: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.connectionCard {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 14px;
+  align-items: start;
+  border: 1px solid #2b2b2e;
+  border-radius: 14px;
+  background: #18181a;
+  padding: 16px;
+}
+
+.providerIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: #fff;
+  background: #c96442;
+}
+
+.providerIconCodex {
+  background: #10a37f;
+}
+
+.connectionBody h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.connectionBody p {
+  margin: 4px 0 0;
+  color: #94918c;
+  font-size: 13px;
+}
+
+.connectionDetail {
+  margin-top: 10px !important;
+}
+
+.pill {
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pillConnected {
+  background: #123a2b;
+  color: #58d3a0;
+}
+
+.pillBad {
+  background: #3a1b1b;
+  color: #ff8d7a;
+}
+
+.pillNeutral {
+  background: #2a2a2d;
+  color: #c9c6c1;
+}
+
+.connectionFoot {
+  grid-column: 2 / -1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.apiCard {
+  border: 1px solid #2b2b2e;
+  border-radius: 14px;
+  background: #18181a;
+  padding: 16px;
+}
+
+.apiRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.apiRow input {
+  flex: 1;
+}
+
+.aiFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.active {
+  color: #94918c;
+  font-size: 13px;
+}
+
+.active strong {
+  color: #f4f1ec;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(300px, 0.9fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.panel {
+  border: 1px solid #2b2b2e;
+  border-radius: 14px;
+  background: #18181a;
+  padding: 18px;
+}
+
+.panel h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.field label {
+  font-size: 12px;
+  color: #a8a5a0;
+}
+
+.field input, .field select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #333336;
+  border-radius: 8px;
+  background: #101012;
+  color: #f4f1ec;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.field input[type="color"] {
+  height: 44px;
+  padding: 4px;
+}
+
+.colorGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.colorGrid .field {
+  margin: 0;
+}
+
+.colorGrid code {
+  font-size: 11px;
+  color: #8f8c87;
+}
+
+.logoRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logoPreview {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #f4f1ec;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-weight: 800;
+  color: #111;
+}
+
+.logoPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.segmented {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.segmented button {
+  border: 1px solid #333336;
+  background: #101012;
+  color: #c9c6c1;
+  border-radius: 7px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.segmented button[aria-pressed="true"] {
+  border-color: #ff5a36;
+  background: #2a1711;
+  color: #fff;
+}
+
+.preview {
+  border: 1px solid #2b2b2e;
+  border-radius: 14px;
+  background: #101012;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.previewFrame {
+  position: relative;
+  min-height: 220px;
+  border-radius: 10px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+.previewTitle {
+  align-self: flex-start;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.previewLower {
+  align-self: flex-start;
+  border-radius: 3px;
+  padding: 6px 9px;
+  font-size: 11px;
+  color: #fff;
+}
+
+.previewLower strong {
+  display: block;
+  font-size: 12px;
+}
+
+.previewCaption {
+  text-align: center;
+  margin-top: 10px;
+}
+
+.previewCaption span {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.previewCaption small {
+  display: block;
+  margin-top: 4px;
+  color: #d9d4cb;
+  font-size: 12px;
+}
+
+.review {
+  border: 1px solid #4a3a1c;
+  border-radius: 9px;
+  background: #241d0f;
+  color: #e8d9b6;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+
+.formFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+
+.error {
+  color: #ff8d7a;
+  font-size: 13px;
+}
+
+.empty {
+  color: #8f8c87;
+  padding: 24px;
+  border: 1px dashed #333336;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.searchRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.searchRow input {
+  width: 220px;
+  border: 1px solid #333336;
+  border-radius: 8px;
+  background: #101012;
+  color: #f4f1ec;
+  padding: 9px 12px;
+}
+
+@media (max-width: 860px) {
+  .aiLayout, .form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* First-run connection step. A fixed scrim keeps the welcome card above the
+   shell while the step owns the screen; dismissing it restores the app. */
+.gate {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, #0b0b0c 72%, transparent);
+  backdrop-filter: blur(6px);
+}
+.gateCard {
+  width: min(520px, 100%);
+  padding: 32px;
+  border-radius: 16px;
+  border: 1px solid #2c2c30;
+  background: #18181a;
+  color: #f4f2ee;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 55%);
+}
+.gateMark {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #ff5a36;
+  color: #17171a;
+  font-weight: 800;
+  font-size: 20px;
+}
+.gateTitle { margin: 18px 0 8px; font-size: 24px; letter-spacing: -0.02em; }
+.gateBody { margin: 0; color: #b7b4ae; line-height: 1.55; font-size: 14px; }
+.gateSteps { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 10px; }
+.gateSteps li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #e9e6e1; }
+.gateSteps li span {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid #3a3a3f;
+  color: #ff8a70;
+  font-size: 12px;
+  font-weight: 700;
+}
+.gateStatus { margin: 18px 0 0; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: #8d8a84; }
+.gateActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.ghost {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #b7b4ae;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.ghost:hover { background: #242427; color: #f4f2ee; }
+
+/* Brands home: the blank-session surface, so it carries the page padding the
+   chat hero would otherwise own. */
+.home {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 40px 32px 80px;
+}
+.homeStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid #2c2c30;
+  background: #202023;
+  color: #a8a5a0;
+  font-size: 12px;
+}
+.homeStatus span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #35d07f;
+}
+
+/* Brand editor: full viewport, matching the two-column design. */
+.editor {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  background: #141416;
+  color: #f4f2ee;
+}
+.editorBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #2a2a2e;
+  background: #18181a;
+}
+.editorName {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.editorBody {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 1px;
+  background: #2a2a2e;
+}
+.editorChat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #18181a;
+  padding: 20px;
+  gap: 16px;
+}
+.chatHead { display: flex; align-items: center; justify-content: space-between; }
+.chatHead h3 { margin: 0; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase; color: #9b9892; }
+.chatHead span { font-size: 11px; color: #35d07f; }
+.requestList { flex: 1; overflow: auto; display: grid; gap: 10px; align-content: start; }
+.request {
+  border: 1px solid #2f2f34;
+  border-radius: 10px;
+  padding: 12px;
+  background: #202023;
+}
+.request[data-latest='true'] { border-color: #ff5a36; }
+.requestMeta { font-size: 11px; color: #8d8a84; margin-bottom: 6px; }
+.request p { margin: 0; font-size: 13px; line-height: 1.5; color: #d7d4ce; }
+.composerRow { display: flex; gap: 8px; }
+.composerRow input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid #333338;
+  background: #1d1d20;
+  color: #f4f2ee;
+  font-size: 13px;
+}
+.editorStage {
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #141416;
+}
+.previewFrame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: 6%;
+}
+.previewType { font-size: clamp(24px, 4vw, 52px); line-height: 1.05; letter-spacing: -0.03em; text-align: center; }
+.previewBar { position: absolute; left: 6%; bottom: 18%; width: 34%; height: 10px; border-radius: 2px; }
+.previewArabic { position: absolute; left: 6%; bottom: 7%; font-size: clamp(14px, 1.6vw, 22px); }
+.transport { display: flex; align-items: center; gap: 12px; color: #9b9892; font-size: 12px; }
+.transport input { flex: 1; accent-color: #ff5a36; }
+.inUseCard {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid #2f2f34;
+  background: #1b1b1e;
+}
+.inUseCard strong { font-size: 13px; }
+.inUseCard p { margin: 4px 0 0; font-size: 12px; color: #9b9892; }
+.inUseCard em { margin-left: auto; font-style: normal; font-size: 11px; color: #8d8a84; }
+.swatches { display: flex; gap: 6px; }
+.swatches span { width: 22px; height: 22px; border-radius: 6px; border: 1px solid #3a3a3f; }
+.lanes { display: grid; gap: 6px; }
+.lane { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 10px; }
+.laneName { font-size: 11px; color: #8d8a84; text-transform: uppercase; letter-spacing: 0.06em; }
+.laneTrack {
+  position: relative;
+  height: 26px;
+  border-radius: 6px;
+  background: #1d1d20;
+  border: 1px solid #2a2a2e;
+  overflow: hidden;
+}
+.laneTrack span { position: absolute; top: 4px; bottom: 4px; border-radius: 4px; opacity: 0.85; }

@@ -15,7 +15,7 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import { RelayAdapter } from './adapter.ts'
-import type { RelayHost } from './adapter.ts'
+import type { RelayHost, RelayModel } from './adapter.ts'
 import { readBrandSnapshot } from './brand.ts'
 import { hostSignInFacts } from './failure.ts'
 import type { RelayStatusEvent } from './status.ts'
@@ -28,18 +28,39 @@ const DEFAULT_PROVIDER_NAME = 'motif-relay'
 /** Default command-line backend: the Claude Code subagent provider's registry name. */
 const DEFAULT_BACKEND = 'claude-code'
 
+/** One model a relay route offers, mapped to its own subagent provider instance. */
+export interface RelayModelConfig {
+  /** Model id the Session stores and the request carries. Defaults to the provider name. */
+  id?: string
+  /** Registered subagent provider instance that runs this model. Defaults to the route backend. */
+  provider?: string
+  /** Selector label. Defaults to the model id. */
+  name?: string
+  /** Optional user-facing distinction between otherwise similar models. */
+  description?: string
+  /** Command-line backend behind the provider, for sign-in instructions and status. Defaults to the route backend. */
+  backend?: string
+}
+
 /**
- * Deployment-owned relay settings. Model, permission mode, and every other
+ * Deployment-owned relay settings. Permission mode and every other
  * command-line option belong to the subagent provider instance; this plugin
- * fixes only the route, the backend, the Brand files, and the budgets.
+ * fixes only the route, the backends and models it offers, the Brand files, and
+ * the budgets.
  */
 export interface Config {
   /** Model-route name registered on `ctx.llm` (default `motif-relay`). */
   providerName?: string
-  /** Registered subagent backend that runs each send (default `claude-code`; `codex` is the sibling). */
+  /** Registered subagent backend that runs each send when `models` is omitted (default `claude-code`). */
   backend?: string
-  /** Model id this route advertises and the Session selects (default: the backend name). */
+  /** Model id selected by default (default: the first offered model). */
   model?: string
+  /**
+   * Models this route offers. Each entry names a registered subagent provider
+   * instance, so one provider row per native model is what makes a real
+   * selector possible. Omitted means one model: the route backend itself.
+   */
+  models?: RelayModelConfig[]
   /** Selector label for this route (default: the backend name). */
   displayName?: string
   /** Brand definition file relative to the Brand folder (default `brand.md`). */
@@ -70,6 +91,13 @@ export const Config: z<Config> = z.object({
   providerName: z.string().min(1).default(DEFAULT_PROVIDER_NAME),
   backend: z.string().min(1).default(DEFAULT_BACKEND),
   model: z.string().min(1),
+  models: z.array(z.object({
+    id: z.string().min(1),
+    provider: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string(),
+    backend: z.string().min(1),
+  })),
   displayName: z.string().min(1),
   brandFile: z.string().min(1).default('brand.md'),
   timelineDir: z.string().min(1).default('timeline'),
@@ -83,7 +111,7 @@ export const Config: z<Config> = z.object({
 })
 
 /** Every optional field with its default materialized. */
-type ResolvedConfig = Required<Config>
+type ResolvedConfig = Required<Omit<Config, 'models'>> & { models: RelayModel[] }
 
 function assertPositiveInteger(field: string, value: number): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
@@ -107,10 +135,36 @@ export function resolveConfig(config: Config): ResolvedConfig {
       throw new Error(`motif-relay: timelineExtensions entries must start with a dot, got ${JSON.stringify(extension)}`)
     }
   }
+  const models: RelayModel[] = (config.models ?? []).map(entry => {
+    const provider = entry.provider ?? backend
+    const id = entry.id ?? provider
+    return {
+      id,
+      provider,
+      name: entry.name ?? id,
+      ...entry.description === undefined ? {} : { description: entry.description },
+      backend: entry.backend ?? backend,
+    }
+  })
+  const offered = models.length === 0
+    ? [{ id: config.model ?? backend, provider: backend, name: config.displayName ?? config.model ?? backend, backend }]
+    : models
+  const seen = new Set<string>()
+  for (const model of offered) {
+    if (seen.has(model.id)) throw new Error(`motif-relay: duplicate model id ${JSON.stringify(model.id)}`)
+    seen.add(model.id)
+    if (model.id === '') throw new Error('motif-relay: every model needs an id')
+    if (model.provider === '') throw new Error('motif-relay: every model needs a provider')
+  }
+  const defaultModel = config.model ?? offered[0]!.id
+  if (!seen.has(defaultModel)) {
+    throw new Error(`motif-relay: model ${JSON.stringify(defaultModel)} is not in models (${[...seen].join(', ')})`)
+  }
   const resolved: ResolvedConfig = {
     providerName,
     backend,
-    model: config.model ?? backend,
+    model: defaultModel,
+    models: offered,
     displayName: config.displayName ?? backend,
     brandFile,
     timelineDir,
@@ -143,9 +197,9 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /**
- * Register the relay model route over the configured subagent backend.
+ * Register the relay model route over the configured subagent providers.
  * @param ctx - context carrying the LLM, Agent, and subagent seams.
- * @param config - route, backend, Brand-file rules, and budgets.
+ * @param config - route, offered models, Brand-file rules, and budgets.
  */
 export function apply(ctx: Context, config: Config): void {
   const resolved = resolveConfig(config)
@@ -160,7 +214,7 @@ export function apply(ctx: Context, config: Config): void {
       return { agent, brandRoot }
     },
     start: spec => ctx.subagents.startActivation({
-      provider: resolved.backend,
+      provider: spec.provider,
       parent: spec.parent,
       prompt: [...spec.prompt],
       label: 'motif-relay',
@@ -174,13 +228,13 @@ export function apply(ctx: Context, config: Config): void {
       maxTimelineFiles: resolved.maxTimelineFiles,
       maxTimelineBytes: resolved.maxTimelineBytes,
     }),
-    status: (sessionId, status) => {
-      ctx.emit('motif-relay/status', { sessionId, backend: resolved.backend, status })
+    status: (sessionId, backend, status) => {
+      ctx.emit('motif-relay/status', { sessionId, backend, status })
     },
   }
   ctx.effect(() => ctx.llm.registerAdapter([resolved.providerName], new RelayAdapter({
-    backend: resolved.backend,
-    model: resolved.model,
+    models: resolved.models,
+    defaultModel: resolved.model,
     displayName: resolved.displayName,
     host,
     limits: {
@@ -200,7 +254,12 @@ export function apply(ctx: Context, config: Config): void {
     signIn: hostSignInFacts(resolved.signInCheck === 'skip' ? { exists: () => true } : {}),
   })), 'motif-relay: model route')
 
-  ctx.logger.info('motif-relay: registered %s over backend %s', resolved.providerName, resolved.backend)
+  ctx.logger.info(
+    'motif-relay: registered %s with %d model(s) over backend %s',
+    resolved.providerName,
+    resolved.models.length,
+    resolved.backend,
+  )
 }
 
 export type * from './adapter.ts'

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-当一个 Motif 会话应由命令行代理而不是托管模型驱动时，挂载这条模型路由：用户的 Edit Request 会在 Brand 文件夹中变成一次全新的 Claude Code 或 Codex 运行，只有该运行的最终答案会作为助手回复回到同一段对话。它组合既有的 `dsh-subagent-claude-code` 与 `dsh-subagent-codex` 提供方，因此原生设置、身份验证、权限模式和模型完全由提供方实例的配置决定。每次发送都是全新且无人值守的；路由不流式传输进度，只展示四种粗略状态，绝不会自动切换到另一个后端，并让会话的模型选项由配置固定。
+当一个 Motif 会话应由命令行代理而不是托管模型驱动时，挂载这条模型路由：用户的 Edit Request 会在 Brand 文件夹中变成一次全新的 Claude Code 或 Codex 运行，只有该运行的最终答案会作为助手回复回到同一段对话。它组合既有的 `dsh-subagent-claude-code` 与 `dsh-subagent-codex` 提供方，因此原生设置、身份验证与权限模式完全由提供方实例的配置决定。路由会公布各提供方实例固定使用的原生模型，由会话显式选择其中一个；每次发送都是全新且无人值守的，不流式传输进度，只展示四种粗略状态，绝不会自动切换到另一个后端或模型。
 
 ## 目录
 
@@ -25,30 +25,39 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-当 Brand 文件夹应由原生命令行代理编辑时，在 profile 中启用此路由。该路由不新增任何工具、不需要本地 MCP 服务器，并且在会话发送消息之前不会启动任何进程。用户唯一的选择是 Brand：会话的工作目录就是 Brand 文件夹，其余选项全部来自本配置与被选中的子代理提供方实例。
+当 Brand 文件夹应由原生命令行代理编辑时，在 profile 中启用此路由。该路由不新增任何工具、不需要本地 MCP 服务器，并且在会话发送消息之前不会启动任何进程。用户选择模型；会话的工作目录就是 Brand 文件夹，其余选项来自本配置与被选中的子代理提供方实例。
 
 ### 安装 Bundle
 
-在 Web 或桌面端的“插件”页面启用 **Motif 中继**。它的 bundle 层会挂载一个 Claude Code 提供方、一个 Codex 提供方，以及覆盖各自之上的中继路由，因此模型选择器里会同时出现 `Claude Code (relay)` 与 `Codex (relay)` 条目；选中哪一个，每个 Edit Request 就经由该路由与该后端发送。该路由不新增工具、不需要本地 MCP 服务器，并且在会话发出消息之前不会启动任何原生进程。用户唯一的选择是 Brand：会话的工作目录就是 Brand 文件夹，其余选项均来自本配置与提供方配置行。
+在 Web 或桌面端的“插件”页面启用 **Motif 中继**。它的 bundle 层会挂载四个 Claude Code 提供方实例（原生默认、Sonnet、Opus、Haiku）、一个 Codex 提供方，以及覆盖每个后端的中继路由，因此模型选择器里会出现 `Claude Code (relay)` 与 `Codex (relay)` 条目，而 Claude 路由会列出 Sonnet、Opus 与 Haiku。选中某个模型后，每个 Edit Request 就经由该路由与该提供方实例发送。该路由不新增工具、不需要本地 MCP 服务器，并且在会话发出消息之前不会启动任何原生进程。用户选择模型；会话的工作目录就是 Brand 文件夹。
 
 官方条目离线可见。启用时会通过常规 bundle 安装器安装本包及其 `@deepseek-ai/dsh-subagent-claude-code` 与 `@deepseek-ai/dsh-subagent-codex` 提供方，然后选中其 profile 层；关闭只取消选中该层，包仍保留。请以运行宿主机的操作系统用户登录一次：Claude Code 路由执行 `claude login`，Codex 路由执行 `codex login`——两个固定运行时各自复用对应的原生登录，中继本身不新增任何账号。只登录了其中一个的机器仍会显示两条路由，未登录的那条会以各自的指引失败。
 
 ### 配置
 
-导入的层插入四行：`@deepseek-ai/dsh-subagent-claude-code`、`@deepseek-ai/dsh-subagent-codex`，以及每个后端一行 `@deepseek-ai/dsh-llm-motif-relay`。两条路由必须使用不同的 `providerName`，因为该名称是 `ctx.llm` 上的注册键；本层分别使用 `motif-relay-claude-code` 与 `motif-relay-codex`。若部署只提供其中一个后端，请在自己的 profile 补丁中按 id 删除另一提供方行与其路由行。`backend` 取值必须与已安装 bundle 注册的提供方实例一致（`claude-code` 或 `codex`）。
+导入的层插入七行：四个 `@deepseek-ai/dsh-subagent-claude-code` 提供方实例（原生默认、`sonnet`、`opus`、`haiku`）、一个 `@deepseek-ai/dsh-subagent-codex` 提供方，以及每个后端一行 `@deepseek-ai/dsh-llm-motif-relay`。两条路由必须使用不同的 `providerName`，因为该名称是 `ctx.llm` 上的注册键；本层分别使用 `motif-relay-claude-code` 与 `motif-relay-codex`。每个 `models` 条目都指定执行它的提供方实例，路由把该名称传给 `startActivation`；这样静态固定模型的后端也能获得真实的模型选择。若部署只提供其中一个后端，请在自己的 profile 补丁中按 id 删除另一提供方行与其路由行。
 
 ```yaml
 - name: '@deepseek-ai/dsh-subagent-claude-code'
+  config:
+    model: sonnet
 - name: '@deepseek-ai/dsh-llm-motif-relay'
   config:
     backend: claude-code
+    model: sonnet
+    models:
+      - id: sonnet
+        provider: motif-relay-claude-sonnet
+        name: Claude Sonnet
+        backend: claude-code
 ```
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `providerName` | `motif-relay` | `ctx.llm` 上的模型路由名称；会话选择该提供方 |
-| `backend` | `claude-code` | 执行每次发送的已注册子代理后端（同级为 `codex`） |
-| `model` | 后端名称 | 本路由公布的模型 id；会话通过配置一次性选定 |
+| `backend` | `claude-code` | 省略 `models` 时执行发送的已注册子代理后端（同级为 `codex`） |
+| `model` | 首个模型 | 请求未指定时选用的模型 id，必须出现在 `models` 中 |
+| `models` | 由 `backend` 组成的单个模型 | 本路由提供的模型列表。每项为 `{ id, provider, name, description?, backend? }`；`provider` 必须是已注册的子代理提供方实例 |
 | `displayName` | 后端名称 | 路由在选择器中的名称 |
 | `brandFile` | `brand.md` | 相对于 Brand 文件夹的 Brand 定义文件 |
 | `timelineDir` | `timeline` | 相对于 Brand 文件夹的 timeline 目录 |
@@ -60,7 +69,7 @@ kind: "package-reference"
 | `timeoutMs` | `900000` | 单次发送的截止时间，超时后释放子进程 |
 | `signInCheck` | `auto` | `auto` 探测原生凭据文件；`skip` 假定宿主看不到的登录已存在 |
 
-固定模型与权限模式是有意为之：`model`、`permissionMode` 与 `env` 属于子代理提供方配置行，本包不会按调用覆盖它们。挂载两条指向不同后端的路由，就为用户提供了可见的后端选择；任何情况下都不会自动切换。
+固定权限模式与环境是有意为之：它们属于子代理提供方配置行，本包不会按调用覆盖。模型选择不同：部署声明提供方实例，路由公布它们，请求可按 id 选择一个。由于每个提供方实例固定自己的原生模型，列表是真实可用的。挂载两条指向不同后端的路由，就为用户提供了可见的后端与模型选择；任何情况下都不会自动切换。
 
 ### 身份验证
 
@@ -175,7 +184,7 @@ kind: "package-reference"
 
 - **没有续跑** —— 每次发送都是全新运行；连续性只来自组合的对话摘要。
 - **没有进度流** —— 推理与工具活动不可见，界面只展示四种粗略状态。
-- **会话选项固定** —— 路由只公布一个模型，模型、权限模式与环境来自配置而不是界面。
+- **模型列表由部署决定** —— 路由只提供 profile 挂载的提供方实例，无法自动发现原生模型。要增加选项，请新增一个带 `model` 的提供方行并添加对应的 `models` 条目。权限模式与环境仍由配置决定。
 - **没有副作用回滚** —— 超时或取消会保留子进程已改动的文件。
 - **没有本地 MCP 服务器** —— 子进程只使用自身的原生工具与配置。
 - **timeline 预算静默生效** —— 超出字节或文件数预算的文件不会进入任务；本 README 说明预算，而不是在每次发送时报告遗漏。

@@ -65,12 +65,35 @@ describe('motif relay bundle layer', () => {
     })
   })
 
-  it('gives each relay route its own registry name and its own single model', () => {
+  it('gives each relay route its own registry name and its own real model list', () => {
     const routes = layerRows().filter(row => row.name === '@deepseek-ai/dsh-llm-motif-relay')
-    const configs = routes.map(route => route.config as { providerName?: string; backend?: string })
+    const configs = routes.map(route => route.config as {
+      providerName?: string
+      backend?: string
+      model?: string
+      models?: { id: string; provider: string; backend?: string }[]
+    })
     expect(routes).toHaveLength(2)
     expect(new Set(configs.map(config => config.providerName)).size).toBe(2)
     expect(configs.map(config => config.backend)).toEqual(['claude-code', 'codex'])
+
+    const claude = configs.find(config => config.backend === 'claude-code')
+    expect(claude?.model).toBe('sonnet')
+    expect(claude?.models?.map(model => model.id)).toEqual(['sonnet', 'opus', 'haiku'])
+    expect(new Set(claude?.models?.map(model => model.provider)).size).toBe(3)
+    expect(claude?.models?.every(model => model.backend === 'claude-code')).toBe(true)
+
+    const codex = configs.find(config => config.backend === 'codex')
+    expect(codex?.model).toBe('codex')
+    expect(codex?.models?.map(model => model.id)).toEqual(['codex'])
+  })
+
+  it('pins one Claude Code provider instance per offered Claude model', () => {
+    const rows = layerRows()
+    const pinned = rows.filter(row => row.id?.startsWith('motif-relay-claude-')
+      && row.name === '@deepseek-ai/dsh-subagent-claude-code')
+    const models = pinned.map(row => (row.config as { model?: string } | undefined)?.model)
+    expect(models.sort()).toEqual(['haiku', 'opus', 'sonnet', undefined])
   })
 
   it('installs every package its layer mounts', () => {

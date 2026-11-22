@@ -7,6 +7,7 @@ describe('resolveConfig', () => {
       providerName: 'motif-relay',
       backend: 'claude-code',
       model: 'claude-code',
+      models: [{ id: 'claude-code', provider: 'claude-code', name: 'claude-code', backend: 'claude-code' }],
       displayName: 'claude-code',
       brandFile: 'brand.md',
       timelineDir: 'timeline',
@@ -18,6 +19,43 @@ describe('resolveConfig', () => {
       timeoutMs: 900_000,
       signInCheck: 'auto',
     })
+  })
+
+  it('offers exactly one model when no list is configured', () => {
+    const resolved = resolveConfig({ backend: 'codex', displayName: 'Codex' })
+
+    expect(resolved.models).toEqual([
+      { id: 'codex', provider: 'codex', name: 'Codex', backend: 'codex' },
+    ])
+  })
+
+  it('maps each configured model to its own provider row and keeps the default', () => {
+    const resolved = resolveConfig({
+      backend: 'claude-code',
+      displayName: 'Claude Code',
+      model: 'opus',
+      models: [
+        { id: 'sonnet', provider: 'claude-sonnet', name: 'Claude Sonnet' },
+        { id: 'opus', provider: 'claude-opus', name: 'Claude Opus', description: 'Deep edits.' },
+      ],
+    })
+
+    expect(resolved.model).toBe('opus')
+    expect(resolved.models).toEqual([
+      { id: 'sonnet', provider: 'claude-sonnet', name: 'Claude Sonnet', backend: 'claude-code' },
+      { id: 'opus', provider: 'claude-opus', name: 'Claude Opus', description: 'Deep edits.', backend: 'claude-code' },
+    ])
+  })
+
+  it('rejects a default model that is not offered and duplicate model ids', () => {
+    expect(() => resolveConfig({ model: 'missing', models: [{ id: 'sonnet', provider: 'claude-sonnet' }] }))
+      .toThrow('model "missing" is not in models (sonnet)')
+    expect(() => resolveConfig({
+      models: [
+        { id: 'sonnet', provider: 'claude-sonnet' },
+        { id: 'sonnet', provider: 'claude-opus' },
+      ],
+    })).toThrow('duplicate model id "sonnet"')
   })
 
   it('names the model and display label after the configured backend', () => {
