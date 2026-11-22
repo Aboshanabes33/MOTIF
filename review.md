@@ -18,8 +18,8 @@ This is a remote code review of GitHub source. I did not clone the repository, r
 ### [P1] Brand editor is a non-functional prototype presented as a real editor
 
 **Files**
-- `packages/client/ui-motif/src/client/MotifSection.tsx` — `BrandEditor` (around lines 480–620; verify exact line numbers in current checkout)
-- `packages/client/ui-motif/src/client/MotifSection.module.css` — editor styles (around lines 653–767)
+- `packages/client/ui-motif/src/client/MotifSection.tsx` — `BrandEditor` (lines 534–616)
+- `packages/client/ui-motif/src/client/MotifSection.module.css` — editor styles (lines 653–767)
 
 The editor shows a request history, composer, preview, transport slider, timeline lanes, and Export Request, but these are static/demo values. The composer input is uncontrolled and Send does not submit; Export Request has no handler; the timeline slider only changes its own thumb; lanes are hard-coded; the preview is not connected to media; and labels such as `v6 · just now`, `0:13`, `0:22`, and `Ready` are static.
 
@@ -31,7 +31,7 @@ The editor shows a request history, composer, preview, transport slider, timelin
 
 ### [P1] “From website” and “From Reference Video” start paths do not perform their advertised workflows
 
-**File:** `packages/client/ui-motif/src/client/MotifSection.tsx` — `BrandsSection` and `NewBrand` (around lines 227–280 and 350–430)
+**File:** `packages/client/ui-motif/src/client/MotifSection.tsx` — `BrandsSection` (lines 227–317) and `NewBrand` (lines 326–500)
 
 All three cards (“Manually”, “From a website”, “From a Reference Video”) only set `creating=true`, so they open the same manual form. The Website field is not bound to state or submitted. There is no reference-video file input or extraction workflow.
 
@@ -43,7 +43,7 @@ All three cards (“Manually”, “From a website”, “From a Reference Video
 
 ### [P1] API-key fallback UI is entirely inert
 
-**File:** `packages/client/ui-motif/src/client/MotifSection.tsx` — `AiSection` (around lines 178–184)
+**File:** `packages/client/ui-motif/src/client/MotifSection.tsx` — `AiSection` (lines 178–184)
 
 The password input has no state or handler. “Save and test” has no click handler. No API-key provider, validation, secure storage, model selection, or test request is connected.
 
@@ -55,7 +55,7 @@ The password input has no state or handler. “Save and test” has no click han
 
 ### [P1] Brand creation is not atomic; duplicate-name races can overwrite another Brand
 
-**File:** `packages/motif/motif-core/src/brand-store.ts` — `createBrand()` (around lines 120–141)
+**File:** `packages/motif/motif-core/src/brand-store.ts` — `createBrand()` (lines 120–141)
 
 The code checks `stat(path)` and then creates directories with `mkdir(..., { recursive: true })`. The check and create are separate operations. Two concurrent requests with the same slug can both pass the check and write to the same folder. The recursive mkdir also accepts an already-created directory, so the second request can overwrite `brand.json`, `brand.md`, or logo files.
 
@@ -67,7 +67,7 @@ The code checks `stat(path)` and then creates directories with `mkdir(..., { rec
 
 ### [P1] Brand folder can be orphaned if Workspace registration fails
 
-**File:** `packages/motif/motif-core/src/index.ts` — `MotifController.createBrand()` (around lines 95–115)
+**File:** `packages/motif/motif-core/src/index.ts` — `MotifController.createBrand()` (lines 123–131)
 
 The folder is created first, then `workspaceRegistry.create()` and `workspace.setTitle()` are called. If Workspace registration fails, the Brand folder remains on disk but the API returns an error. On subsequent snapshots, that Brand may have no `workspaceId`, and the UI disables its Open button.
 
@@ -79,7 +79,7 @@ The folder is created first, then `workspaceRegistry.create()` and `workspace.se
 
 ### [P1] Global CLI installation is likely broken on Windows
 
-**File:** `packages/motif/motif-core/src/connection.ts` — `installBackend()` (around lines 122–136)
+**File:** `packages/motif/motif-core/src/connection.ts` — `installBackend()` (lines 122–136)
 
 The installer invokes `execFile('npm', ...)` without a shell or resolving the platform-specific executable. On Windows, npm is commonly exposed as `npm.cmd`; `execFile` does not reliably execute `.cmd` wrappers without shell handling. This needs a Windows-specific implementation and verification.
 
@@ -91,7 +91,7 @@ The installer invokes `execFile('npm', ...)` without a shell or resolving the pl
 
 ### [P2] Arabic-only Brand names collapse to the same slug
 
-**File:** `packages/motif/motif-core/src/brand-store.ts` — `slugify()` (around lines 43–50)
+**File:** `packages/motif/motif-core/src/brand-store.ts` — `slugify()` (lines 43–50)
 
 The slug is limited to ASCII letters/numbers. Arabic-only names normalize to an empty slug and become `brand`. This means different Arabic names collide and only one can be created.
 
@@ -103,7 +103,7 @@ The slug is limited to ASCII letters/numbers. Arabic-only names normalize to an 
 
 ### [P2] Brand-list and Brand-read errors are silently treated as “no Brands”
 
-**File:** `packages/motif/motif-core/src/brand-store.ts` — `listBrands()`, `readBrand()`, `countVideos()` (around lines 145–200)
+**File:** `packages/motif/motif-core/src/brand-store.ts` — `listBrands()`, `readBrand()`, `countVideos()` (lines 145–200)
 
 `listBrands` swallows every `readdir(root)` error and returns an empty array. `readBrand` swallows all read errors and malformed JSON. `countVideos` also turns any filesystem error into zero.
 
@@ -115,7 +115,7 @@ The slug is limited to ASCII letters/numbers. Arabic-only names normalize to an 
 
 ### [P2] “Videos” count counts all timeline files, not videos
 
-**File:** `packages/motif/motif-core/src/brand-store.ts` — `countVideos()` (around lines 145–148)
+**File:** `packages/motif/motif-core/src/brand-store.ts` — `countVideos()` (lines 145–148)
 
 Every non-hidden file in `timeline/` is counted, including JSON timelines, Markdown notes, captions, and metadata. The UI displays this number as “videos”.
 
@@ -127,7 +127,7 @@ Every non-hidden file in `timeline/` is counted, including JSON timelines, Markd
 
 ### [P2] Connection sign-in reports success before confirming the child process started
 
-**File:** `packages/motif/motif-core/src/connection.ts` — `signInBackend()` (around lines 149–176)
+**File:** `packages/motif/motif-core/src/connection.ts` — `signInBackend()` (lines 149–176)
 
 The detached process uses `stdio: 'ignore'`, immediately calls `unref()`, and returns success. A spawn error can arrive asynchronously via the child's `error` event and is not caught by this try/catch. Also, some CLI login flows require an interactive terminal; the current detached/no-stdio path is not proven to support those flows.
 
@@ -139,7 +139,7 @@ The detached process uses `stdio: 'ignore'`, immediately calls `unref()`, and re
 
 ### [P2] Relay status can remain “started” when Brand context reading fails
 
-**File:** `packages/llm/llm-motif-relay/src/adapter.ts` — `stream()` (around lines 227–235)
+**File:** `packages/llm/llm-motif-relay/src/adapter.ts` — `stream()` (lines 227–235)
 
 The adapter emits `started`, then reads the Brand snapshot and builds the task before entering the start/activation error-handling block. If `readBrand()` fails (permissions, I/O error, unexpected file), the request throws but no `failed` status is emitted. The timeout/cancellation controller is also created only after the Brand snapshot is read.
 
@@ -152,8 +152,8 @@ The adapter emits `started`, then reads the Brand snapshot and builds the task b
 ### [P2] “Active AI” indicators are not connected to the selected/used backend
 
 **Files**
-- `packages/client/ui-motif/src/client/MotifSection.tsx` — `AiSection` (around lines 103, 187–193)
-- Same file — `MotifHome` (around the final home-status component)
+- `packages/client/ui-motif/src/client/MotifSection.tsx` — `AiSection` (lines 103, 187–193)
+- Same file — `MotifHome` (lines 617–629)
 
 The AI settings page defines the “active” connection as the first card whose sign-in state is `yes`, not the model selected in the Session. The home status is hard-coded to “Claude Code”. This can display Claude as active when Codex is the selected model—or when neither backend has actually been used.
 
@@ -191,7 +191,7 @@ The editor uses a fixed 340px chat column plus the stage, with no editor-specifi
 
 **Files**
 - `packages/client/ui-motif/src/client/MotifSection.tsx` — file upload handler
-- `packages/motif/motif-core/src/brand-store.ts` — `decodeLogo()` (around lines 104–110)
+- `packages/motif/motif-core/src/brand-store.ts` — `decodeLogo()` (lines 104–110)
 
 The client reads the entire file into a base64 Data URL without a size limit. The Host accepts a matching MIME-shaped Data URL and decodes it with permissive `Buffer.from(..., 'base64')`; it does not enforce a maximum byte size or verify file signatures. SVG is accepted without sanitization.
 
@@ -203,7 +203,7 @@ The client reads the entire file into a base64 Data URL without a size limit. Th
 
 ### [P3] Brand schema/version is declared but not validated
 
-**File:** `packages/motif/motif-core/src/brand-store.ts` — `StoredBrand` / `readBrand()` (around lines 29–36 and 156–176)
+**File:** `packages/motif/motif-core/src/brand-store.ts` — `StoredBrand` / `readBrand()` (lines 29–36 and 156–176)
 
 A `version: 1` schema exists, but read does not validate the version, identity fields, logo type, or `updatedAt`. Invalid data can be merged into the fallback identity; unexpected types may break sorting/rendering or produce invalid CSS values.
 
@@ -213,7 +213,7 @@ A `version: 1` schema exists, but read does not validate the version, identity f
 
 ### [P3] Connection snapshot probes CLIs sequentially and can be slow
 
-**File:** `packages/motif/motif-core/src/connection.ts` — `inspectConnections()` (around lines 76–105)
+**File:** `packages/motif/motif-core/src/connection.ts` — `inspectConnections()` (lines 76–105)
 
 The two `--version` probes are awaited in a loop, each with a 5-second timeout. A slow/unresponsive executable can delay the snapshot by up to roughly 10 seconds, and the onboarding/settings surfaces may request separate snapshots.
 
