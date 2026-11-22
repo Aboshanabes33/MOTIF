@@ -27,9 +27,15 @@ kind: "package-reference"
 
 当 Brand 文件夹应由原生命令行代理编辑时，在 profile 中启用此路由。该路由不新增任何工具、不需要本地 MCP 服务器，并且在会话发送消息之前不会启动任何进程。用户唯一的选择是 Brand：会话的工作目录就是 Brand 文件夹，其余选项全部来自本配置与被选中的子代理提供方实例。
 
+### 安装 Bundle
+
+在 Web 或桌面端的“插件”页面启用 **Motif 中继**。它的 bundle 层会挂载一个 Claude Code 提供方以及覆盖其上的中继路由，因此模型选择器里会出现 `Claude Code (relay)` 条目；选中它即可让每个 Edit Request 经由此路由发送。该路由不新增工具、不需要本地 MCP 服务器，并且在会话发出消息之前不会启动任何原生进程。用户唯一的选择是 Brand：会话的工作目录就是 Brand 文件夹，其余选项均来自本配置与提供方配置行。
+
+官方条目离线可见。启用时会通过常规 bundle 安装器安装本包及其 `@deepseek-ai/dsh-subagent-claude-code` 提供方，然后选中其 profile 层；关闭只取消选中该层，包仍保留。请以运行宿主机的操作系统用户执行一次 `claude login`——固定运行时会复用该登录，中继本身不新增任何账号。
+
 ### 配置
 
-挂载路由以及它选择的后端提供方。后端名称必须与已安装 bundle 注册的提供方实例一致（`claude-code` 或 `codex`）。
+导入的层在路由上设置 `backend: claude-code`，并在其旁挂载 `@deepseek-ai/dsh-subagent-claude-code`。若部署改为中继到 Codex，请替换这两行：挂载 `@deepseek-ai/dsh-subagent-codex` 并把中继的 `backend` 设为 `codex`。后端名称必须与已安装 bundle 注册的提供方实例一致（`claude-code` 或 `codex`）。
 
 ```yaml
 - name: '@deepseek-ai/dsh-subagent-claude-code'

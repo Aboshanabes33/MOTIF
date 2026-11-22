@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Relay do Motif",
+    "description": "Envie cada solicitação ao seu próprio agente de linha de comando Claude Code e leia na sessão apenas a resposta final dele."
+  }
+}

@@ -4,8 +4,14 @@ import { describe, expect, it } from 'vitest'
 import { OFFICIAL_ON_DEMAND_CATALOG, ON_DEMAND_BUNDLES, PROFILE_TEMPLATES } from '../src/index.ts'
 
 describe('Official on-demand catalog', () => {
-  it('offers exactly the two native subagent integrations with offline localized metadata', () => {
-    expect(ON_DEMAND_BUNDLES).toEqual(['@deepseek-ai/dsh-subagent-claude-code', '@deepseek-ai/dsh-subagent-codex'])
+  it('offers the Motif relay and the two native subagent integrations with offline localized metadata', () => {
+    // The relay composes the Claude Code provider, so the three entries install
+    // as one family while staying out of every shipped profile template.
+    expect(ON_DEMAND_BUNDLES).toEqual([
+      '@deepseek-ai/dsh-llm-motif-relay',
+      '@deepseek-ai/dsh-subagent-claude-code',
+      '@deepseek-ai/dsh-subagent-codex',
+    ])
     expect(OFFICIAL_ON_DEMAND_CATALOG.map(entry => entry.packageName)).toEqual(ON_DEMAND_BUNDLES)
     for (const entry of OFFICIAL_ON_DEMAND_CATALOG) {
       expect(entry.meta.icon).toMatch(/^data:image\/svg\+xml;base64,/)

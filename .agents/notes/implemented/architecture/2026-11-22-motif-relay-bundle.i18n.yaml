@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-22-motif-relay-bundle.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-22-motif-relay-bundle.md
+/agent-note-the-motif-relay-ships-as-an-installable-profile-bundle:
+  en: a0364f70eab566f2
+  zh: 706312f0d73a1af1
+/agent-note-the-motif-relay-ships-as-an-installable-profile-bundle/problem:
+  en: 1805ae819cd1f050
+  zh: a67d699a05e3f198
+/agent-note-the-motif-relay-ships-as-an-installable-profile-bundle/decision:
+  en: 436b709dbc807b4d
+  zh: eca4d2a3acd309cb
+/agent-note-the-motif-relay-ships-as-an-installable-profile-bundle/alternatives-considered:
+  en: b1ff6a4a09d0e034
+  zh: ebcd6b7f7da0b116
+/agent-note-the-motif-relay-ships-as-an-installable-profile-bundle/consequences:
+  en: 87c54bbf5f70db0d
+  zh: 18c1ff2e03119494

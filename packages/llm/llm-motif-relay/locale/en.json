@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Motif relay",
+    "description": "Send each request to your own Claude Code command-line agent and read only its final answer in the session."
+  }
+}

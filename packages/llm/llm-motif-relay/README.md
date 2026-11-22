@@ -25,11 +25,15 @@ Mount this model route when a Motif Session should run a command-line agent: the
 <a id="use-this-package"></a>
 ## Use this package
 
-Enable the route in a profile when a Brand folder should be edited by a native command-line agent. The route adds no tool, requires no local MCP server, and starts no process until a Session sends a message. The user's only choice is the Brand: the Session's working directory is the Brand folder, and every other option comes from this configuration and the selected subagent provider instance.
+Enable **Motif relay** in the Web or Desktop Plugins page. Its bundle layer mounts one Claude Code provider and the relay route over it, so a `Claude Code (relay)` entry appears in the model selector; choosing it sends every Edit Request through this route. The route adds no tool, requires no local MCP server, and starts no native process until a Session sends a message. The user's only choice is the Brand: the Session's working directory is the Brand folder, and every other option comes from this configuration and the provider row.
+
+### Installing the Bundle
+
+The Official entry is visible offline. Enabling it installs this package together with its `@deepseek-ai/dsh-subagent-claude-code` provider through the ordinary bundle installer, then selects its profile layer; switching Off deselects the layer and leaves the package installed. Sign in once with `claude login` as the operating-system user that runs the Host — the pinned runtime reuses that sign-in, and the relay adds no account of its own.
 
 ### Configuration
 
-Mount the route and the backend provider it selects. The backend name must match the provider instance that the installed bundle registers (`claude-code` or `codex`).
+The imported layer sets `backend: claude-code` on the route and mounts `@deepseek-ai/dsh-subagent-claude-code` beside it. A deployment that relays to Codex replaces those two rows: mount `@deepseek-ai/dsh-subagent-codex` and give the relay `backend: codex`. The backend name must match the provider instance registered by the installed bundle (`claude-code` or `codex`).
 
 ```yaml
 - name: '@deepseek-ai/dsh-subagent-claude-code'
