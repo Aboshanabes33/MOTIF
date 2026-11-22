@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-21-boat-ci-failover-leg.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-11-21-boat-ci-failover-leg.md
+/agent-note-boat-as-a-failover-leg-for-ci-pools:
+  en: 4dff0201e6e1cf87
+  zh: 8063406d7db6a4b1
+/agent-note-boat-as-a-failover-leg-for-ci-pools/problem:
+  en: be97312550006531
+  zh: 3d214f4dcfafa486
+/agent-note-boat-as-a-failover-leg-for-ci-pools/decision:
+  en: 57a6939d86e53caf
+  zh: e9d7b6af0623fa71
+/agent-note-boat-as-a-failover-leg-for-ci-pools/alternatives-considered:
+  en: a491f94e9f21c5cd
+  zh: 182bb13a378cda93
+/agent-note-boat-as-a-failover-leg-for-ci-pools/consequences:
+  en: aa0b051573fe82eb
+  zh: 733fef4fb1226b00

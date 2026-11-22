@@ -73,6 +73,8 @@ describe('Node compatibility self-hosted routing', () => {
     // The blacksmith value routes the compatibility legs onto Blacksmith's
     // standard Linux runner regardless of PR ownership (ephemeral runners).
     expect(route({ mode: 'blacksmith' })).toBe('blacksmith-4vcpu-ubuntu-2404')
+    // The boat value routes them onto a fresh boat sandbox for the same reason.
+    expect(route({ mode: 'boat' })).toBe('boat')
     expect(route({ author: 'dependabot[bot]', actor: 'maintainer' })).toBe('ubuntu-latest')
     expect(route({ repository: 'outsider/fork', fork: true })).toBe('ubuntu-latest')
     expect(route({ repository: 'outsider/fork', fork: false })).toBe('ubuntu-latest')

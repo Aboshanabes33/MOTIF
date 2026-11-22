@@ -692,9 +692,12 @@ describe('CI workflow', () => {
     const aggregate = workflowJob(workflow, 'all-checks-passed')
 
     // The shared self-hosted pool is not an idle runner, so only the
-    // Blacksmith leg moves the benchmarks off hosted Linux.
+    // Blacksmith leg and the per-job boat sandbox move the benchmarks off
+    // hosted Linux.
     expect(evaluateRunsOn(benchmark['runs-on'], { vars: { DSH_CI_FAILOVER_LINUX: 'blacksmith' } }))
       .toBe('blacksmith-4vcpu-ubuntu-2404')
+    expect(evaluateRunsOn(benchmark['runs-on'], { vars: { DSH_CI_FAILOVER_LINUX: 'boat' } }))
+      .toBe('boat-large')
     for (const mode of ['', 'selfhosted', 'unexpected']) {
       expect(evaluateRunsOn(benchmark['runs-on'], { vars: { DSH_CI_FAILOVER_LINUX: mode } })).toBe('ubuntu-24.04')
     }
@@ -704,6 +707,46 @@ describe('CI workflow', () => {
     expect(benchmark['continue-on-error']).toBeUndefined()
     expect(benchmark.env).toBeUndefined()
     expect(aggregate.needs).toContain('node-24-bench')
+  })
+
+  it('routes the Linux lanes onto boat CI sandboxes under the boat failover value', () => {
+    const workflow = loadWorkflow('.github/workflows/ci.yml')
+    const sizes: ReadonlyArray<readonly [string, string, string, Record<string, unknown>]> = [
+      ['publisher-isolated', 'boat', 'ubuntu-latest', { matrix: { os: 'linux' } }],
+      ['node-24', 'boat-large', 'dsh-ubuntu-24-04-16core', {}],
+      ['node-24-coverage', 'boat-xlarge', 'dsh-ubuntu-24-04-16core', {}],
+      ['node-24-lint', 'boat-large', 'dsh-ubuntu-24-04-16core', {}],
+      ['node-24-bench', 'boat-large', 'ubuntu-24.04', {}],
+      ['node-24-consumers', 'boat-xlarge', 'dsh-ubuntu-24-04-16core', {}],
+      ['node-compat', 'boat', 'ubuntu-latest', { matrix: { runner: 'ubuntu-latest' } }],
+      ['all-checks-passed', 'boat', 'ubuntu-latest', {}],
+    ]
+
+    for (const [jobName, size, hosted, context] of sizes) {
+      const job = workflowJob(workflow, jobName)
+      expect(job['runs-on'], `${jobName} runs-on must declare the boat leg`).toContain("== 'boat'")
+      expect(evaluateRunsOn(job['runs-on'], { vars: { DSH_CI_FAILOVER_LINUX: 'boat' }, ...context }), `${jobName} boat value`)
+        .toBe(size)
+      // The boat leg is an explicit opt-in: an unset or unknown value keeps the
+      // workflow-defined hosted target, exactly as before the leg existed.
+      for (const vars of [{}, { DSH_CI_FAILOVER_LINUX: 'unexpected' }]) {
+        expect(evaluateRunsOn(job['runs-on'], { vars, ...context }), `${jobName} hosted fallback`)
+          .toBe(hosted)
+      }
+    }
+
+    // Boat sandboxes are Linux x86_64 only: no Windows lane may resolve onto
+    // one, while the Windows verdict follows the Linux switch.
+    const windows = loadWorkflow('.github/workflows/ci-windows.yml')
+    for (const jobName of ['windows-publisher', 'windows-build', 'windows-native-tests', 'windows-coverage']) {
+      expect(workflowJob(windows, jobName)['runs-on'], `${jobName} must stay off boat`).not.toContain("== 'boat'")
+    }
+    expect(workflowJob(windows, 'windows-checks-passed')['runs-on']).toContain("== 'boat'")
+    const python = loadWorkflow('.github/workflows/ci-python.yml')
+    expect(workflowJob(python, 'python-checks-passed')['runs-on']).toContain("== 'boat'")
+    // The credential-holding Python runtime builder stays hosted: it is a
+    // reusable-workflow call with no `runs-on` of its own to retarget.
+    expect(workflowJob(python, 'python-runtime')).not.toHaveProperty('runs-on')
   })
 
   it('always restores the hosted benchmark pnpm cache', () => {

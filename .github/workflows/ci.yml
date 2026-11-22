@@ -28,6 +28,7 @@ jobs:
     runs-on: >-
       ${{ matrix.os == 'macos' && 'macos-latest'
           || vars.DSH_CI_FAILOVER_LINUX == 'blacksmith' && 'blacksmith-4vcpu-ubuntu-2404'
+          || vars.DSH_CI_FAILOVER_LINUX == 'boat' && 'boat'
           || vars.DSH_CI_FAILOVER_LINUX == 'selfhosted'
           && github.event.pull_request.user.login != 'dependabot[bot]'
           && fromJSON('["self-hosted", "linux", "x64", "vm-backup"]')
@@ -70,7 +71,10 @@ jobs:
   # see .agents/notes/implemented/process/2026-07-26-ci-failover-runbook.md.
   # Setting the variable to 'blacksmith' instead routes the same jobs onto
   # Blacksmith's hosted runners sized per workload (see
-  # .agents/notes/implemented/process/2026-09-09-blacksmith-failover-leg.md). The
+  # .agents/notes/implemented/process/2026-09-09-blacksmith-failover-leg.md).
+  # Setting it to 'boat' routes them onto boat.dev CI sandboxes — fresh per-job
+  # Linux VMs billed by the second (see
+  # .agents/notes/implemented/process/2026-11-21-boat-ci-failover-leg.md). The
   # in-house pool's readiness is re-proven on every master push by the
   # serial-linux-selfhosted standby lane in ci-master.yml. Native Windows jobs
   # and their separate DSH_CI_FAILOVER_WINDOWS switch live in ci-windows.yml.
@@ -78,6 +82,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: >-
       ${{ vars.DSH_CI_FAILOVER_LINUX == 'blacksmith' && 'blacksmith-8vcpu-ubuntu-2404'
+          || vars.DSH_CI_FAILOVER_LINUX == 'boat' && 'boat-large'
           || vars.DSH_CI_FAILOVER_LINUX == 'selfhosted'
           && github.event.pull_request.user.login != 'dependabot[bot]'
           && fromJSON('["self-hosted", "linux", "x64", "vm-backup"]')
@@ -145,6 +150,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: >-
       ${{ vars.DSH_CI_FAILOVER_LINUX == 'blacksmith' && 'blacksmith-16vcpu-ubuntu-2404'
+          || vars.DSH_CI_FAILOVER_LINUX == 'boat' && 'boat-xlarge'
           || vars.DSH_CI_FAILOVER_LINUX == 'selfhosted'
           && github.event.pull_request.user.login != 'dependabot[bot]'
           && fromJSON('["self-hosted", "linux", "x64", "vm-backup"]')
@@ -266,6 +272,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: >-
       ${{ vars.DSH_CI_FAILOVER_LINUX == 'blacksmith' && 'blacksmith-8vcpu-ubuntu-2404'
+          || vars.DSH_CI_FAILOVER_LINUX == 'boat' && 'boat-large'
           || vars.DSH_CI_FAILOVER_LINUX == 'selfhosted'
           && github.event.pull_request.user.login != 'dependabot[bot]'
           && fromJSON('["self-hosted", "linux", "x64", "vm-backup"]')
@@ -327,12 +334,14 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: >-
       ${{ vars.DSH_CI_FAILOVER_LINUX == 'blacksmith' && 'blacksmith-4vcpu-ubuntu-2404'
+          || vars.DSH_CI_FAILOVER_LINUX == 'boat' && 'boat-large'
           || 'ubuntu-24.04' }}
     name: node 24 / benchmarks
     # Wall-clock budgets need an otherwise idle runner, so this job runs the
     # benchmark lane alone instead of joining a concurrent gate aggregate, and
     # keeps its own two-file parallelism inside that runner. The self-hosted
-    # failover pool is shared, so the benchmarks stay on hosted Linux there.
+    # failover pool is shared, so the benchmarks stay on hosted Linux there; a
+    # boat sandbox belongs to one job, so the boat leg keeps timing.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
@@ -391,6 +400,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: >-
       ${{ vars.DSH_CI_FAILOVER_LINUX == 'blacksmith' && 'blacksmith-16vcpu-ubuntu-2404'
+          || vars.DSH_CI_FAILOVER_LINUX == 'boat' && 'boat-xlarge'
           || vars.DSH_CI_FAILOVER_LINUX == 'selfhosted'
           && github.event.pull_request.user.login != 'dependabot[bot]'
           && fromJSON('["self-hosted", "linux", "x64", "vm-backup"]')
@@ -535,10 +545,11 @@ jobs:
     needs: publisher-isolated
     if: github.event_name == 'pull_request'
     # Under the selfhosted leg this job admits only repository-owned PR code
-    # to the persistent shared VM; the blacksmith branch targets ephemeral
-    # runners and carries none of those predicates.
+    # to the persistent shared VM; the blacksmith and boat branches target
+    # ephemeral runners and carry none of those predicates.
     runs-on: >-
       ${{ vars.DSH_CI_FAILOVER_LINUX == 'blacksmith' && 'blacksmith-4vcpu-ubuntu-2404'
+          || vars.DSH_CI_FAILOVER_LINUX == 'boat' && 'boat'
           || vars.DSH_CI_FAILOVER_LINUX == 'selfhosted'
           && github.event.pull_request.head.repo.full_name == github.repository
           && github.event.pull_request.head.repo.fork == false
@@ -655,10 +666,12 @@ jobs:
     # (DSH_CI_FAILOVER_LINUX), not the Windows one, because it aggregates the
     # required Linux workers and runs on the vm-backup pool. Under the
     # 'blacksmith' value the verdict shares Blacksmith's pool with its workers
-    # through the same selector, so a Blacksmith outage strands both together —
+    # through the same selector, and the 'boat' value shares a boat sandbox
+    # pool the same way, so an outage of an opted-in leg strands both together —
     # the accepted consequence of the explicit opt-in switch.
     runs-on: >-
       ${{ vars.DSH_CI_FAILOVER_LINUX == 'blacksmith' && 'blacksmith-4vcpu-ubuntu-2404'
+          || vars.DSH_CI_FAILOVER_LINUX == 'boat' && 'boat'
           || vars.DSH_CI_FAILOVER_LINUX == 'selfhosted'
           && github.event.pull_request.user.login != 'dependabot[bot]'
           && fromJSON('["self-hosted", "linux", "x64", "vm-backup"]')
