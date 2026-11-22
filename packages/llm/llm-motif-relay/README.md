@@ -25,15 +25,15 @@ Mount this model route when a Motif Session should run a command-line agent: the
 <a id="use-this-package"></a>
 ## Use this package
 
-Enable **Motif relay** in the Web or Desktop Plugins page. Its bundle layer mounts one Claude Code provider and the relay route over it, so a `Claude Code (relay)` entry appears in the model selector; choosing it sends every Edit Request through this route. The route adds no tool, requires no local MCP server, and starts no native process until a Session sends a message. The user's only choice is the Brand: the Session's working directory is the Brand folder, and every other option comes from this configuration and the provider row.
+Enable **Motif relay** in the Web or Desktop Plugins page. Its bundle layer mounts one Claude Code provider, one Codex provider, and a relay route over each, so `Claude Code (relay)` and `Codex (relay)` both appear in the model selector; choosing one sends every Edit Request through that route and backend. The route adds no tool, requires no local MCP server, and starts no native process until a Session sends a message. The user's only choice is the Brand: the Session's working directory is the Brand folder, and every other option comes from this configuration and the provider row.
 
 ### Installing the Bundle
 
-The Official entry is visible offline. Enabling it installs this package together with its `@deepseek-ai/dsh-subagent-claude-code` provider through the ordinary bundle installer, then selects its profile layer; switching Off deselects the layer and leaves the package installed. Sign in once with `claude login` as the operating-system user that runs the Host — the pinned runtime reuses that sign-in, and the relay adds no account of its own.
+The Official entry is visible offline. Enabling it installs this package together with its `@deepseek-ai/dsh-subagent-claude-code` and `@deepseek-ai/dsh-subagent-codex` providers through the ordinary bundle installer, then selects its profile layer; switching Off deselects the layer and leaves the package installed. Sign in once, as the operating-system user that runs the Host, with `claude login` for the Claude Code route and `codex login` for the Codex route — each pinned runtime reuses that native sign-in, and the relay adds no account of its own. A machine with only one of them signed in still offers both routes; the unsigned one fails with its own instruction.
 
 ### Configuration
 
-The imported layer sets `backend: claude-code` on the route and mounts `@deepseek-ai/dsh-subagent-claude-code` beside it. A deployment that relays to Codex replaces those two rows: mount `@deepseek-ai/dsh-subagent-codex` and give the relay `backend: codex`. The backend name must match the provider instance registered by the installed bundle (`claude-code` or `codex`).
+The imported layer inserts four rows: `@deepseek-ai/dsh-subagent-claude-code`, `@deepseek-ai/dsh-subagent-codex`, and one `@deepseek-ai/dsh-llm-motif-relay` row per backend. The two routes need distinct `providerName` values, because that name is the registry key on `ctx.llm`; the layer uses `motif-relay-claude-code` and `motif-relay-codex`. A deployment that offers only one backend deletes the other provider row and its route row by id in its own profile patch. The `backend` value must match the provider instance registered by the installed bundle (`claude-code` or `codex`).
 
 ```yaml
 - name: '@deepseek-ai/dsh-subagent-claude-code'

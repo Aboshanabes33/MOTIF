@@ -47,15 +47,30 @@ describe('motif relay bundle layer', () => {
     expect(manifest.exports?.['./locale/*.json']).toBe('./locale/*.json')
   })
 
-  it('mounts the Claude Code provider and the relay route over it', () => {
+  it('mounts both command-line providers and one relay route over each', () => {
     const rows = layerRows()
     expect(rows.find(row => row.id === 'motif-relay-claude-code')).toMatchObject({
       name: '@deepseek-ai/dsh-subagent-claude-code',
     })
+    expect(rows.find(row => row.id === 'motif-relay-codex-provider')).toMatchObject({
+      name: '@deepseek-ai/dsh-subagent-codex',
+    })
     expect(rows.find(row => row.id === 'motif-relay')).toMatchObject({
       name: '@deepseek-ai/dsh-llm-motif-relay',
-      config: { backend: 'claude-code', displayName: 'Claude Code' },
+      config: { providerName: 'motif-relay-claude-code', backend: 'claude-code', displayName: 'Claude Code' },
     })
+    expect(rows.find(row => row.id === 'motif-relay-codex')).toMatchObject({
+      name: '@deepseek-ai/dsh-llm-motif-relay',
+      config: { providerName: 'motif-relay-codex', backend: 'codex', displayName: 'Codex' },
+    })
+  })
+
+  it('gives each relay route its own registry name and its own single model', () => {
+    const routes = layerRows().filter(row => row.name === '@deepseek-ai/dsh-llm-motif-relay')
+    const configs = routes.map(route => route.config as { providerName?: string; backend?: string })
+    expect(routes).toHaveLength(2)
+    expect(new Set(configs.map(config => config.providerName)).size).toBe(2)
+    expect(configs.map(config => config.backend)).toEqual(['claude-code', 'codex'])
   })
 
   it('installs every package its layer mounts', () => {

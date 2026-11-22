@@ -29,13 +29,13 @@ kind: "package-reference"
 
 ### 安装 Bundle
 
-在 Web 或桌面端的“插件”页面启用 **Motif 中继**。它的 bundle 层会挂载一个 Claude Code 提供方以及覆盖其上的中继路由，因此模型选择器里会出现 `Claude Code (relay)` 条目；选中它即可让每个 Edit Request 经由此路由发送。该路由不新增工具、不需要本地 MCP 服务器，并且在会话发出消息之前不会启动任何原生进程。用户唯一的选择是 Brand：会话的工作目录就是 Brand 文件夹，其余选项均来自本配置与提供方配置行。
+在 Web 或桌面端的“插件”页面启用 **Motif 中继**。它的 bundle 层会挂载一个 Claude Code 提供方、一个 Codex 提供方，以及覆盖各自之上的中继路由，因此模型选择器里会同时出现 `Claude Code (relay)` 与 `Codex (relay)` 条目；选中哪一个，每个 Edit Request 就经由该路由与该后端发送。该路由不新增工具、不需要本地 MCP 服务器，并且在会话发出消息之前不会启动任何原生进程。用户唯一的选择是 Brand：会话的工作目录就是 Brand 文件夹，其余选项均来自本配置与提供方配置行。
 
-官方条目离线可见。启用时会通过常规 bundle 安装器安装本包及其 `@deepseek-ai/dsh-subagent-claude-code` 提供方，然后选中其 profile 层；关闭只取消选中该层，包仍保留。请以运行宿主机的操作系统用户执行一次 `claude login`——固定运行时会复用该登录，中继本身不新增任何账号。
+官方条目离线可见。启用时会通过常规 bundle 安装器安装本包及其 `@deepseek-ai/dsh-subagent-claude-code` 与 `@deepseek-ai/dsh-subagent-codex` 提供方，然后选中其 profile 层；关闭只取消选中该层，包仍保留。请以运行宿主机的操作系统用户登录一次：Claude Code 路由执行 `claude login`，Codex 路由执行 `codex login`——两个固定运行时各自复用对应的原生登录，中继本身不新增任何账号。只登录了其中一个的机器仍会显示两条路由，未登录的那条会以各自的指引失败。
 
 ### 配置
 
-导入的层在路由上设置 `backend: claude-code`，并在其旁挂载 `@deepseek-ai/dsh-subagent-claude-code`。若部署改为中继到 Codex，请替换这两行：挂载 `@deepseek-ai/dsh-subagent-codex` 并把中继的 `backend` 设为 `codex`。后端名称必须与已安装 bundle 注册的提供方实例一致（`claude-code` 或 `codex`）。
+导入的层插入四行：`@deepseek-ai/dsh-subagent-claude-code`、`@deepseek-ai/dsh-subagent-codex`，以及每个后端一行 `@deepseek-ai/dsh-llm-motif-relay`。两条路由必须使用不同的 `providerName`，因为该名称是 `ctx.llm` 上的注册键；本层分别使用 `motif-relay-claude-code` 与 `motif-relay-codex`。若部署只提供其中一个后端，请在自己的 profile 补丁中按 id 删除另一提供方行与其路由行。`backend` 取值必须与已安装 bundle 注册的提供方实例一致（`claude-code` 或 `codex`）。
 
 ```yaml
 - name: '@deepseek-ai/dsh-subagent-claude-code'

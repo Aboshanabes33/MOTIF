@@ -12,11 +12,11 @@ Status: implemented
 
 ## 决策
 
-中继现在是一个 Profile Bundle。`packages/llm/llm-motif-relay/cordis.patch.yml` 插入两行宿主配置：一次性 Claude Code 提供方，以及覆盖其上的中继路由（`backend: claude-code`）。在插件页面启用该 bundle，就是让 `Claude Code (relay)` 出现在模型选择器中的那一步；关闭则取消选中该层，选择器回到此前的路由。包新增了 `dsh.bundle.patch`、一个 `icon`、八个 `locale/<语言>.json` 词典、`files`/`exports` 中的补丁与词典文件，以及对 `@deepseek-ai/dsh-subagent-claude-code` 的依赖，使其层所挂载的提供方随它一起安装。
+中继现在是一个 Profile Bundle。`packages/llm/llm-motif-relay/cordis.patch.yml` 插入四行宿主配置：一次性 Claude Code 提供方、一次性 Codex 提供方，以及覆盖各自之上的一条中继路由，因此启用该 bundle 后，模型选择器中会同时出现 `Claude Code (relay)` 与 `Codex (relay)`。在插件页面启用该 bundle，就是让 `Claude Code (relay)` 出现在模型选择器中的那一步；关闭则取消选中该层，选择器回到此前的路由。包新增了 `dsh.bundle.patch`、一个 `icon`、八个 `locale/<语言>.json` 词典、`files`/`exports` 中的补丁与词典文件，以及对 `@deepseek-ai/dsh-subagent-claude-code` 的依赖，使其层所挂载的提供方随它一起安装。
 
 它留在 `ON_DEMAND_BUNDLES`，而不进入任何随附模板。因此 `packages/util/official-bundles/src/bundles.ts` 让中继在任何 profile 中保持关闭，直到有人主动要求；目录生成器也继续保证按需提供方永远不会被发行版自身安装。插件管理器把它列在 `MORE_BUNDLES` 中，紧邻它所组合的两个子代理提供方。
 
-该层自己挂载提供方，而不是要求用户启用两个 bundle：一次开关就能得到可用路由，是最小且诚实的产品可见面；中继自身的失败分类仍会报告原生登录缺失或运行时不可用，因此半配置的机器会以可操作的错误失败，而不是静默无响应。若部署改为中继到 Codex，则按包 README 所述替换这两行；两个方向都不存在自动后端切换。
+该层自己挂载两个提供方，而不是要求用户启用三个 bundle：一次开关就能得到两条可选路由，是最小且诚实的产品可见面；中继自身的失败分类仍会报告原生登录缺失或运行时不可用，因此只登录了其中一个代理的机器会在该路由上以可操作的错误失败，而不是静默无响应。两条路由使用不同的 `providerName`，因为该名称是 `ctx.llm` 上的注册键；每条路由只公布自己的后端作为模型，所以选择器呈现的是带标签的选择，两个方向都不存在自动后端切换。若部署只提供单一后端，按 id 删除另一对配置行即可。
 
 ## 备选方案
 
@@ -28,7 +28,7 @@ Status: implemented
 
 ## 后果
 
-中继现在通过插件页面而非手工编辑 profile 来被发现和回退。安装它会拉取 Claude Code 提供方及其 Agent SDK，因此安装不再是无依赖的——这正是“真正会路由的层”的代价。在会话发出消息之前不会启动任何进程，所以空闲成本仍然为零。
+中继现在通过插件页面而非手工编辑 profile 来被发现和回退。安装它会拉取两个提供方及其 Agent SDK，因此安装不再是无依赖的——这正是“真正会路由的层”的代价。在会话发出消息之前不会启动任何进程，所以空闲成本仍然为零。
 
 `packages/llm/llm-motif-relay/tests/bundle-layer.spec.ts` 钉住了这层接线：清单声明了层、图标与词典文件；组合随附补丁得到带有 `backend: claude-code` 的两行；层挂载的每一行都是已声明的依赖；每个随附语言都有标题与描述；并且该 bundle 出现在按需列表、插件管理器与生成的离线目录中。生成的目录是重新生成而非手工编辑的，因此条目不会与包自身的元数据漂移。
 
