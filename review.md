@@ -177,7 +177,7 @@ The new package contains no UI tests. The PR's verification notes explicitly sta
 
 ### [P2] Brand editor layout has no responsive treatment for narrow screens
 
-**File:** `packages/client/ui-motif/src/client/MotifSection.module.css` — editor layout (around lines 677–681)
+**File:** `packages/client/ui-motif/src/client/MotifSection.module.css` — editor layout (lines 677–681)
 
 The editor uses a fixed 340px chat column plus the stage, with no editor-specific breakpoint. The existing media query around 558 only collapses the AI/form layouts. On narrow screens, the stage is squeezed and the two-column editor becomes unusable.
 
