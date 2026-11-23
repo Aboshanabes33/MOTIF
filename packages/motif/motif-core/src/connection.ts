@@ -63,6 +63,37 @@ export interface SignInChild {
   on(event: 'spawn', listener: () => void): unknown
 }
 
+const DEFAULT_INTERNALS: ConnectionInternals = {}
+const PROBE_TTL_MS = 3_000
+interface ProbeEntry { expires: number; generation: number; promise: Promise<boolean> }
+const probes = new WeakMap<ConnectionInternals, Map<string, ProbeEntry>>()
+const generations = new WeakMap<ConnectionInternals, Map<string, number>>()
+function probeKey(backend: MotifBackend, commands: MotifCommands): string {
+  return `${backend}:${commandOf(backend, commands)}`
+}
+/** Invalidate only this host context and provider. In-flight stale probes cannot repopulate the cache. */
+export function invalidateConnectionProbe(backend: MotifBackend, commands = DEFAULT_COMMANDS, internals = DEFAULT_INTERNALS): void {
+  const key = probeKey(backend, commands)
+  probes.get(internals)?.delete(key)
+  let epochs = generations.get(internals)
+  if (!epochs) { epochs = new Map(); generations.set(internals, epochs) }
+  epochs.set(key, (epochs.get(key) ?? 0) + 1)
+}
+function probe(backend: MotifBackend, commands: MotifCommands, internals: ConnectionInternals): Promise<boolean> {
+  const key = probeKey(backend, commands)
+  let cache = probes.get(internals)
+  if (!cache) { cache = new Map(); probes.set(internals, cache) }
+  const cached = cache.get(key)
+  if (cached && cached.expires > Date.now()) return cached.promise
+  const generation = generations.get(internals)?.get(key) ?? 0
+  const entry: ProbeEntry = { expires: Infinity, generation, promise: installed(commandOf(backend, commands), internals) }
+  cache.set(key, entry)
+  void entry.promise.finally(() => {
+    if (cache?.get(key) === entry) entry.expires = Date.now() + PROBE_TTL_MS
+  })
+  return entry.promise
+}
+
 function commandOf(backend: MotifBackend, commands: MotifCommands): string {
   return backend === 'claude-code' ? commands.claudeCode : commands.codex
 }
@@ -129,7 +160,7 @@ async function installed(command: string, internals: ConnectionInternals): Promi
  */
 export async function inspectConnections(
   commands: MotifCommands = DEFAULT_COMMANDS,
-  internals: ConnectionInternals = {},
+  internals: ConnectionInternals = DEFAULT_INTERNALS,
 ): Promise<MotifConnection[]> {
   const facts = hostSignInFacts(internals.exists === undefined ? {} : { exists: internals.exists })
   if (internals.env !== undefined) {
@@ -138,8 +169,7 @@ export async function inspectConnections(
   }
   const cards: MotifConnection[] = []
   for (const backend of ['claude-code', 'codex'] as const) {
-    const command = commandOf(backend, commands)
-    const found = await installed(command, internals)
+    const found = await probe(backend, commands, internals)
     const state = detectSignInState(backend, facts)
     const signedIn = state === 'present' ? 'yes' : state === 'absent' ? 'no' : 'unknown'
     cards.push({
@@ -169,34 +199,37 @@ export async function inspectConnections(
 export async function installBackend(
   backend: MotifBackend,
   commands: MotifCommands = DEFAULT_COMMANDS,
-  internals: ConnectionInternals = {},
+  internals: ConnectionInternals = DEFAULT_INTERNALS,
 ): Promise<MotifActionResult> {
-  const command = commandOf(backend, commands)
-  if (await installed(command, internals)) return { ok: true, message: `${LABELS[backend]} is already installed.` }
-  const exec = internals.exec ?? (async (file, args, options) => {
-    const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
-    return await run(launch.file, [...launch.args], {
-      timeout: options.timeout,
-      maxBuffer: options.maxBuffer,
-      env: internals.env,
-      windowsHide: true,
-    }) })
-  const platform = platformOf(internals)
+  invalidateConnectionProbe(backend, commands, internals)
   try {
-    // One npm process installs the official package; its output is captured
-    // whole, so a failure message can carry npm's own tail. The install can
-    // take several minutes on a slow network, which the button's busy state
-    // covers while this request runs.
-    await exec(platformExecutable('npm', platform), ['install', '-g', PACKAGES[backend]], { timeout: 600_000, maxBuffer: 8 * 1024 * 1024 })
-  } catch (error: unknown) {
-    return {
-      ok: false,
-      message: `Could not install ${LABELS[backend]} - ${startError(error, 'npm', platform)} You can also run “npm install -g ${PACKAGES[backend]}” in a terminal, then check again.`,
+    const command = commandOf(backend, commands)
+    if (await installed(command, internals)) return { ok: true, message: `${LABELS[backend]} is already installed.` }
+    const exec = internals.exec ?? (async (file, args, options) => {
+      const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+      return await run(launch.file, [...launch.args], {
+        timeout: options.timeout,
+        maxBuffer: options.maxBuffer,
+        env: internals.env,
+        windowsHide: true,
+      }) })
+    const platform = platformOf(internals)
+    try {
+      // One npm process installs the official package; its output is captured
+      // whole, so a failure message can carry npm's own tail. The install can
+      // take several minutes on a slow network, which the button's busy state
+      // covers while this request runs.
+      await exec(platformExecutable('npm', platform), ['install', '-g', PACKAGES[backend]], { timeout: 600_000, maxBuffer: 8 * 1024 * 1024 })
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        message: `Could not install ${LABELS[backend]} - ${startError(error, 'npm', platform)} You can also run “npm install -g ${PACKAGES[backend]}” in a terminal, then check again.`,
+      }
     }
-  }
-  return await installed(command, internals)
-    ? { ok: true, message: `${LABELS[backend]} is installed. The next step is sign-in.` }
-    : { ok: false, message: `${LABELS[backend]} still does not answer after installation.` }
+    return await installed(command, internals)
+      ? { ok: true, message: `${LABELS[backend]} is installed. The next step is sign-in.` }
+      : { ok: false, message: `${LABELS[backend]} still does not answer after installation.` }
+  } finally { invalidateConnectionProbe(backend, commands, internals) }
 }
 
 const LABELS_COMMAND = 'Motif'
@@ -271,55 +304,58 @@ function confirmLaunch(child: SignInChild): Promise<void> {
 export async function signInBackend(
   backend: MotifBackend,
   commands: MotifCommands = DEFAULT_COMMANDS,
-  internals: ConnectionInternals = {},
+  internals: ConnectionInternals = DEFAULT_INTERNALS,
 ): Promise<MotifActionResult> {
-  const command = commandOf(backend, commands)
-  if (!await installed(command, internals)) {
-    return { ok: false, message: `Install the official ${LABELS[backend]} tool first.` }
-  }
-  const platform = internals.platform ?? process.platform
-  const exec = internals.exec ?? (async (file, args, options) => await run(file, [...args], {
-    timeout: options.timeout,
-    maxBuffer: options.maxBuffer,
-    env: internals.env,
-    windowsHide: true,
-  }))
-  if (hasTerminalLauncher(platform) && terminalSafeCommand(command)) {
-    for (const launcher of terminalLaunchers(platform)) {
-      try {
-        await exec(launcher.file, launcher.args(command), { timeout: 10_000 })
-        return {
-          ok: true,
-          message: `A terminal opened running \`${command} login\`. Finish the sign-in there - it opens ${LABELS[backend]}'s own page - then run Test.`,
-        }
-      } catch {
-        // That terminal is not available; try the next one.
-      }
+  invalidateConnectionProbe(backend, commands, internals)
+  try {
+    const command = commandOf(backend, commands)
+    if (!await installed(command, internals)) {
+      return { ok: false, message: `Install the official ${LABELS[backend]} tool first.` }
     }
-  }
-  const spawnSignIn = internals.spawn ?? ((file: string, args: readonly string[]): SignInChild => {
-    const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
-    return spawn(launch.file, [...launch.args], {
-      detached: true,
-      stdio: 'ignore',
+    const platform = internals.platform ?? process.platform
+    const exec = internals.exec ?? (async (file, args, options) => await run(file, [...args], {
+      timeout: options.timeout,
+      maxBuffer: options.maxBuffer,
       env: internals.env,
       windowsHide: true,
-    })
-  })
-  try {
-    const child = spawnSignIn(platformExecutable(command, platform), ['login'])
-    await confirmLaunch(child)
-    child.unref()
-  } catch (error: unknown) {
-    return {
-      ok: false,
-      message: `Could not open ${LABELS[backend]} sign-in - ${startError(error, command, platform)} Run “${command} login” in a terminal.`,
+    }))
+    if (hasTerminalLauncher(platform) && terminalSafeCommand(command)) {
+      for (const launcher of terminalLaunchers(platform)) {
+        try {
+          await exec(launcher.file, launcher.args(command), { timeout: 10_000 })
+          return {
+            ok: true,
+            message: `A terminal opened running \`${command} login\`. Finish the sign-in there - it opens ${LABELS[backend]}'s own page - then run Test.`,
+          }
+        } catch {
+          // That terminal is not available; try the next one.
+        }
+      }
     }
-  }
-  return {
-    ok: true,
-    message: `Started \`${command} login\` in the background, but no terminal could be opened for it. If nothing asks you to sign in, run \`${command} login\` in a terminal yourself, then run Test.`,
-  }
+    const spawnSignIn = internals.spawn ?? ((file: string, args: readonly string[]): SignInChild => {
+      const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+      return spawn(launch.file, [...launch.args], {
+        detached: true,
+        stdio: 'ignore',
+        env: internals.env,
+        windowsHide: true,
+      })
+    })
+    try {
+      const child = spawnSignIn(platformExecutable(command, platform), ['login'])
+      await confirmLaunch(child)
+      child.unref()
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        message: `Could not open ${LABELS[backend]} sign-in - ${startError(error, command, platform)} Run “${command} login” in a terminal.`,
+      }
+    }
+    return {
+      ok: true,
+      message: `Started \`${command} login\` in the background, but no terminal could be opened for it. If nothing asks you to sign in, run \`${command} login\` in a terminal yourself, then run Test.`,
+    }
+  } finally { invalidateConnectionProbe(backend, commands, internals) }
 }
 
 /**
@@ -332,7 +368,7 @@ export async function signInBackend(
 export async function testBackend(
   backend: MotifBackend,
   commands: MotifCommands = DEFAULT_COMMANDS,
-  internals: ConnectionInternals = {},
+  internals: ConnectionInternals = DEFAULT_INTERNALS,
 ): Promise<MotifActionResult> {
   const command = commandOf(backend, commands)
   if (!await installed(command, internals)) {
