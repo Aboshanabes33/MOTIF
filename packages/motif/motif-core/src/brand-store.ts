@@ -6,9 +6,9 @@
  * @module @deepseek-ai/dsh-motif-core/brand-store
  */
 
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity } from './types.ts'
+import { mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
+import { isAbsolute, join, relative } from 'node:path'
+import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifTimelineEntry } from './types.ts'
 
 /** Raised when a Brand form or folder cannot be accepted. */
 export class MotifBrandError extends Error {
@@ -105,9 +105,9 @@ export function normalizeIdentity(identity: MotifBrandIdentity): MotifBrandIdent
 function decodeLogo(dataUrl: string): { bytes: Buffer; extension: string } {
   const match = /^data:image\/(png|jpeg|jpg|webp|svg\+xml);base64,(.+)$/s.exec(dataUrl)
   if (match === null) throw new MotifBrandError('Logo must be a PNG, JPEG, WebP, or SVG data URL')
-  const mime = match[1]!
+  const [, mime = '', data = ''] = match
   const extension = mime === 'jpeg' ? 'jpg' : mime === 'svg+xml' ? 'svg' : mime
-  return { bytes: Buffer.from(match[2]!, 'base64'), extension }
+  return { bytes: Buffer.from(data, 'base64'), extension }
 }
 
 /**
@@ -195,4 +195,29 @@ export async function listBrands(
     if (brand !== undefined) brands.push(brand)
   }
   return brands.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+}
+
+/**
+ * List one Brand's timeline files, most recently modified first.
+ * @param root - directory holding every Brand folder.
+ * @param brandId - Brand folder slug; anything outside the slug alphabet is rejected.
+ * @returns the timeline entries, empty when the Brand has no timeline folder yet.
+ * @throws {MotifBrandError} when the id is not a folder slug.
+ */
+export async function listTimeline(root: string, brandId: string): Promise<MotifTimelineEntry[]> {
+  if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(brandId)) throw new MotifBrandError('Unknown Brand folder')
+  const dir = join(root, brandId, 'timeline')
+  const base = await realpath(root)
+  let canonical: string
+  try { canonical = await realpath(dir) }
+  catch (reason) { if ((reason as NodeJS.ErrnoException).code === 'ENOENT') return []; throw reason }
+  const inside = relative(base, canonical)
+  if (inside === '..' || inside.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(inside)) throw new MotifBrandError('Timeline is outside its Brand root')
+  const entries = await readdir(canonical, { withFileTypes: true })
+  const files = entries.filter(entry => entry.isFile() && !entry.name.startsWith('.'))
+  const timeline = await Promise.all(files.map(async (entry) => {
+    const info = await stat(join(dir, entry.name))
+    return { name: entry.name, bytes: info.size, updatedAt: info.mtime.toISOString() }
+  }))
+  return timeline.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
 }

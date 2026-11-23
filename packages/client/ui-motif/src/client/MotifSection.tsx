@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
-import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
+import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot, MotifTimelineEntry } from '@deepseek-ai/dsh-motif-core/types'
 import type { MotifCopy } from './locales.ts'
 import styles from './MotifSection.module.css'
 
@@ -20,6 +20,13 @@ export interface MotifInjected {
   createBrand: (request: MotifBrandCreateRequest) => Promise<{ workspaceId: string }>
   /** Open a Brand's workspace. */
   openBrand: (workspaceId: string) => void
+  /** Read one Brand's real timeline files from its folder. */
+  loadTimeline: (brand: MotifBrand) => Promise<readonly MotifTimelineEntry[]>
+  /**
+   * Submit one Edit Request to the Brand's real workspace Session (the MOTIF
+   * session/relay flow). Aborting the signal cancels the in-flight turn.
+   */
+  sendEditRequest: (brand: MotifBrand, text: string, signal: AbortSignal) => Promise<{ ok: boolean; message: string }>
 }
 
 type Props = { [K in keyof MotifInjected]?: MotifInjected[K] | undefined }
@@ -60,7 +67,6 @@ function useSnapshot(load: (() => Promise<MotifSnapshot>) | undefined) {
     void refresh()
     // The section is mounted once per settings visit; the host is polled by
     // explicit actions, so one read is enough to paint it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { snapshot, error, loading, refresh }
@@ -224,7 +230,7 @@ function BrandArt({ brand }: { brand: MotifBrand }) {
  * @param props - slot inject face.
  * @returns the Brands section.
  */
-export function BrandsSection({ t = key => key, load, createBrand, openBrand }: Props) {
+export function BrandsSection({ t = key => key, load, createBrand, openBrand, loadTimeline, sendEditRequest }: Props) {
   const { snapshot, error, loading, refresh } = useSnapshot(load)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<MotifBrand | undefined>()
@@ -233,9 +239,12 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
   const visible = useMemo(() => brands.filter(brand => brand.name.toLowerCase().includes(query.trim().toLowerCase())), [brands, query])
 
   if (creating) {
+    // Creation cards are only clickable with a Host injection; a missing one is a wiring bug, not user input.
+    if (createBrand === undefined) throw new Error('MOTIF: Brand creation requested without a Host createBrand injection')
+    const create = createBrand
     return (
       <NewBrand t={t} onCancel={() => { setCreating(false) }} onCreated={async (request) => {
-        const result = await createBrand!(request)
+        const result = await create(request)
         await refresh()
         setCreating(false)
         openBrand?.(result.workspaceId)
@@ -252,7 +261,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
         </div>
         <div className={styles.searchRow}>
           <input value={query} placeholder={t('brands.search')} aria-label={t('brands.search')}
-            onChange={event => { setQuery(event.target.value) }} />
+            onChange={(event) => { setQuery(event.target.value) }} />
           <button type="button" className={styles.primary} onClick={() => { setCreating(true) }}>+ {t('brands.new')}</button>
         </div>
       </div>
@@ -299,7 +308,8 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
           </button>
         </div>
       </div>
-      {editing !== undefined && <BrandEditor brand={editing} t={t} onClose={() => { setEditing(undefined) }} />}
+      {editing !== undefined && <BrandEditor brand={editing} t={t} onClose={() => { setEditing(undefined) }}
+        loadTimeline={loadTimeline} sendEditRequest={sendEditRequest} />}
     </div>
   )
 }
@@ -378,7 +388,7 @@ function NewBrand({ t, onCancel, onCreated }: {
           <div className={styles.panel}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.name')}>
-                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={event => { setName(event.target.value) }} autoFocus />
+                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={(event) => { setName(event.target.value) }} autoFocus />
               </Field>
               <Field label={t('brand.form.website')}>
                 <input placeholder={t('brand.form.websitePlaceholder')} />
@@ -408,7 +418,7 @@ function NewBrand({ t, onCancel, onCreated }: {
                 ['dark', 'brand.form.dark'],
               ] as const).map(([key, label]) => (
                 <Field key={key} label={t(label)}>
-                  <input type="color" value={identity[key]} onChange={event => { set(key, event.target.value.toUpperCase()) }
+                  <input type="color" value={identity[key]} onChange={(event) => { set(key, event.target.value.toUpperCase()) }
                   } />
                   <code>{identity[key]}</code>
                 </Field>
@@ -418,10 +428,10 @@ function NewBrand({ t, onCancel, onCreated }: {
             <h2 style={{ marginTop: 18 }}>{t('brand.form.fonts')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.latinFont')}>
-                <input value={identity.latinFont} onChange={event => { set('latinFont', event.target.value) }} />
+                <input value={identity.latinFont} onChange={(event) => { set('latinFont', event.target.value) }} />
               </Field>
               <Field label={t('brand.form.arabicFont')}>
-                <input value={identity.arabicFont} onChange={event => { set('arabicFont', event.target.value) }} />
+                <input value={identity.arabicFont} onChange={(event) => { set('arabicFont', event.target.value) }} />
               </Field>
             </div>
 
@@ -430,14 +440,14 @@ function NewBrand({ t, onCancel, onCreated }: {
                 { value: 'soft', label: t('brand.form.motionSoft') },
                 { value: 'snap', label: t('brand.form.motionSnap') },
                 { value: 'fade', label: t('brand.form.motionFade') },
-              ]} onChange={value => { set('motion', value) }} />
+              ]} onChange={(value) => { set('motion', value) }} />
             </Field>
             <Field label={t('brand.form.caption')}>
               <Segmented value={identity.caption as 'word' | 'plain' | 'boxed'} options={[
                 { value: 'word', label: t('brand.form.captionWord') },
                 { value: 'plain', label: t('brand.form.captionPlain') },
                 { value: 'boxed', label: t('brand.form.captionBoxed') },
-              ]} onChange={value => { set('caption', value) }} />
+              ]} onChange={(value) => { set('caption', value) }} />
             </Field>
           </div>
         </div>
@@ -531,57 +541,148 @@ export function MotifOnboarding({ t = key => key, load, complete, openSection }:
 }
 
 /** One Brand's editing surface: request history, preview, timeline, identity. */
-export function BrandEditor({ brand, t = key => key, onClose }: {
+/** One Edit Request submitted from this editor, with its delivery state. */
+interface EditorRequest {
+  readonly id: number
+  readonly text: string
+  readonly state: 'sending' | 'sent' | 'failed' | 'cancelled'
+  readonly detail: string
+}
+
+/** Format one byte count for the timeline list. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const REQUEST_STATE_COPY = {
+  sending: 'editor.state.sending',
+  sent: 'editor.state.sent',
+  failed: 'editor.state.failed',
+  cancelled: 'editor.state.cancelled',
+} as const
+
+/**
+ * Brand editor: the composer submits Edit Requests to the Brand's real
+ * workspace Session (the session/relay flow), and the timeline lists the
+ * Brand folder's real timeline files. Controls without a real flow behind
+ * them, such as Export, stay disabled with an explanation instead of
+ * pretending to work.
+ * @param props - the Brand, the injected services, and the close handler.
+ * @returns the editor dialog.
+ */
+export function BrandEditor({ brand, t = key => key, onClose, loadTimeline, sendEditRequest }: {
   brand: MotifBrand
   t?: MotifInjected['t']
   onClose: () => void
+  loadTimeline?: MotifInjected['loadTimeline'] | undefined
+  sendEditRequest?: MotifInjected['sendEditRequest'] | undefined
 }) {
   const { identity } = brand
-  const lanes: readonly { key: MotifCopy; clips: readonly [number, number][] }[] = [
-    { key: 'editor.video', clips: [[0, 62], [64, 88]] },
-    { key: 'editor.captions', clips: [[4, 28], [32, 58], [62, 88]] },
-    { key: 'editor.titles', clips: [[0, 18], [40, 52]] },
-    { key: 'editor.motion', clips: [[8, 16], [56, 70]] },
-    { key: 'editor.audio', clips: [[0, 100]] },
-  ]
+  const [draft, setDraft] = useState('')
+  const [requests, setRequests] = useState<readonly EditorRequest[]>([])
+  const nextRequestId = useRef(1)
+  const abortRef = useRef<AbortController | undefined>(undefined)
+  const [timeline, setTimeline] = useState<readonly MotifTimelineEntry[] | undefined>(undefined)
+  const [timelineState, setTimelineState] = useState<'loading' | 'ready' | 'failed'>(
+    loadTimeline === undefined ? 'failed' : 'loading',
+  )
+
+  const reloadTimeline = useCallback(async (): Promise<void> => {
+    if (loadTimeline === undefined) {
+      setTimelineState('failed')
+      return
+    }
+    setTimelineState('loading')
+    try {
+      setTimeline(await loadTimeline(brand))
+      setTimelineState('ready')
+    } catch {
+      setTimelineState('failed')
+    }
+  }, [brand, loadTimeline])
+
+  useEffect(() => {
+    void reloadTimeline()
+  }, [reloadTimeline])
+
+  const sending = requests.some(request => request.state === 'sending')
+  const canSend = sendEditRequest !== undefined && brand.workspaceId !== undefined
+
+  const submit = async (): Promise<void> => {
+    const text = draft.trim()
+    if (text === '' || sendEditRequest === undefined || !canSend || sending) return
+    const controller = new AbortController()
+    abortRef.current = controller
+    const id = nextRequestId.current++
+    setRequests(previous => [{ id, text, state: 'sending', detail: '' }, ...previous])
+    setDraft('')
+    try {
+      const result = await sendEditRequest(brand, text, controller.signal)
+      const state = result.ok ? 'sent' : controller.signal.aborted ? 'cancelled' : 'failed'
+      setRequests(previous => previous.map(request => request.id === id
+        ? { ...request, state, detail: result.message }
+        : request))
+      if (result.ok) await reloadTimeline()
+    } catch (reason: unknown) {
+      const detail = reason instanceof Error ? reason.message : String(reason)
+      setRequests(previous => previous.map(request => request.id === id
+        ? { ...request, state: controller.signal.aborted ? 'cancelled' : 'failed', detail }
+        : request))
+    } finally {
+      abortRef.current = undefined
+    }
+  }
+
   return (
     <div className={styles.editor} role="dialog" aria-modal="true" aria-label={brand.name}>
       <header className={styles.editorBar}>
         <button type="button" className={styles.ghost} onClick={onClose}>← {t('editor.back')}</button>
         <div className={styles.editorName}>{brand.name}</div>
-        <button type="button" className={styles.primary}>{t('editor.export')}</button>
+        <span className={styles.exportGroup}>
+          <button type="button" className={styles.primary} disabled aria-describedby="motif-export-note">
+            {t('editor.export')}
+          </button>
+          <span className={styles.exportNote} id="motif-export-note">{t('editor.exportUnavailable')}</span>
+        </span>
       </header>
       <div className={styles.editorBody}>
         <aside className={styles.editorChat}>
           <div className={styles.chatHead}>
             <h3>{t('editor.editRequest')}</h3>
-            <span>{t('editor.ready')}</span>
+            <span data-available={canSend}>{canSend ? t('editor.ready') : t('editor.unavailable')}</span>
           </div>
           <div className={styles.requestList}>
-            <div className={styles.request} data-latest="true">
-              <div className={styles.requestMeta}>{t('editor.version')}</div>
-              <p>{t('editor.requestPlaceholder')}</p>
-            </div>
+            {requests.length === 0 && <p className={styles.emptyNote}>{t('editor.noRequests')}</p>}
+            {requests.map(request => (
+              <div className={styles.request} data-state={request.state} key={request.id}>
+                <div className={styles.requestMeta}>{t(REQUEST_STATE_COPY[request.state])}</div>
+                <p>{request.text}</p>
+                {request.detail !== '' && <p className={styles.requestDetail}>{request.detail}</p>}
+              </div>
+            ))}
           </div>
-          <div className={styles.composerRow}>
-            <input placeholder={t('editor.requestPlaceholder')} aria-label={t('editor.editRequest')} />
-            <button type="button" className={styles.primary}>{t('editor.send')}</button>
-          </div>
+          <form className={styles.composerRow} onSubmit={(event) => { event.preventDefault(); void submit() }}>
+            <input value={draft} placeholder={t('editor.requestPlaceholder')} aria-label={t('editor.editRequest')}
+              disabled={!canSend || sending}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => { setDraft(event.target.value) }} />
+            {sending
+              ? <button type="button" className={styles.secondary} onClick={() => { abortRef.current?.abort() }}>{t('editor.cancel')}</button>
+              : <button type="submit" className={styles.primary} disabled={!canSend || draft.trim() === ''}>{t('editor.send')}</button>}
+          </form>
+          {!canSend && <p className={styles.composerHint}>{t('editor.sendUnavailable')}</p>}
         </aside>
         <main className={styles.editorStage}>
           <div className={styles.previewFrame} style={{ background: identity.dark }}>
+            {brand.logo !== undefined && <img className={styles.previewLogo} src={brand.logo} alt={brand.name} />}
             <div className={styles.previewType} style={{ color: identity.light, fontFamily: `'${identity.latinFont}', sans-serif` }}>
               {brand.name}
             </div>
             <div className={styles.previewBar} style={{ background: identity.accent }} />
             <div className={styles.previewArabic} style={{ color: identity.light, fontFamily: `'${identity.arabicFont}', sans-serif` }}>
-              {t('brand.form.captionArabic')}
+              {brand.name}
             </div>
-          </div>
-          <div className={styles.transport}>
-            <span>0:13</span>
-            <input type="range" min={0} max={22} defaultValue={13} aria-label={t('editor.timeline')} />
-            <span>0:22</span>
           </div>
           <div className={styles.inUseCard}>
             <div>
@@ -593,20 +694,27 @@ export function BrandEditor({ brand, t = key => key, onClose }: {
                 <span key={colour} style={{ background: colour }} />
               ))}
             </div>
-            <em>{t('editor.handEdits')}</em>
           </div>
-          <div className={styles.lanes}>
-            {lanes.map(lane => (
-              <div className={styles.lane} key={lane.key}>
-                <span className={styles.laneName}>{t(lane.key)}</span>
-                <div className={styles.laneTrack}>
-                  {lane.clips.map(([start, end]) => (
-                    <span key={`${start}-${end}`} style={{ left: `${start}%`, width: `${end - start}%`, background: identity.primary }} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <section className={styles.timeline} aria-label={t('editor.timeline')}>
+            <h3 className={styles.timelineTitle}>{t('editor.timeline')}</h3>
+            {timelineState === 'loading' && <p className={styles.emptyNote}>{t('editor.timelineLoading')}</p>}
+            {timelineState === 'failed' && <p className={styles.emptyNote}>{t('editor.timelineFailed')}</p>}
+            {timelineState === 'ready' && timeline !== undefined && timeline.length === 0 && (
+              <p className={styles.emptyNote}>{t('editor.timelineEmpty')}</p>
+            )}
+            {timelineState === 'ready' && timeline !== undefined && timeline.length > 0 && (
+              <ul className={styles.timelineList}>
+                {timeline.map(entry => (
+                  <li className={styles.timelineRow} key={entry.name}>
+                    <span className={styles.timelineName}>{entry.name}</span>
+                    <span className={styles.timelineMeta}>
+                      {formatBytes(entry.bytes)} · {new Date(entry.updatedAt).toLocaleString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </main>
       </div>
     </div>
