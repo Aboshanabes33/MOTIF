@@ -403,6 +403,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand, an
 
 
 
+
         await refresh()
         setCreating(false)
         setPrefill(undefined)
@@ -835,6 +836,33 @@ export function BrandEditor({ brand, t = key => key, onClose, loadTimeline, send
   sendEditRequest?: MotifInjected['sendEditRequest'] | undefined
 }) {
   const { identity } = brand
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
+    dialogRef.current?.focus()
+    return () => { if (previous?.isConnected) previous.focus() }
+  }, [])
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); return }
+      if (event.key !== 'Tab') return
+      const dialog = dialogRef.current
+      if (!dialog) return
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex="0"]',
+      ))
+      const first = controls[0]
+      const last = controls.at(-1)
+      if (!first || !last) { event.preventDefault(); dialog.focus(); return }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+        event.preventDefault(); last.focus()
+      } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) {
+        event.preventDefault(); first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
   const [draft, setDraft] = useState('')
   const [requests, setRequests] = useState<readonly EditorRequest[]>([])
   const nextRequestId = useRef(1)
@@ -891,7 +919,7 @@ export function BrandEditor({ brand, t = key => key, onClose, loadTimeline, send
   }
 
   return (
-    <div className={styles.editor} role="dialog" aria-modal="true" aria-label={brand.name}>
+    <div ref={dialogRef} tabIndex={-1} className={styles.editor} role="dialog" aria-modal="true" aria-label={brand.name}>
       <header className={styles.editorBar}>
         <button type="button" className={styles.ghost} onClick={onClose}>← {t('editor.back')}</button>
         <div className={styles.editorName}>{brand.name}</div>

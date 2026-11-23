@@ -827,6 +827,47 @@
 }
 .laneTrack span { position: absolute; top: 4px; bottom: 4px; border-radius: 4px; opacity: 0.85; }
 
+/* Editor responsiveness and access: touch-sized controls and a visible focus
+   ring at every width, then a stacked layout on narrow screens. */
+.editor .primary, .editor .secondary, .editor .ghost { min-height: 44px; padding: 10px 16px; }
+.editor .composerRow input { min-height: 44px; }
+.editor .transport input { min-height: 44px; }
+.editor :focus-visible { outline: 2px solid #ff5a36; outline-offset: 2px; }
+.editor:focus { outline: none; }
+
+@media (max-width: 960px) {
+  .editorBody { grid-template-columns: 280px minmax(0, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .editorBar { flex-wrap: wrap; gap: 8px 12px; padding: 10px 14px; }
+  .editorName { order: -1; flex-basis: 100%; }
+  /* Stack: the stage scrolls with the page and the request panel docks at
+     the bottom instead of forcing a fixed 340px sidebar. */
+  .editorBody {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: auto;
+  }
+  .editorStage { order: -1; overflow: visible; padding: 16px; }
+  .editorChat { max-height: 45vh; padding: 16px; }
+  .composerRow { flex-wrap: wrap; }
+  /* 16px input text keeps iOS from zooming the page on focus. */
+  .composerRow input { flex-basis: 100%; font-size: 16px; }
+  .inUseCard { flex-wrap: wrap; gap: 10px 14px; }
+  .inUseCard em { margin-left: 0; }
+  .lane { grid-template-columns: 72px minmax(0, 1fr); }
+}
+
+.editor { overflow: hidden; }
+.editorBar, .editorName, .editorChat, .editorStage, .inUseCard > div { min-width: 0; }
+.editorName, .request p, .inUseCard p, .previewType { overflow-wrap: anywhere; }
+.editor .previewFrame { box-sizing: border-box; flex-shrink: 0; }
+@media (max-width: 720px) {
+  .editorBody { display: flex; flex-direction: column; }
+  .editorStage { flex: 1 0 auto; }
+  .editorChat { flex-shrink: 0; }
+}
 
 .apiKeyCard {
   display: grid;
