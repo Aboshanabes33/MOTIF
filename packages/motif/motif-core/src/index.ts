@@ -15,7 +15,8 @@ import type {} from '@deepseek-ai/dsh-workspace'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-credentials'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
-import { createBrand, listBrands } from './brand-store.ts'
+import { createBrand, listBrands, listTimeline } from './brand-store.ts'
+import { analyzeWebsite } from './website-analysis.ts'
 import {
   apiKeyStatus,
   deleteApiKey,
@@ -47,14 +48,21 @@ import type {
   MotifBrandCreateRequest,
   MotifBrandCreateResult,
   MotifSnapshot,
+  MotifTimelineEntry,
+  MotifTimelineRequest,
+  MotifWebsiteAnalysisRequest,
+  MotifWebsiteSuggestion,
 } from './types.ts'
 
 export type * from './types.ts'
-export { createBrand, listBrands, brandMarkdown, normalizeIdentity, slugify, MotifBrandError } from './brand-store.ts'
+export { createBrand, listBrands, listTimeline, brandMarkdown, normalizeIdentity, slugify, MotifBrandError } from './brand-store.ts'
+export { analyzeWebsite, parseWebsiteUrl } from './website-analysis.ts'
+export type { WebsiteAnalysisInternals } from './website-analysis.ts'
 export {
   DEFAULT_COMMANDS,
   inspectConnections,
   installBackend,
+  platformExecutable,
   signInBackend,
   testBackend,
 } from './connection.ts'
@@ -158,6 +166,28 @@ export class MotifController extends TypertRemoteService {
     const workspace = await this.ctx.workspaceRegistry.create(brand.path)
     await workspace.setTitle(brand.name)
     return { brand: { ...brand, workspaceId: workspace.id }, workspaceId: workspace.id }
+  }
+
+  /**
+   * Analyze one public web page into a Brand identity suggestion for the form.
+   * @param request - user-entered address.
+   * @returns the suggested name and identity, plus the final page URL.
+   * @throws {MotifBrandError} on an unusable address, unreachable page, or non-HTML answer.
+   */
+  @Remote('analyzeWebsite')
+  analyzeWebsite(request: MotifWebsiteAnalysisRequest): Promise<MotifWebsiteSuggestion> {
+    return analyzeWebsite(request.url)
+  }
+
+  /**
+   * Read one Brand's timeline files for the editor surface.
+   * @param request - Brand folder slug.
+   * @returns timeline entries, most recently modified first.
+   * @throws {MotifBrandError} when the id is not a folder slug.
+   */
+  @Remote('timeline')
+  timeline(request: MotifTimelineRequest): Promise<MotifTimelineEntry[]> {
+    return listTimeline(this.config.root, request.brandId)
   }
 
   /**

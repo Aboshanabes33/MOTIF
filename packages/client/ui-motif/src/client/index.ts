@@ -7,8 +7,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-motif-core/remote'
-import type { MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
+import type { MotifBrand, MotifSnapshot, MotifTimelineEntry, MotifWebsiteSuggestion } from '@deepseek-ai/dsh-motif-core/types'
 import { AiSection, BrandsSection, MotifHomeFrame, MotifOnboarding, type MotifInjected } from './MotifSection.tsx'
 import { ar, en, zh, type MotifCopy } from './locales.ts'
 
@@ -19,8 +20,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
+declare module '@deepseek-ai/dsh-api-session-controller/client' {
+  interface SessionReferenceSourceMap {
+    /** Edit Requests the Brand editor sends into a Brand workspace Session. */
+    motifEditRequest: unknown
+  }
+}
+
 /** Services the surfaces use. */
-export const inject = ['slots', 'locale', 'remote', 'remote.motif', 'uiWorkspace']
+export const inject = ['slots', 'locale', 'remote', 'remote.motif', 'uiWorkspace', 'workspaces', 'sessions']
 
 /** Locale namespace owned by this package. */
 const NS = 'settings.motif'
@@ -51,10 +59,58 @@ export function apply(ctx: Context): void {
     testApiKey: request => valueOf(ctx.remote.motif.testApiKey(request)),
     deleteApiKey: provider => valueOf(ctx.remote.motif.deleteApiKey({ provider })),
     apiKeyStatus: provider => valueOf(ctx.remote.motif.apiKeyStatus({ provider })),
+    analyzeWebsite: async (url, signal) => {
+      // Typert Remotes cannot be aborted mid-call: race the one bounded host
+      // fetch against the AbortSignal so the UI can leave immediately. The
+      // host-side fetch is capped (timeout and size) and its late result is
+      // dropped.
+      const answer = valueOf<MotifWebsiteSuggestion>(ctx.remote.motif.analyzeWebsite({ url }))
+      return await new Promise<MotifWebsiteSuggestion>((resolve, reject) => {
+        if (signal.aborted) {
+          reject(new DOMException('Aborted', 'AbortError'))
+          return
+        }
+        const onAbort = (): void => { reject(new DOMException('Aborted', 'AbortError')) }
+        signal.addEventListener('abort', onAbort, { once: true })
+        answer.then(resolve, reject).finally(() => { signal.removeEventListener('abort', onAbort) })
+      })
+    },
     openBrand: (workspaceId) => {
       void ctx.uiWorkspace.openWorkspace(workspaceId as WorkspaceId).catch((reason: unknown) => {
         ctx.logger.error(reason)
       })
+    },
+    loadTimeline: brand => valueOf<readonly MotifTimelineEntry[]>(ctx.remote.motif.timeline({ brandId: brand.id })),
+    sendEditRequest: async (brand: MotifBrand, text: string, signal: AbortSignal) => {
+      if (brand.workspaceId === undefined) {
+        return { ok: false, message: 'The Brand has no Workspace yet.' }
+      }
+      const workspaceId = brand.workspaceId as WorkspaceId
+      try {
+        const workspace = ctx.workspaces.list.getSnapshot().items
+          .find(item => item.workspaceId === workspaceId)
+        const sessionId = workspace?.sessionIds[0] ?? await ctx.sessions.create({ workspaceId })
+        await ctx.sessions.using(sessionId, { source: 'motifEditRequest', signal }, async (reference) => {
+          await reference.ready
+          const scoped = reference.binding.ctx
+          const cancel = (): void => {
+            void scoped.conversation.cancel().catch((reason: unknown) => { ctx.logger.error(reason) })
+          }
+          if (signal.aborted) {
+            cancel()
+            return
+          }
+          signal.addEventListener('abort', cancel, { once: true })
+          try {
+            await scoped.conversation.send(text)
+          } finally {
+            signal.removeEventListener('abort', cancel)
+          }
+        })
+        return { ok: true, message: '' }
+      } catch (reason: unknown) {
+        return { ok: false, message: reason instanceof Error ? reason.message : String(reason) }
+      }
     },
   })
 
