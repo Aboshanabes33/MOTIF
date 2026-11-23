@@ -86,6 +86,22 @@ export interface MotifBrandCreateResult {
   readonly workspaceId: string
 }
 
+/** One file in a Brand's timeline folder, as the editor surface shows it. */
+export interface MotifTimelineEntry {
+  /** File name within the timeline folder. */
+  readonly name: string
+  /** Size in bytes. */
+  readonly bytes: number
+  /** ISO instant of the last local modification. */
+  readonly updatedAt: string
+}
+
+/** Read one Brand's timeline folder. */
+export interface MotifTimelineRequest {
+  /** Stable folder slug of the Brand. */
+  readonly brandId: string
+}
+
 /** One backend-scoped action. */
 export interface MotifBackendRequest {
   /** Backend to act on. */
