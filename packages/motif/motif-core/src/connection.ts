@@ -43,9 +43,44 @@ export interface ConnectionInternals {
   /** Override the existence probe. */
   readonly exists?: (path: string) => boolean
   /** Override `execFile` for version/test calls. */
-  readonly exec?: (file: string, args: readonly string[], options: { timeout: number; maxBuffer?: number }) => Promise<{ stdout: string; stderr: string }>
+  readonly exec?: (
+    file: string,
+    args: readonly string[],
+    options: { timeout: number; maxBuffer?: number },
+  ) => Promise<{ stdout: string; stderr: string }>
   /** Override the detached sign-in spawn. */
   readonly spawn?: (file: string, args: readonly string[]) => { unref(): void }
+}
+
+const DEFAULT_INTERNALS: ConnectionInternals = {}
+const PROBE_TTL_MS = 3_000
+interface ProbeEntry { expires: number; generation: number; promise: Promise<boolean> }
+const probes = new WeakMap<ConnectionInternals, Map<string, ProbeEntry>>()
+const generations = new WeakMap<ConnectionInternals, Map<string, number>>()
+function probeKey(backend: MotifBackend, commands: MotifCommands): string {
+  return `${backend}:${commandOf(backend, commands)}`
+}
+/** Invalidate only this host context and provider. In-flight stale probes cannot repopulate the cache. */
+export function invalidateConnectionProbe(backend: MotifBackend, commands = DEFAULT_COMMANDS, internals = DEFAULT_INTERNALS): void {
+  const key = probeKey(backend, commands)
+  probes.get(internals)?.delete(key)
+  let epochs = generations.get(internals)
+  if (!epochs) { epochs = new Map(); generations.set(internals, epochs) }
+  epochs.set(key, (epochs.get(key) ?? 0) + 1)
+}
+function probe(backend: MotifBackend, commands: MotifCommands, internals: ConnectionInternals): Promise<boolean> {
+  const key = probeKey(backend, commands)
+  let cache = probes.get(internals)
+  if (!cache) { cache = new Map(); probes.set(internals, cache) }
+  const cached = cache.get(key)
+  if (cached && cached.expires > Date.now()) return cached.promise
+  const generation = generations.get(internals)?.get(key) ?? 0
+  const entry: ProbeEntry = { expires: Infinity, generation, promise: installed(commandOf(backend, commands), internals) }
+  cache.set(key, entry)
+  void entry.promise.finally(() => {
+    if (cache?.get(key) === entry) entry.expires = Date.now() + PROBE_TTL_MS
+  })
+  return entry.promise
 }
 
 function commandOf(backend: MotifBackend, commands: MotifCommands): string {
@@ -75,20 +110,18 @@ async function installed(command: string, internals: ConnectionInternals): Promi
  */
 export async function inspectConnections(
   commands: MotifCommands = DEFAULT_COMMANDS,
-  internals: ConnectionInternals = {},
+  internals: ConnectionInternals = DEFAULT_INTERNALS,
 ): Promise<MotifConnection[]> {
   const facts = hostSignInFacts(internals.exists === undefined ? {} : { exists: internals.exists })
   if (internals.env !== undefined) {
     // A test environment supplies the credential roots; keep the real platform otherwise.
     Object.assign(facts, { env: internals.env, home: internals.env.HOME ?? internals.env.USERPROFILE ?? facts.home })
   }
-  const cards: MotifConnection[] = []
-  for (const backend of ['claude-code', 'codex'] as const) {
-    const command = commandOf(backend, commands)
-    const found = await installed(command, internals)
+  return await Promise.all((['claude-code', 'codex'] as const).map(async (backend) => {
+    const found = await probe(backend, commands, internals)
     const state = detectSignInState(backend, facts)
     const signedIn = state === 'present' ? 'yes' : state === 'absent' ? 'no' : 'unknown'
-    cards.push({
+    return {
       backend,
       label: LABELS[backend],
       installed: found,
@@ -99,10 +132,9 @@ export async function inspectConnections(
           ? `Sign in opens ${LABELS[backend]}'s own page; Motif never sees your password.`
           : signedIn === 'unknown'
             ? 'Run a test request to confirm the sign-in.'
-            : `Signed in on this computer.`,
-    })
-  }
-  return cards
+            : 'Signed in on this computer.',
+    }
+  }))
 }
 
 /**
@@ -115,27 +147,31 @@ export async function inspectConnections(
 export async function installBackend(
   backend: MotifBackend,
   commands: MotifCommands = DEFAULT_COMMANDS,
-  internals: ConnectionInternals = {},
+  internals: ConnectionInternals = DEFAULT_INTERNALS,
 ): Promise<MotifActionResult> {
-  const command = commandOf(backend, commands)
-  if (await installed(command, internals)) return { ok: true, message: `${LABELS[backend]} is already installed.` }
-  const exec = internals.exec ?? (async (file, args, options) => await run(file, [...args], {
-    timeout: options.timeout,
-    maxBuffer: options.maxBuffer,
-    env: internals.env,
-    windowsHide: true,
-  }))
+  invalidateConnectionProbe(backend, commands, internals)
   try {
-    await exec('npm', ['install', '-g', PACKAGES[backend]], { timeout: 600_000, maxBuffer: 8 * 1024 * 1024 })
-  } catch (error: unknown) {
-    return {
-      ok: false,
-      message: `Could not install ${LABELS[backend]}. Install ${PACKAGES[backend]} globally, then check again. (${error instanceof Error ? error.message : String(error)})`,
+    const command = commandOf(backend, commands)
+    if (await installed(command, internals)) return { ok: true, message: `${LABELS[backend]} is already installed.` }
+    const exec = internals.exec ?? (async (file, args, options) => await run(file, [...args], {
+      timeout: options.timeout,
+      maxBuffer: options.maxBuffer,
+      env: internals.env,
+      windowsHide: true,
+    }))
+    try {
+      await exec('npm', ['install', '-g', PACKAGES[backend]], { timeout: 600_000, maxBuffer: 8 * 1024 * 1024 })
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        message: `Could not install ${LABELS[backend]}. Install ${PACKAGES[backend]} globally, then check again. (${error instanceof Error ? error.message : String(error)})`,
+      }
     }
-  }
-  return await installed(command, internals)
-    ? { ok: true, message: `${LABELS[backend]} is installed. The next step is sign-in.` }
-    : { ok: false, message: `${LABELS[backend]} still does not answer after installation.` }
+    return await installed(command, internals)
+      ? { ok: true, message: `${LABELS[backend]} is installed. The next step is sign-in.` }
+      : { ok: false, message: `${LABELS[backend]} still does not answer after installation.` }
+  } finally { invalidateConnectionProbe(backend, commands, internals) }
+
 }
 
 /**
@@ -149,30 +185,34 @@ export async function installBackend(
 export async function signInBackend(
   backend: MotifBackend,
   commands: MotifCommands = DEFAULT_COMMANDS,
-  internals: ConnectionInternals = {},
+  internals: ConnectionInternals = DEFAULT_INTERNALS,
 ): Promise<MotifActionResult> {
-  const command = commandOf(backend, commands)
-  if (!await installed(command, internals)) {
-    return { ok: false, message: `Install the official ${LABELS[backend]} tool first.` }
-  }
+  invalidateConnectionProbe(backend, commands, internals)
   try {
-    const child = (internals.spawn ?? ((file: string, args: readonly string[]) => spawn(file, [...args], {
-      detached: true,
-      stdio: 'ignore',
-      env: internals.env,
-      windowsHide: true,
-    })))(command, ['login'])
-    child.unref()
-  } catch (error: unknown) {
-    return {
-      ok: false,
-      message: `Could not open ${LABELS[backend]} sign-in. Run “${command} login” in a terminal. (${error instanceof Error ? error.message : String(error)})`,
+    const command = commandOf(backend, commands)
+    if (!await installed(command, internals)) {
+      return { ok: false, message: `Install the official ${LABELS[backend]} tool first.` }
     }
-  }
-  return {
-    ok: true,
-    message: `A ${LABELS[backend]} sign-in window opened. Finish it in your browser, then run Test.`,
-  }
+    try {
+      const child = (internals.spawn ?? ((file: string, args: readonly string[]) => spawn(file, [...args], {
+        detached: true,
+        stdio: 'ignore',
+        env: internals.env,
+        windowsHide: true,
+      })))(command, ['login'])
+      child.unref()
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        message: `Could not open ${LABELS[backend]} sign-in. Run “${command} login” in a terminal. (${error instanceof Error ? error.message : String(error)})`,
+      }
+    }
+    return {
+      ok: true,
+      message: `A ${LABELS[backend]} sign-in window opened. Finish it in your browser, then run Test.`,
+    }
+  } finally { invalidateConnectionProbe(backend, commands, internals) }
+
 }
 
 /**
@@ -185,7 +225,7 @@ export async function signInBackend(
 export async function testBackend(
   backend: MotifBackend,
   commands: MotifCommands = DEFAULT_COMMANDS,
-  internals: ConnectionInternals = {},
+  internals: ConnectionInternals = DEFAULT_INTERNALS,
 ): Promise<MotifActionResult> {
   const command = commandOf(backend, commands)
   if (!await installed(command, internals)) {
