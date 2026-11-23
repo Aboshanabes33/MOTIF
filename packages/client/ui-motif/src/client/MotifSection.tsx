@@ -1,3 +1,4 @@
+import { useDeveloperMode, type DeveloperModePreference } from './DeveloperMode.tsx'
 import { useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
@@ -6,6 +7,8 @@ import styles from './MotifSection.module.css'
 
 /** Values every Motif settings surface receives through its slot `inject`. */
 export interface MotifInjected {
+  developerMode?: DeveloperModePreference
+
   /** Copy resolver bound to this package's locale namespace. */
   t: (key: MotifCopy, vars?: Readonly<Record<string, string | number>>) => string
   /** Read both backend cards and every Brand. */
@@ -60,7 +63,6 @@ function useSnapshot(load: (() => Promise<MotifSnapshot>) | undefined) {
     void refresh()
     // The section is mounted once per settings visit; the host is polled by
     // explicit actions, so one read is enough to paint it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { snapshot, error, loading, refresh }
@@ -235,7 +237,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
   if (creating) {
     return (
       <NewBrand t={t} onCancel={() => { setCreating(false) }} onCreated={async (request) => {
-        const result = await createBrand!(request)
+        const result = await createBrand(request)
         await refresh()
         setCreating(false)
         openBrand?.(result.workspaceId)
@@ -252,7 +254,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
         </div>
         <div className={styles.searchRow}>
           <input value={query} placeholder={t('brands.search')} aria-label={t('brands.search')}
-            onChange={event => { setQuery(event.target.value) }} />
+            onChange={(event) => { setQuery(event.target.value) }} />
           <button type="button" className={styles.primary} onClick={() => { setCreating(true) }}>+ {t('brands.new')}</button>
         </div>
       </div>
@@ -378,7 +380,7 @@ function NewBrand({ t, onCancel, onCreated }: {
           <div className={styles.panel}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.name')}>
-                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={event => { setName(event.target.value) }} autoFocus />
+                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={(event) => { setName(event.target.value) }} autoFocus />
               </Field>
               <Field label={t('brand.form.website')}>
                 <input placeholder={t('brand.form.websitePlaceholder')} />
@@ -408,7 +410,7 @@ function NewBrand({ t, onCancel, onCreated }: {
                 ['dark', 'brand.form.dark'],
               ] as const).map(([key, label]) => (
                 <Field key={key} label={t(label)}>
-                  <input type="color" value={identity[key]} onChange={event => { set(key, event.target.value.toUpperCase()) }
+                  <input type="color" value={identity[key]} onChange={(event) => { set(key, event.target.value.toUpperCase()) }
                   } />
                   <code>{identity[key]}</code>
                 </Field>
@@ -418,10 +420,10 @@ function NewBrand({ t, onCancel, onCreated }: {
             <h2 style={{ marginTop: 18 }}>{t('brand.form.fonts')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.latinFont')}>
-                <input value={identity.latinFont} onChange={event => { set('latinFont', event.target.value) }} />
+                <input value={identity.latinFont} onChange={(event) => { set('latinFont', event.target.value) }} />
               </Field>
               <Field label={t('brand.form.arabicFont')}>
-                <input value={identity.arabicFont} onChange={event => { set('arabicFont', event.target.value) }} />
+                <input value={identity.arabicFont} onChange={(event) => { set('arabicFont', event.target.value) }} />
               </Field>
             </div>
 
@@ -430,14 +432,14 @@ function NewBrand({ t, onCancel, onCreated }: {
                 { value: 'soft', label: t('brand.form.motionSoft') },
                 { value: 'snap', label: t('brand.form.motionSnap') },
                 { value: 'fade', label: t('brand.form.motionFade') },
-              ]} onChange={value => { set('motion', value) }} />
+              ]} onChange={(value) => { set('motion', value) }} />
             </Field>
             <Field label={t('brand.form.caption')}>
               <Segmented value={identity.caption as 'word' | 'plain' | 'boxed'} options={[
                 { value: 'word', label: t('brand.form.captionWord') },
                 { value: 'plain', label: t('brand.form.captionPlain') },
                 { value: 'boxed', label: t('brand.form.captionBoxed') },
-              ]} onChange={value => { set('caption', value) }} />
+              ]} onChange={(value) => { set('caption', value) }} />
             </Field>
           </div>
         </div>
@@ -627,10 +629,11 @@ export function MotifHome({ t = key => key, load, createBrand, openBrand }: Prop
 }
 
 /** Frame hoc: keep the conversation body untouched once a Brand is open. */
-export function MotifHomeFrame({ hero, children, t, load, createBrand, openBrand }: Props & {
+export function MotifHomeFrame({ hero, children, t, load, createBrand, openBrand, developerMode }: Props & {
   hero: boolean
   children?: ReactNode
 }) {
-  if (!hero) return <>{children}</>
+  const developer = useDeveloperMode(developerMode)
+  if (!hero || developer) return <>{children}</>
   return <MotifHome t={t} load={load} createBrand={createBrand} openBrand={openBrand} />
 }
