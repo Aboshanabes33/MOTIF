@@ -8,6 +8,7 @@
 
 import { mkdir, readFile, readdir, realpath, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, relative } from 'node:path'
+import { BrandSchemaError, parseStoredBrand } from './brand-schema.ts'
 import { decodeLogo, MAX_LOGO_BYTES } from './logo.ts'
 import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifBrandProblem, MotifTimelineEntry } from './types.ts'
 
@@ -325,21 +326,17 @@ async function countVideos(path: string): Promise<number> {
  * @returns the Brand view, or undefined when the folder has no `brand.json`.
  */
 export async function readBrand(path: string, workspaceId?: string): Promise<MotifBrand | undefined> {
-  const raw = await readFile(join(path, 'brand.json'), 'utf8')
+  const metadataPath = join(path, 'brand.json')
+  const raw = await readFile(metadataPath, 'utf8')
     .catch((error: unknown) => {
       if (isMissingError(error)) return undefined
       throw error
     })
   if (raw === undefined) return undefined
-  let stored: StoredBrand
-  try {
-    stored = JSON.parse(raw) as StoredBrand
-  } catch (error) {
-    throw new MotifBrandCorruptError(path, error instanceof Error ? error.message : String(error))
-  }
-  if (typeof stored.name !== 'string' || stored.name.trim() === '') {
-    throw new MotifBrandCorruptError(path, 'brand.json has no usable name')
-  }
+  let value: unknown
+  try { value = JSON.parse(raw) }
+  catch { throw new BrandSchemaError(metadataPath, 'Brand metadata is not valid JSON') }
+  const stored = parseStoredBrand(value, metadataPath)
   const identity = { ...IDENTITY_FALLBACK, ...stored.identity }
   let logo: string | undefined
   // Only the exact local asset names are accepted, never an arbitrary path.
@@ -405,7 +402,7 @@ export async function listBrandsDetailed(
     } catch (error) {
       problems.push({
         path,
-        kind: error instanceof MotifBrandCorruptError ? 'corrupt' : 'unreadable',
+        kind: error instanceof MotifBrandCorruptError || error instanceof BrandSchemaError ? 'corrupt' : 'unreadable',
         message: error instanceof Error ? error.message : String(error),
       })
     }
