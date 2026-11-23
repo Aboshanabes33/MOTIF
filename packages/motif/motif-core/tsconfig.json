@@ -26,6 +26,9 @@
     },
     {
       "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../subprocess/subprocess"
     }
   ]
 }
