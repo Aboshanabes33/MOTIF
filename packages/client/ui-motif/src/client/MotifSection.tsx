@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
-import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
+import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot, MotifWebsiteSuggestion } from '@deepseek-ai/dsh-motif-core/types'
 import type { MotifCopy } from './locales.ts'
 import styles from './MotifSection.module.css'
 
@@ -20,6 +20,11 @@ export interface MotifInjected {
   createBrand: (request: MotifBrandCreateRequest) => Promise<{ workspaceId: string }>
   /** Open a Brand's workspace. */
   openBrand: (workspaceId: string) => void
+  /**
+   * Analyze one public web page into a Brand identity suggestion. Aborting the
+   * signal stops the wait; the bounded host fetch may finish in the background.
+   */
+  analyzeWebsite: (url: string, signal: AbortSignal) => Promise<MotifWebsiteSuggestion>
 }
 
 type Props = { [K in keyof MotifInjected]?: MotifInjected[K] | undefined }
@@ -60,7 +65,6 @@ function useSnapshot(load: (() => Promise<MotifSnapshot>) | undefined) {
     void refresh()
     // The section is mounted once per settings visit; the host is polled by
     // explicit actions, so one read is enough to paint it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { snapshot, error, loading, refresh }
@@ -224,9 +228,11 @@ function BrandArt({ brand }: { brand: MotifBrand }) {
  * @param props - slot inject face.
  * @returns the Brands section.
  */
-export function BrandsSection({ t = key => key, load, createBrand, openBrand }: Props) {
+export function BrandsSection({ t = key => key, load, createBrand, openBrand, analyzeWebsite }: Props) {
   const { snapshot, error, loading, refresh } = useSnapshot(load)
   const [creating, setCreating] = useState(false)
+  const [prefill, setPrefill] = useState<{ name?: string; identity: MotifBrandIdentity; source: string } | undefined>()
+  const [websiteFlow, setWebsiteFlow] = useState(false)
   const [editing, setEditing] = useState<MotifBrand | undefined>()
   const [query, setQuery] = useState('')
   const brands = snapshot?.brands ?? []
@@ -234,10 +240,12 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
 
   if (creating) {
     return (
-      <NewBrand t={t} onCancel={() => { setCreating(false) }} onCreated={async (request) => {
-        const result = await createBrand!(request)
+      <NewBrand t={t} initial={prefill} onCancel={() => { setCreating(false); setPrefill(undefined) }} onCreated={async (request) => {
+        if (createBrand === undefined) throw new Error('MOTIF: Brand creation requested without a Host createBrand injection')
+        const result = await createBrand(request)
         await refresh()
         setCreating(false)
+        setPrefill(undefined)
         openBrand?.(result.workspaceId)
       }} />
     )
@@ -252,7 +260,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
         </div>
         <div className={styles.searchRow}>
           <input value={query} placeholder={t('brands.search')} aria-label={t('brands.search')}
-            onChange={event => { setQuery(event.target.value) }} />
+            onChange={(event) => { setQuery(event.target.value) }} />
           <button type="button" className={styles.primary} onClick={() => { setCreating(true) }}>+ {t('brands.new')}</button>
         </div>
       </div>
@@ -288,16 +296,31 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
       <div>
         <h2 className={styles.sectionTitle} style={{ marginBottom: 12 }}>{t('brands.start')}</h2>
         <div className={styles.startGrid}>
-          <button type="button" className={styles.startCard} onClick={() => { setCreating(true) }}>
+          <button type="button" className={styles.startCard} onClick={() => { setPrefill(undefined); setCreating(true) }}>
             <strong>{t('brands.manually')}</strong><span>{t('brands.manually.body')}</span>
           </button>
-          <button type="button" className={styles.startCard} onClick={() => { setCreating(true) }}>
+          <button type="button" className={styles.startCard} disabled={analyzeWebsite === undefined}
+            title={analyzeWebsite === undefined ? t('brands.fromWebsite.unavailable') : undefined}
+            onClick={() => { setWebsiteFlow(open => !open) }}>
             <strong>{t('brands.fromWebsite')}</strong><span>{t('brands.fromWebsite.body')}</span>
           </button>
-          <button type="button" className={styles.startCard} onClick={() => { setCreating(true) }}>
-            <strong>{t('brands.fromVideo')}</strong><span>{t('brands.fromVideo.body')}</span>
+          <button type="button" className={styles.startCard} disabled>
+            <strong>{t('brands.fromVideo')}</strong><span>{t('brands.fromVideo.unavailable')}</span>
           </button>
         </div>
+        {websiteFlow && analyzeWebsite !== undefined && (
+          <WebsiteStart t={t} analyzeWebsite={analyzeWebsite}
+            onCancel={() => { setWebsiteFlow(false) }}
+            onAnalyzed={(suggestion) => {
+              setWebsiteFlow(false)
+              setPrefill({
+                ...suggestion.name === undefined ? {} : { name: suggestion.name },
+                identity: suggestion.identity,
+                source: suggestion.source,
+              })
+              setCreating(true)
+            }} />
+        )}
       </div>
       {editing !== undefined && <BrandEditor brand={editing} t={t} onClose={() => { setEditing(undefined) }} />}
     </div>
@@ -323,13 +346,23 @@ function Segmented<T extends string>({ value, options, onChange }: {
   )
 }
 
-function NewBrand({ t, onCancel, onCreated }: {
+export interface MotifBrandCreateInitial {
+  /** Suggested Brand name, when known. */
+  name?: string
+  /** Suggested identity tokens. */
+  identity: MotifBrandIdentity
+  /** Human-readable origin of the suggestion (for example, the analyzed URL). */
+  source: string
+}
+
+function NewBrand({ t, initial, onCancel, onCreated }: {
   t: (key: MotifCopy, vars?: Readonly<Record<string, string | number>>) => string
+  initial?: MotifBrandCreateInitial | undefined
   onCancel: () => void
   onCreated: (request: MotifBrandCreateRequest) => Promise<void>
 }) {
-  const [name, setName] = useState('')
-  const [identity, setIdentity] = useState<MotifBrandIdentity>(FALLBACK_IDENTITY)
+  const [name, setName] = useState(initial?.name ?? '')
+  const [identity, setIdentity] = useState<MotifBrandIdentity>(initial?.identity ?? FALLBACK_IDENTITY)
   const [logo, setLogo] = useState<string | undefined>()
   const [logoName, setLogoName] = useState<string | undefined>()
   const [saving, setSaving] = useState(false)
@@ -374,14 +407,13 @@ function NewBrand({ t, onCancel, onCreated }: {
       </div>
       <div className={styles.form}>
         <div>
-          <div className={styles.review}>{t('brand.form.review')}</div>
+          {initial !== undefined
+            ? <div className={styles.review}>{t('brands.flow.website.prefilled', { source: initial.source })}</div>
+            : <div className={styles.review}>{t('brand.form.review')}</div>}
           <div className={styles.panel}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
               <Field label={t('brand.form.name')}>
-                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={event => { setName(event.target.value) }} autoFocus />
-              </Field>
-              <Field label={t('brand.form.website')}>
-                <input placeholder={t('brand.form.websitePlaceholder')} />
+                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={(event) => { setName(event.target.value) }} autoFocus />
               </Field>
             </div>
 
@@ -408,7 +440,7 @@ function NewBrand({ t, onCancel, onCreated }: {
                 ['dark', 'brand.form.dark'],
               ] as const).map(([key, label]) => (
                 <Field key={key} label={t(label)}>
-                  <input type="color" value={identity[key]} onChange={event => { set(key, event.target.value.toUpperCase()) }
+                  <input type="color" value={identity[key]} onChange={(event) => { set(key, event.target.value.toUpperCase()) }
                   } />
                   <code>{identity[key]}</code>
                 </Field>
@@ -418,10 +450,10 @@ function NewBrand({ t, onCancel, onCreated }: {
             <h2 style={{ marginTop: 18 }}>{t('brand.form.fonts')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.latinFont')}>
-                <input value={identity.latinFont} onChange={event => { set('latinFont', event.target.value) }} />
+                <input value={identity.latinFont} onChange={(event) => { set('latinFont', event.target.value) }} />
               </Field>
               <Field label={t('brand.form.arabicFont')}>
-                <input value={identity.arabicFont} onChange={event => { set('arabicFont', event.target.value) }} />
+                <input value={identity.arabicFont} onChange={(event) => { set('arabicFont', event.target.value) }} />
               </Field>
             </div>
 
@@ -430,14 +462,14 @@ function NewBrand({ t, onCancel, onCreated }: {
                 { value: 'soft', label: t('brand.form.motionSoft') },
                 { value: 'snap', label: t('brand.form.motionSnap') },
                 { value: 'fade', label: t('brand.form.motionFade') },
-              ]} onChange={value => { set('motion', value) }} />
+              ]} onChange={(value) => { set('motion', value) }} />
             </Field>
             <Field label={t('brand.form.caption')}>
               <Segmented value={identity.caption as 'word' | 'plain' | 'boxed'} options={[
                 { value: 'word', label: t('brand.form.captionWord') },
                 { value: 'plain', label: t('brand.form.captionPlain') },
                 { value: 'boxed', label: t('brand.form.captionBoxed') },
-              ]} onChange={value => { set('caption', value) }} />
+              ]} onChange={(value) => { set('caption', value) }} />
             </Field>
           </div>
         </div>
@@ -531,7 +563,64 @@ export function MotifOnboarding({ t = key => key, load, complete, openSection }:
 }
 
 /** One Brand's editing surface: request history, preview, timeline, identity. */
-export function BrandEditor({ brand, t = key => key, onClose }: {
+export function WebsiteStart({ t, analyzeWebsite, onCancel, onAnalyzed }: {
+  t: (key: MotifCopy, vars?: Readonly<Record<string, string | number>>) => string
+  analyzeWebsite: MotifInjected['analyzeWebsite']
+  onCancel: () => void
+  onAnalyzed: (suggestion: MotifWebsiteSuggestion) => void
+}) {
+  const [url, setUrl] = useState('')
+  const [analyzing, setAnalyzing] = useState(false)
+  const [error, setError] = useState<string | undefined>()
+  const abortRef = useRef<AbortController | undefined>()
+
+  const analyze = async (): Promise<void> => {
+    const trimmed = url.trim()
+    setError(undefined)
+    if (!/^https?:\/\/.+/i.test(trimmed)) {
+      setError(t('brands.flow.website.invalid'))
+      return
+    }
+    const controller = new AbortController()
+    abortRef.current = controller
+    setAnalyzing(true)
+    try {
+      const suggestion = await analyzeWebsite(trimmed, controller.signal)
+      if (!controller.signal.aborted) {
+        onAnalyzed(suggestion)
+      }
+    } catch (reason: unknown) {
+      if (!controller.signal.aborted) {
+        setError(reason instanceof Error ? reason.message : t('brands.flow.website.failed'))
+      }
+    } finally {
+      setAnalyzing(false)
+      abortRef.current = undefined
+    }
+  }
+
+  const cancel = (): void => {
+    abortRef.current?.abort()
+    onCancel()
+  }
+
+  return (
+    <form className={styles.websiteFlow} onSubmit={(event) => { event.preventDefault(); void analyze() }}>
+      <label className={styles.websiteFlowLabel}>
+        {t('brands.flow.website.label')}
+        <input value={url} placeholder={t('brand.form.websitePlaceholder')} aria-label={t('brands.flow.website.label')}
+          disabled={analyzing} onChange={(event) => { setUrl(event.target.value) }} />
+      </label>
+      {analyzing
+        ? <button type="button" className={styles.secondary} onClick={cancel}>{t('brands.flow.website.cancel')}</button>
+        : <button type="submit" className={styles.primary}>{t('brands.flow.website.action')}</button>}
+      {analyzing && <span className={styles.websiteFlowStatus}>{t('brands.flow.website.analyzing')}</span>}
+      {error !== undefined && <p className={styles.websiteFlowError} role="alert">{error}</p>}
+    </form>
+  )
+}
+
+function BrandEditor({ brand, t = key => key, onClose }: {
   brand: MotifBrand
   t?: MotifInjected['t']
   onClose: () => void

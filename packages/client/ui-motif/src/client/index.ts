@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {} from '@deepseek-ai/dsh-motif-core/remote'
-import type { MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
+import type { MotifSnapshot, MotifWebsiteSuggestion } from '@deepseek-ai/dsh-motif-core/types'
 import { AiSection, BrandsSection, MotifHomeFrame, MotifOnboarding, type MotifInjected } from './MotifSection.tsx'
 import { ar, en, zh, type MotifCopy } from './locales.ts'
 
@@ -47,6 +47,22 @@ export function apply(ctx: Context): void {
     signIn: backend => valueOf(ctx.remote.motif.signIn({ backend })),
     test: backend => valueOf(ctx.remote.motif.test({ backend })),
     createBrand: request => valueOf(ctx.remote.motif.createBrand(request)),
+    analyzeWebsite: async (url, signal) => {
+      // Typert Remotes cannot be aborted mid-call: race the one bounded host
+      // fetch against the AbortSignal so the UI can leave immediately. The
+      // host-side fetch is capped (timeout and size) and its late result is
+      // dropped.
+      const answer = valueOf<MotifWebsiteSuggestion>(ctx.remote.motif.analyzeWebsite({ url }))
+      return await new Promise<MotifWebsiteSuggestion>((resolve, reject) => {
+        if (signal.aborted) {
+          reject(new DOMException('Aborted', 'AbortError'))
+          return
+        }
+        const onAbort = (): void => { reject(new DOMException('Aborted', 'AbortError')) }
+        signal.addEventListener('abort', onAbort, { once: true })
+        answer.then(resolve, reject).finally(() => { signal.removeEventListener('abort', onAbort) })
+      })
+    },
     openBrand: (workspaceId) => {
       void ctx.uiWorkspace.openWorkspace(workspaceId as WorkspaceId).catch((reason: unknown) => {
         ctx.logger.error(reason)
