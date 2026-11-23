@@ -38,6 +38,7 @@ export {
   DEFAULT_COMMANDS,
   inspectConnections,
   installBackend,
+  platformExecutable,
   signInBackend,
   testBackend,
 } from './connection.ts'
