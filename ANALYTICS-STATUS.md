@@ -1,9 +1,15 @@
 # PostHog integration status
 
-Partial work, not a shipped integration and not grounds to close #51. The central analytics boundary is implemented and tested, but no production PostHog instance or real UI/Host event source calls it yet.
+Partial SDK integration for #81, not a working end-to-end verified analytics rollout.
 
-The app already has desktop-only productAnalytics over authenticated RPC and an OTEL Host sender. Reuse that ownership/policy layer rather than initialize PostHog in each component or duplicate captures in renderer and Host. Official Node capture/identify contracts checked at https://posthog.com/docs/libraries/node and https://posthog.com/docs/libraries/node/reference . Consent guidance checked at https://posthog.com/docs/privacy/data-collection .
+Host motif-core now owns one posthog-node 6.0.5 adapter per controller lifetime, with bounded queue, explicit close, exception autocapture off, no browser SDK/replay, local evaluation disabled, GeoIP off, privacyMode on and a final closed event/property filter. Brand creation records only after successful workspace registration. Startup and SDK failure are nonfatal.
 
-The boundary accepts only fixed event names and enum property values, never arbitrary text. No prompt, transcript, media, path, name, email, credential or raw exception is allowed. It drops all events before verified account identity, without configuration, without consent or in development. It does not queue events for later consent. Sign-out clears the identity. Use an opaque backend-issued account ID, not a token or email.
+Configuration requires NODE_ENV=production, MOTIF_ANALYTICS_CONSENT=true, MOTIF_POSTHOG_ENVIRONMENT=production, MOTIF_POSTHOG_KEY and explicit MOTIF_POSTHOG_HOST (https://us.i.posthog.com or https://eu.i.posthog.com). Missing any condition disables construction. Development is disabled, not sent to a production project. A development project rollout is not configured yet.
 
-Remaining: choose an explicit consent setting and deployment/project host, wire a single posthog-node SDK instance on the Host with autocapture/replay disabled and development separation, map real successful product actions, connect verified #50 identity/sign-out, add shutdown handling, update exact package/lockfile and review privacy policy. No actual user data has been sent to PostHog by this work.
+Crucially, no verified account lifecycle is wired: this controller NEVER calls signIn, so it emits no product events yet, even when configured. Do not substitute a renderer claim, environment account ID, email or native CLI login for verified application authentication. #79's authenticated isolated-runtime flow must supply the lifecycle internally before enabling collection.
+
+Boundary event names remain motif_onboarding_completed, motif_mode_changed, motif_brand_created, motif_workspace_opened, motif_edit_requested, motif_provider_selected, motif_job_started/completed/failed. Only predefined enum properties are accepted. No free text, prompts, transcripts, media, paths, names, emails, credentials or raw errors. The final SDK beforeSend drops non-taxonomy/automatic/identity profile events and rebuilds properties. Identity is an opaque backend-verified account id; signOut clears it and pre-auth events are not buffered.
+
+Remaining: verified identity/sign-out wiring, explicit consent UX, all action mappings besides Brand success, development project separation, consent-revocation queue policy, real non-production PostHog dashboard verification, and policy review. Do not close #81. No remote test events or private user data sent during this work.
+
+SDK contract: https://posthog.com/docs/libraries/node . Local package types were checked against the installed version. Focused tests: posthog.spec.ts and product-analytics.spec.ts. Affected motif-core compile passes; full repository baseline remains caveated by #86.
