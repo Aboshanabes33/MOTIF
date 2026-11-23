@@ -8,6 +8,7 @@
 
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
+import { resolveWindowsCommand } from './windows-command.ts'
 import { hostSignInFacts, detectSignInState } from '@deepseek-ai/dsh-llm-motif-relay/src/failure.ts'
 import type { MotifActionResult, MotifBackend, MotifConnection } from './types.ts'
 
@@ -38,6 +39,8 @@ export const DEFAULT_COMMANDS: MotifCommands = { claudeCode: 'claude', codex: 'c
 
 /** Host integrations replaceable by tests. */
 export interface ConnectionInternals {
+  /** Platform override for executable resolution (default `process.platform`). */
+  readonly platform?: string
   /** Environment used for credential paths and child processes. */
   readonly env?: NodeJS.ProcessEnv
   /** Override the existence probe. */
@@ -64,15 +67,54 @@ function commandOf(backend: MotifBackend, commands: MotifCommands): string {
   return backend === 'claude-code' ? commands.claudeCode : commands.codex
 }
 
+/**
+ * Spell one command the way the current platform can execute it directly.
+ *
+ * npm-installed command-line tools ship a `<name>.cmd` shim on Windows, and
+ * `execFile`/`spawn` resolve no `PATHEXT` there, so a bare name cannot run
+ * without the extension. Only bare names gain the extension: an absolute or
+ * relative path (with separators) or a name already carrying one is used
+ * exactly as configured, which keeps paths with spaces intact - arguments
+ * always travel as an array and nothing is interpolated through a shell.
+ * @param command - configured executable name or path.
+ * @param platform - platform the spelling is for.
+ * @returns the executable to pass to `execFile`/`spawn`.
+ */
+export function platformExecutable(command: string, platform: string): string {
+  const bare = !command.includes('/') && !command.includes('\\')
+  const hasExtension = /\.[a-z0-9]+$/i.test(command)
+  return platform === 'win32' && bare && !hasExtension ? `${command}.cmd` : command
+}
+
+/** Platform one operation resolves executables for. */
+function platformOf(internals: ConnectionInternals): string {
+  return internals.platform ?? process.platform
+}
+
+/** One display sentence from a failed process start. */
+function startError(error: unknown, label: string, platform: string): string {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code
+  if (code === 'ENOENT') {
+    return platform === 'win32'
+      ? `${label} was not found. On Windows the tool runs through its .cmd shim; install Node.js (which provides npm.cmd), then check again.`
+      : `${label} was not found. Install Node.js (which provides npm), then check again.`
+  }
+  const stderr = (error as { stderr?: string } | undefined)?.stderr?.trim()
+  const tail = stderr !== undefined && stderr !== '' ? stderr : error instanceof Error ? error.message : String(error)
+  return `${label} could not run: ${tail.slice(0, 300)}`
+}
+
 async function installed(command: string, internals: ConnectionInternals): Promise<boolean> {
-  const exec = internals.exec ?? (async (file, args, options) => await run(file, [...args], {
-    timeout: options.timeout,
-    maxBuffer: options.maxBuffer,
-    env: internals.env,
-    windowsHide: true,
-  }))
+  const exec = internals.exec ?? (async (file, args, options) => {
+    const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+    return await run(launch.file, [...launch.args], {
+      timeout: options.timeout,
+      maxBuffer: options.maxBuffer,
+      env: internals.env,
+      windowsHide: true,
+    }) })
   try {
-    await exec(command, ['--version'], { timeout: 5_000 })
+    await exec(platformExecutable(command, platformOf(internals)), ['--version'], { timeout: 5_000 })
     return true
   } catch {
     return false
@@ -131,18 +173,25 @@ export async function installBackend(
 ): Promise<MotifActionResult> {
   const command = commandOf(backend, commands)
   if (await installed(command, internals)) return { ok: true, message: `${LABELS[backend]} is already installed.` }
-  const exec = internals.exec ?? (async (file, args, options) => await run(file, [...args], {
-    timeout: options.timeout,
-    maxBuffer: options.maxBuffer,
-    env: internals.env,
-    windowsHide: true,
-  }))
+  const exec = internals.exec ?? (async (file, args, options) => {
+    const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+    return await run(launch.file, [...launch.args], {
+      timeout: options.timeout,
+      maxBuffer: options.maxBuffer,
+      env: internals.env,
+      windowsHide: true,
+    }) })
+  const platform = platformOf(internals)
   try {
-    await exec('npm', ['install', '-g', PACKAGES[backend]], { timeout: 600_000, maxBuffer: 8 * 1024 * 1024 })
+    // One npm process installs the official package; its output is captured
+    // whole, so a failure message can carry npm's own tail. The install can
+    // take several minutes on a slow network, which the button's busy state
+    // covers while this request runs.
+    await exec(platformExecutable('npm', platform), ['install', '-g', PACKAGES[backend]], { timeout: 600_000, maxBuffer: 8 * 1024 * 1024 })
   } catch (error: unknown) {
     return {
       ok: false,
-      message: `Could not install ${LABELS[backend]}. Install ${PACKAGES[backend]} globally, then check again. (${error instanceof Error ? error.message : String(error)})`,
+      message: `Could not install ${LABELS[backend]} - ${startError(error, 'npm', platform)} You can also run “npm install -g ${PACKAGES[backend]}” in a terminal, then check again.`,
     }
   }
   return await installed(command, internals)
@@ -248,20 +297,23 @@ export async function signInBackend(
       }
     }
   }
-  const spawnSignIn = internals.spawn ?? ((file: string, args: readonly string[]): SignInChild => spawn(file, [...args], {
-    detached: true,
-    stdio: 'ignore',
-    env: internals.env,
-    windowsHide: true,
-  }))
+  const spawnSignIn = internals.spawn ?? ((file: string, args: readonly string[]): SignInChild => {
+    const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+    return spawn(launch.file, [...launch.args], {
+      detached: true,
+      stdio: 'ignore',
+      env: internals.env,
+      windowsHide: true,
+    })
+  })
   try {
-    const child = spawnSignIn(command, ['login'])
+    const child = spawnSignIn(platformExecutable(command, platform), ['login'])
     await confirmLaunch(child)
     child.unref()
   } catch (error: unknown) {
     return {
       ok: false,
-      message: `Could not start ${LABELS[backend]} sign-in (${error instanceof Error ? error.message : String(error)}). Run \`${command} login\` in a terminal yourself, then run Test.`,
+      message: `Could not open ${LABELS[backend]} sign-in - ${startError(error, command, platform)} Run “${command} login” in a terminal.`,
     }
   }
   return {
@@ -286,17 +338,19 @@ export async function testBackend(
   if (!await installed(command, internals)) {
     return { ok: false, message: `Install the official ${LABELS[backend]} tool first.` }
   }
-  const exec = internals.exec ?? (async (file, args, options) => await run(file, [...args], {
-    timeout: options.timeout,
-    maxBuffer: options.maxBuffer,
-    env: internals.env,
-    windowsHide: true,
-  }))
+  const exec = internals.exec ?? (async (file, args, options) => {
+    const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+    return await run(launch.file, [...launch.args], {
+      timeout: options.timeout,
+      maxBuffer: options.maxBuffer,
+      env: internals.env,
+      windowsHide: true,
+    }) })
   const args = backend === 'claude-code'
     ? ['-p', 'Reply with exactly: OK']
     : ['exec', 'Reply with exactly: OK']
   try {
-    const result = await exec(command, args, { timeout: 60_000, maxBuffer: 1024 * 1024 })
+    const result = await exec(platformExecutable(command, platformOf(internals)), args, { timeout: 60_000, maxBuffer: 1024 * 1024 })
     const answer = `${result.stdout ?? ''}${result.stderr ?? ''}`.trim()
     return answer === ''
       ? { ok: false, message: `${LABELS[backend]} answered with no text.` }
