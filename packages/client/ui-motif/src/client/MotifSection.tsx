@@ -1,3 +1,4 @@
+import { useDeveloperMode, type DeveloperModePreference } from './DeveloperMode.tsx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import type { MotifActionResult, MotifApiKeySaveRequest, MotifApiKeySaveResult, MotifApiKeyStatus, MotifApiKeyTestRequest, MotifApiKeyTestResult, MotifApiProvider, MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot, MotifTimelineEntry, MotifWebsiteSuggestion } from '@deepseek-ai/dsh-motif-core/types'
@@ -7,6 +8,8 @@ import { MAX_LOGO_BYTES, validateLogoBytes } from './logo.ts'
 
 /** Values every Motif settings surface receives through its slot `inject`. */
 export interface MotifInjected {
+  developerMode?: DeveloperModePreference
+
   /** Copy resolver bound to this package's locale namespace. */
   t: (key: MotifCopy, vars?: Readonly<Record<string, string | number>>) => string
   /** Read both backend cards and every Brand. */
@@ -1051,10 +1054,11 @@ export function MotifHome({ t = key => key, load, createBrand, openBrand }: Prop
 }
 
 /** Frame hoc: keep the conversation body untouched once a Brand is open. */
-export function MotifHomeFrame({ hero, children, t, load, createBrand, openBrand }: Props & {
+export function MotifHomeFrame({ hero, children, t, load, createBrand, openBrand, developerMode }: Props & {
   hero: boolean
   children?: ReactNode
 }) {
-  if (!hero) return <>{children}</>
+  const developer = useDeveloperMode(developerMode)
+  if (!hero || developer) return <>{children}</>
   return <MotifHome t={t} load={load} createBrand={createBrand} openBrand={openBrand} />
 }

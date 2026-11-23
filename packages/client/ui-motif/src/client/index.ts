@@ -1,3 +1,4 @@
+import { DeveloperModeSection } from './DeveloperMode.tsx'
 /** Motif settings surfaces: the AI-connection onboarding and Brand management. */
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -28,7 +29,7 @@ declare module '@deepseek-ai/dsh-api-session-controller/client' {
 }
 
 /** Services the surfaces use. */
-export const inject = ['slots', 'locale', 'remote', 'remote.motif', 'uiWorkspace', 'workspaces', 'sessions']
+export const inject = ['slots', 'locale', 'remote', 'remote.motif', 'uiWorkspace', 'workspaces', 'sessions', 'configForms']
 
 /** Locale namespace owned by this package. */
 const NS = 'settings.motif'
@@ -49,6 +50,7 @@ export function apply(ctx: Context): void {
   const t = (key: MotifCopy, vars?: Readonly<Record<string, string | number>>): string => translate(key, vars)
 
   const face = (): MotifInjected => ({
+    developerMode: ctx.configForms.developerTools,
     t,
     load: () => valueOf<MotifSnapshot>(ctx.remote.motif.snapshot()),
     install: backend => valueOf(ctx.remote.motif.install({ backend })),
@@ -113,6 +115,12 @@ export function apply(ctx: Context): void {
       }
     },
   })
+
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section', id: 'motif-mode', order: 0,
+    label: () => 'Developer Mode',
+    inject: () => ({ preference: ctx.configForms.developerTools }),
+  }, DeveloperModeSection))
 
   // The blank-session home is the Brands page, not the generic chat hero.
   ctx.slots.inject('conversation.hero.frame', () => ctx.slots.register({
