@@ -14,6 +14,10 @@ import { dshPath } from '@deepseek-ai/dsh-home-paths'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { createBrand, listBrands } from './brand-store.ts'
+import { reduceActivity } from './activity.ts'
+import type { MotifActivity } from './activity.ts'
+// Pulls the `motif-relay/status` event declaration onto cordis Events.
+import type {} from '@deepseek-ai/dsh-llm-motif-relay/src/index.ts'
 import {
   DEFAULT_COMMANDS,
   inspectConnections,
@@ -32,6 +36,8 @@ import type {
 
 export type * from './types.ts'
 export { createBrand, listBrands, brandMarkdown, normalizeIdentity, slugify, MotifBrandError } from './brand-store.ts'
+export { reduceActivity } from './activity.ts'
+export type { MotifActivity, MotifActivityEvent } from './activity.ts'
 export {
   DEFAULT_COMMANDS,
   inspectConnections,
@@ -74,6 +80,7 @@ export class MotifController extends TypertRemoteService {
 
   private readonly config: ResolvedConfig
   private readonly commands: MotifCommands
+  private activity: readonly MotifActivity[] = []
 
   /**
    * @param ctx - Host context carrying Workspace registration and Remote access.
@@ -87,6 +94,11 @@ export class MotifController extends TypertRemoteService {
       codexCommand: config.codexCommand ?? DEFAULT_COMMANDS.codex,
     }
     this.commands = { claudeCode: this.config.claudeCommand, codex: this.config.codexCommand }
+    // Observed relay sends drive the Active-AI indicators; nothing is assumed
+    // from install or sign-in state alone.
+    ctx.on('motif-relay/status', (event: { backend: string; model: string; status: 'started' | 'working' | 'finished' | 'failed' }) => {
+      this.activity = reduceActivity(this.activity, event, new Date().toISOString())
+    })
   }
 
   /**
@@ -110,7 +122,7 @@ export class MotifController extends TypertRemoteService {
       })()
       return workspaces.get(absolute) ?? workspaces.get(canonical)
     })
-    return { brands, connections: await inspectConnections(this.commands) }
+    return { brands, connections: await inspectConnections(this.commands), activity: this.activity }
   }
 
   /**

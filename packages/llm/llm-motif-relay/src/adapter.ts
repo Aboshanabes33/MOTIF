@@ -96,9 +96,10 @@ export interface RelayHost {
    * Publish one coarse status fact.
    * @param sessionId - Session whose turn is delegating.
    * @param backend - command-line backend that ran the send.
+   * @param model - relay model selected for the send.
    * @param status - state reached.
    */
-  status(sessionId: SessionId, backend: string, status: RelayStatus): void
+  status(sessionId: SessionId, backend: string, model: string, status: RelayStatus): void
 }
 
 /** Fixed budgets applied to every relay send. */
@@ -224,7 +225,7 @@ export class RelayAdapter extends LlmAdapter {
       throw failureError(missingSignInFailure(context))
     }
 
-    this.options.host.status(sessionId, selected.backend, 'started')
+    this.options.host.status(sessionId, selected.backend, selected.id, 'started')
     const brand = await this.options.host.readBrand(target.brandRoot)
     const task = buildRelayTask({
       editRequest,
@@ -260,10 +261,10 @@ export class RelayAdapter extends LlmAdapter {
       })
     } catch (error: unknown) {
       release()
-      this.options.host.status(sessionId, selected.backend, 'failed')
+      this.options.host.status(sessionId, selected.backend, selected.id, 'failed')
       throw failureError(failureFromError(error, context))
     }
-    this.options.host.status(sessionId, selected.backend, 'working')
+    this.options.host.status(sessionId, selected.backend, selected.id, 'working')
 
     const cancelled = new Promise<never>((_resolve, reject) => {
       controller.signal.addEventListener('abort', () => {
@@ -277,17 +278,17 @@ export class RelayAdapter extends LlmAdapter {
       await activation.dispose().then(() => undefined, () => undefined)
       release()
       const failure = isRelayFailure(error) ? error : failureFromError(error, context)
-      if (failure.kind !== 'cancelled') this.options.host.status(sessionId, selected.backend, 'failed')
+      if (failure.kind !== 'cancelled') this.options.host.status(sessionId, selected.backend, selected.id, 'failed')
       throw failureError(failure)
     }
     release()
 
     const failure = failureFromResult(result, context)
     if (failure !== undefined) {
-      if (failure.kind !== 'cancelled') this.options.host.status(sessionId, selected.backend, 'failed')
+      if (failure.kind !== 'cancelled') this.options.host.status(sessionId, selected.backend, selected.id, 'failed')
       throw failureError(failure)
     }
-    this.options.host.status(sessionId, selected.backend, 'finished')
+    this.options.host.status(sessionId, selected.backend, selected.id, 'finished')
 
     const answer = textOf(result)
     yield { type: 'block-start', index: 0, blockType: 'text' }

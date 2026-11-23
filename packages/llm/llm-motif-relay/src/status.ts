@@ -17,6 +17,8 @@ export interface RelayStatusEvent {
   readonly sessionId: SessionId
   /** Registered command-line backend handling this send. */
   readonly backend: string
+  /** Relay model id selected for this send. */
+  readonly model: string
   /** Coarse state reached; `finished` and `failed` are terminal for the send. */
   readonly status: RelayStatus
 }

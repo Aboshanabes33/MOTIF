@@ -60,7 +60,6 @@ function useSnapshot(load: (() => Promise<MotifSnapshot>) | undefined) {
     void refresh()
     // The section is mounted once per settings visit; the host is polled by
     // explicit actions, so one read is enough to paint it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { snapshot, error, loading, refresh }
@@ -100,7 +99,11 @@ export function AiSection({ t = key => key, load, install, signIn, test }: Props
     }
   }
 
-  const connected = snapshot?.connections.find(connection => connection.signedIn === 'yes')
+  const activity = snapshot?.activity ?? []
+  const running = activity.find(entry => entry.state === 'running')
+  const latest = activity[0]
+  const labelOf = (backend: string): string =>
+    snapshot?.connections.find(connection => connection.backend === backend)?.label ?? backend
 
   return (
     <div className={styles.root}>
@@ -131,6 +134,7 @@ export function AiSection({ t = key => key, load, install, signIn, test }: Props
           <div className={styles.cards}>
             {(snapshot?.connections ?? []).map((connection: MotifConnection) => {
               const cardBusy = busy?.startsWith(connection.backend) === true
+              const cardActivity = activity.find(entry => entry.backend === connection.backend)
               const pill = connection.signedIn === 'yes'
                 ? { label: t('ai.connected'), className: styles.pillConnected }
                 : connection.signedIn === 'no'
@@ -150,6 +154,12 @@ export function AiSection({ t = key => key, load, install, signIn, test }: Props
                     )}
                   </div>
                   <span className={`${styles.pill} ${pill.className}`}>{pill.label}</span>
+                  {cardActivity?.state === 'running' && (
+                    <span className={`${styles.pill} ${styles.pillRunning}`}>{t('ai.pillRunning')}</span>
+                  )}
+                  {cardActivity !== undefined && cardActivity.state !== 'running' && (
+                    <span className={`${styles.pill} ${styles.pillNeutral}`}>{t('ai.pillSelected', { model: cardActivity.model })}</span>
+                  )}
                   <div className={styles.connectionFoot}>
                     {!connection.installed && (
                       <button type="button" className={styles.primary} disabled={cardBusy}
@@ -186,9 +196,11 @@ export function AiSection({ t = key => key, load, install, signIn, test }: Props
 
           <div className={styles.aiFooter} style={{ marginTop: 18 }}>
             <span className={styles.active}>
-              {connected === undefined
-                ? t('ai.noneActive')
-                : <>{t('ai.active')}: <strong>{connected.label}</strong> · {t('ai.connected')}</>}
+              {running !== undefined
+                ? <>{t('ai.running', { name: labelOf(running.backend) })}</>
+                : latest !== undefined
+                  ? <>{t('ai.active')}: <strong>{labelOf(latest.backend)}</strong> · {latest.model}</>
+                  : t('ai.noneActive')}
             </span>
             <button type="button" className={styles.secondary} onClick={() => { void refresh() }}>{t('ai.step1')}</button>
           </div>
@@ -235,7 +247,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
   if (creating) {
     return (
       <NewBrand t={t} onCancel={() => { setCreating(false) }} onCreated={async (request) => {
-        const result = await createBrand!(request)
+        const result = await createBrand(request)
         await refresh()
         setCreating(false)
         openBrand?.(result.workspaceId)
@@ -252,7 +264,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
         </div>
         <div className={styles.searchRow}>
           <input value={query} placeholder={t('brands.search')} aria-label={t('brands.search')}
-            onChange={event => { setQuery(event.target.value) }} />
+            onChange={(event) => { setQuery(event.target.value) }} />
           <button type="button" className={styles.primary} onClick={() => { setCreating(true) }}>+ {t('brands.new')}</button>
         </div>
       </div>
@@ -378,7 +390,7 @@ function NewBrand({ t, onCancel, onCreated }: {
           <div className={styles.panel}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.name')}>
-                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={event => { setName(event.target.value) }} autoFocus />
+                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={(event) => { setName(event.target.value) }} autoFocus />
               </Field>
               <Field label={t('brand.form.website')}>
                 <input placeholder={t('brand.form.websitePlaceholder')} />
@@ -408,7 +420,7 @@ function NewBrand({ t, onCancel, onCreated }: {
                 ['dark', 'brand.form.dark'],
               ] as const).map(([key, label]) => (
                 <Field key={key} label={t(label)}>
-                  <input type="color" value={identity[key]} onChange={event => { set(key, event.target.value.toUpperCase()) }
+                  <input type="color" value={identity[key]} onChange={(event) => { set(key, event.target.value.toUpperCase()) }
                   } />
                   <code>{identity[key]}</code>
                 </Field>
@@ -418,10 +430,10 @@ function NewBrand({ t, onCancel, onCreated }: {
             <h2 style={{ marginTop: 18 }}>{t('brand.form.fonts')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.latinFont')}>
-                <input value={identity.latinFont} onChange={event => { set('latinFont', event.target.value) }} />
+                <input value={identity.latinFont} onChange={(event) => { set('latinFont', event.target.value) }} />
               </Field>
               <Field label={t('brand.form.arabicFont')}>
-                <input value={identity.arabicFont} onChange={event => { set('arabicFont', event.target.value) }} />
+                <input value={identity.arabicFont} onChange={(event) => { set('arabicFont', event.target.value) }} />
               </Field>
             </div>
 
@@ -430,14 +442,14 @@ function NewBrand({ t, onCancel, onCreated }: {
                 { value: 'soft', label: t('brand.form.motionSoft') },
                 { value: 'snap', label: t('brand.form.motionSnap') },
                 { value: 'fade', label: t('brand.form.motionFade') },
-              ]} onChange={value => { set('motion', value) }} />
+              ]} onChange={(value) => { set('motion', value) }} />
             </Field>
             <Field label={t('brand.form.caption')}>
               <Segmented value={identity.caption as 'word' | 'plain' | 'boxed'} options={[
                 { value: 'word', label: t('brand.form.captionWord') },
                 { value: 'plain', label: t('brand.form.captionPlain') },
                 { value: 'boxed', label: t('brand.form.captionBoxed') },
-              ]} onChange={value => { set('caption', value) }} />
+              ]} onChange={(value) => { set('caption', value) }} />
             </Field>
           </div>
         </div>
@@ -615,12 +627,20 @@ export function BrandEditor({ brand, t = key => key, onClose }: {
 
 /** Blank-session home: the Brands page replaces the generic chat hero. */
 export function MotifHome({ t = key => key, load, createBrand, openBrand }: Props) {
+  const { snapshot } = useSnapshot(load)
+  const activity = snapshot?.activity ?? []
+  const running = activity.find(entry => entry.state === 'running')
+  const latest = activity[0]
   return (
     <div className={styles.home}>
       <BrandsSection t={t} load={load} createBrand={createBrand} openBrand={openBrand} />
       <div className={styles.homeStatus}>
         <span />
-        {t('editor.aiActive', { name: 'Claude Code' })}
+        {running !== undefined
+          ? t('editor.aiRunning', { name: running.model })
+          : latest !== undefined
+            ? t('editor.aiActive', { name: latest.model })
+            : t('ai.noneActive')}
       </div>
     </div>
   )

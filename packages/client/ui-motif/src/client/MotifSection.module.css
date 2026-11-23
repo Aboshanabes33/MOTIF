@@ -292,6 +292,11 @@
   color: #ff8d7a;
 }
 
+.pillRunning {
+  color: #8fd0ff;
+  border-color: #2b4a5a;
+}
+
 .pillNeutral {
   background: #2a2a2d;
   color: #c9c6c1;

@@ -60,12 +60,26 @@ export interface MotifBrand {
   readonly videoCount: number
 }
 
+/** Last observed relay activity for one backend: what Motif actually routed. */
+export interface MotifBackendActivity {
+  /** Command-line backend that handled the send. */
+  readonly backend: string
+  /** Relay model id selected for that send. */
+  readonly model: string
+  /** `running` while a send is in flight, then its terminal outcome. */
+  readonly state: 'running' | 'finished' | 'failed'
+  /** ISO instant of the latest observed event. */
+  readonly at: string
+}
+
 /** One full read for the shell. */
 export interface MotifSnapshot {
   /** Brands in most-recently-edited order. */
   readonly brands: readonly MotifBrand[]
   /** Both backend cards. */
   readonly connections: readonly MotifConnection[]
+  /** Observed relay sends, most recent first; empty before the first send. */
+  readonly activity: readonly MotifBackendActivity[]
 }
 
 /** Form payload for a new Brand. */
