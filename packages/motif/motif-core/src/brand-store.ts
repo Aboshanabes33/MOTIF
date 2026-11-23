@@ -6,7 +6,7 @@
  * @module @deepseek-ai/dsh-motif-core/brand-store
  */
 
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity } from './types.ts'
 
@@ -105,9 +105,9 @@ export function normalizeIdentity(identity: MotifBrandIdentity): MotifBrandIdent
 function decodeLogo(dataUrl: string): { bytes: Buffer; extension: string } {
   const match = /^data:image\/(png|jpeg|jpg|webp|svg\+xml);base64,(.+)$/s.exec(dataUrl)
   if (match === null) throw new MotifBrandError('Logo must be a PNG, JPEG, WebP, or SVG data URL')
-  const mime = match[1]!
+  const [, mime = '', data = ''] = match
   const extension = mime === 'jpeg' ? 'jpg' : mime === 'svg+xml' ? 'svg' : mime
-  return { bytes: Buffer.from(match[2]!, 'base64'), extension }
+  return { bytes: Buffer.from(data, 'base64'), extension }
 }
 
 /**
@@ -139,6 +139,48 @@ export async function createBrand(root: string, request: MotifBrandCreateRequest
   await writeFile(join(path, 'brand.json'), `${JSON.stringify(stored, null, 2)}\n`)
   await writeFile(join(path, 'brand.md'), brandMarkdown(name, identity))
   return { id, name, path, identity, ...logo === undefined ? {} : { logo }, updatedAt, videoCount: 0 }
+}
+
+/**
+ * Remove a Brand folder only while it still holds exactly the Brand this
+ * operation wrote: the stored metadata must parse and match the name and
+ * creation instant of the folder the caller just created. Any mismatch -
+ * foreign, replaced, or unreadable content - keeps the folder, so a rollback
+ * can never delete pre-existing user data.
+ * @param brand - the Brand view returned by {@link createBrand}.
+ * @returns whether the folder was removed.
+ */
+export async function removeCreatedBrand(brand: MotifBrand): Promise<boolean> {
+  let stored: StoredBrand
+  try {
+    stored = JSON.parse(await readFile(join(brand.path, 'brand.json'), 'utf8')) as StoredBrand
+  } catch {
+    return false
+  }
+  if (stored?.version !== 1 || stored.name !== brand.name || stored.updatedAt !== brand.updatedAt) {
+    return false
+  }
+  // Refuse cleanup if anything appeared after creation. Never recursively
+  // delete a workspace: an agent or another process may already have written it.
+  try {
+    const top = await readdir(brand.path)
+    if (top.some(name => !['brand.json', 'brand.md', 'assets', 'timeline'].includes(name))) return false
+    if ((await readdir(join(brand.path, 'timeline'))).length !== 0) return false
+    const assets = await readdir(join(brand.path, 'assets'))
+    const decoded = brand.logo ? decodeLogo(brand.logo) : undefined
+    const expectedLogo = decoded ? `logo.${decoded.extension}` : undefined
+    if (assets.some(name => name !== expectedLogo) || assets.length !== (expectedLogo ? 1 : 0)) return false
+    if (await readFile(join(brand.path, 'brand.md'), 'utf8') !== brandMarkdown(brand.name, brand.identity)) return false
+    if (decoded !== undefined && expectedLogo !== undefined && !(await readFile(join(brand.path, 'assets', expectedLogo))).equals(decoded.bytes)) return false
+    if (expectedLogo) await unlink(join(brand.path, 'assets', expectedLogo))
+    await rmdir(join(brand.path, 'assets'))
+    await rmdir(join(brand.path, 'timeline'))
+    await unlink(join(brand.path, 'brand.md'))
+    await unlink(join(brand.path, 'brand.json'))
+    await rmdir(brand.path)
+    return true
+  } catch { return false }
+
 }
 
 /** Count timeline entries that look like video work products. */
