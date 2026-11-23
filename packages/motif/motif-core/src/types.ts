@@ -56,7 +56,7 @@ export interface MotifBrand {
   readonly logo?: string
   /** ISO instant of the last local edit. */
   readonly updatedAt: string
-  /** Number of files currently in the Brand timeline. */
+  /** Number of video assets (`.mp4`, `.mov`, `.webm`, `.mkv`, `.m4v`) in the Brand folder. */
   readonly videoCount: number
 }
 
@@ -72,10 +72,22 @@ export interface MotifBackendActivity {
   readonly at: string
 }
 
+/** One Brand folder that could not be read while listing. */
+export interface MotifBrandProblem {
+  /** Absolute folder that failed. */
+  readonly path: string
+  /** `corrupt` for unreadable `brand.json`, `unreadable` for I/O failures. */
+  readonly kind: 'corrupt' | 'unreadable'
+  /** Actionable one-sentence description. */
+  readonly message: string
+}
+
 /** One full read for the shell. */
 export interface MotifSnapshot {
   /** Brands in most-recently-edited order. */
   readonly brands: readonly MotifBrand[]
+  /** Brand folders that failed to read; empty when every folder read. */
+  readonly brandProblems: readonly MotifBrandProblem[]
   /** Both backend cards. */
   readonly connections: readonly MotifConnection[]
   /** Observed relay sends, most recent first; empty before the first send. */
@@ -100,6 +112,38 @@ export interface MotifBrandCreateResult {
   readonly workspaceId: string
 }
 
+/** Analyze one public web page into a Brand identity suggestion. */
+export interface MotifWebsiteAnalysisRequest {
+  /** User-entered address; http or https only. */
+  readonly url: string
+}
+
+/** Identity suggestion read from one web page, for the user to review in the form. */
+export interface MotifWebsiteSuggestion {
+  /** Suggested Brand name from the document title, when the page declares one. */
+  readonly name?: string
+  /** Suggested identity; unset fields keep the Brand form defaults. */
+  readonly identity: MotifBrandIdentity
+  /** Final page URL after redirects. */
+  readonly source: string
+}
+
+/** One file in a Brand's timeline folder, as the editor surface shows it. */
+export interface MotifTimelineEntry {
+  /** File name within the timeline folder. */
+  readonly name: string
+  /** Size in bytes. */
+  readonly bytes: number
+  /** ISO instant of the last local modification. */
+  readonly updatedAt: string
+}
+
+/** Read one Brand's timeline folder. */
+export interface MotifTimelineRequest {
+  /** Stable folder slug of the Brand. */
+  readonly brandId: string
+}
+
 /** One backend-scoped action. */
 export interface MotifBackendRequest {
   /** Backend to act on. */
@@ -112,4 +156,64 @@ export interface MotifActionResult {
   readonly ok: boolean
   /** One sentence safe to show beside the card. */
   readonly message: string
+}
+
+
+/** AI provider a user can authenticate with an API key instead of a CLI subscription. */
+export type MotifApiProvider = 'anthropic' | 'openai'
+
+/** Save (insert or replace) one provider API key. */
+export interface MotifApiKeySaveRequest {
+  /** Provider the key belongs to. */
+  readonly provider: MotifApiProvider
+  /** The key exactly as pasted; the Host trims and validates it. */
+  readonly apiKey: string
+}
+
+/** Verify one supplied key, or the stored key when `apiKey` is omitted. */
+export interface MotifApiKeyTestRequest {
+  /** Provider the key belongs to. */
+  readonly provider: MotifApiProvider
+  /** A draft key to verify without storing; omitted tests the stored key. */
+  readonly apiKey?: string
+}
+
+/** Provider-scoped credential query or deletion. */
+export interface MotifApiKeyRequest {
+  /** Provider to act on. */
+  readonly provider: MotifApiProvider
+}
+
+/** UI-safe view of one provider's stored key; never the value. */
+export interface MotifApiKeyStatus {
+  /** Provider this status describes. */
+  readonly provider: MotifApiProvider
+  /** Whether a key is stored in the Host credential store. */
+  readonly configured: boolean
+  /** Masked preview of the stored key (last characters only). */
+  readonly masked?: string
+  /** Environment variable the backend reads this key from. */
+  readonly env: string
+  /** CLI backend the key authenticates. */
+  readonly backend: MotifBackend
+  /** Whether the Host store accepts writes. */
+  readonly writable: boolean
+}
+
+/** Truthful result of one verification request. */
+export interface MotifApiKeyTestResult {
+  /** Whether the provider accepted the key. */
+  readonly ok: boolean
+  /** One sentence safe to show beside the card. */
+  readonly detail: string
+}
+
+/** Save outcome: the stored fact plus the verification result. */
+export interface MotifApiKeySaveResult {
+  /** Whether the key is now stored (validation passed). */
+  readonly stored: boolean
+  /** Verification of the key just stored. */
+  readonly test: MotifApiKeyTestResult
+  /** UI-safe status after the write. */
+  readonly status: MotifApiKeyStatus
 }

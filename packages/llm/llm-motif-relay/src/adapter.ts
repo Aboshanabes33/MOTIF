@@ -226,18 +226,14 @@ export class RelayAdapter extends LlmAdapter {
     }
 
     this.options.host.status(sessionId, selected.backend, selected.id, 'started')
-    const brand = await this.options.host.readBrand(target.brandRoot)
-    const task = buildRelayTask({
-      editRequest,
-      brand: brand.definition,
-      timelineFiles: brand.timelineFiles,
-      conversation: conversationSummary(options.messages, this.options.limits.conversation),
-    })
 
     if (options.signal?.aborted === true) {
       throw new LlmError('motif-relay: the send was cancelled before the run started', 'ABORTED')
     }
 
+    // Deadline and cancellation cover every stage after `started`, including
+    // Brand snapshot and task preparation, so a slow or failing read cannot
+    // leave the send in a non-terminal state.
     const controller = new AbortController()
     let timedOut = false
     const onAbort = (): void => { controller.abort() }
@@ -251,6 +247,47 @@ export class RelayAdapter extends LlmAdapter {
       options.signal?.removeEventListener('abort', onAbort)
     }
 
+    // Terminal status is published exactly once per send, from any stage.
+    let terminalEmitted = false
+    const emitTerminal = (status: 'finished' | 'failed'): void => {
+      if (terminalEmitted) return
+      terminalEmitted = true
+      this.options.host.status(sessionId, selected.backend, selected.id, status)
+    }
+
+    const aborted = new Promise<never>((_resolve, reject) => {
+      controller.signal.addEventListener('abort', () => {
+        reject(timedOut ? timeoutFailureFor(context) : cancelledFailure(context))
+      }, { once: true })
+    })
+    // The race rejection stays armed for the run stage; never let an
+    // unlistened rejection surface after the send already settled.
+    aborted.catch(() => {})
+
+    const toFailure = (error: unknown): LlmError => {
+      const failure = isRelayFailure(error) ? error : failureFromError(error, context)
+      if (failure.kind !== 'cancelled') emitTerminal('failed')
+      return failureError(failure)
+    }
+
+    let task: string
+    try {
+      const prepare = (async (): Promise<string> => {
+        const brand = await this.options.host.readBrand(target.brandRoot)
+        return buildRelayTask({
+          editRequest,
+          brand: brand.definition,
+          timelineFiles: brand.timelineFiles,
+          conversation: conversationSummary(options.messages, this.options.limits.conversation),
+        })
+      })()
+      prepare.catch(() => {}) // the race below owns the outcome
+      task = await Promise.race([prepare, aborted])
+    } catch (error: unknown) {
+      release()
+      throw toFailure(error)
+    }
+
     let activation: SubagentActivation
     try {
       activation = await this.options.host.start({
@@ -261,34 +298,26 @@ export class RelayAdapter extends LlmAdapter {
       })
     } catch (error: unknown) {
       release()
-      this.options.host.status(sessionId, selected.backend, selected.id, 'failed')
-      throw failureError(failureFromError(error, context))
+      throw toFailure(error)
     }
     this.options.host.status(sessionId, selected.backend, selected.id, 'working')
 
-    const cancelled = new Promise<never>((_resolve, reject) => {
-      controller.signal.addEventListener('abort', () => {
-        reject(timedOut ? timeoutFailureFor(context) : cancelledFailure(context))
-      }, { once: true })
-    })
     let result: SubagentResult
     try {
-      result = await Promise.race([activation.result, cancelled])
+      result = await Promise.race([activation.result, aborted])
     } catch (error: unknown) {
       await activation.dispose().then(() => undefined, () => undefined)
       release()
-      const failure = isRelayFailure(error) ? error : failureFromError(error, context)
-      if (failure.kind !== 'cancelled') this.options.host.status(sessionId, selected.backend, selected.id, 'failed')
-      throw failureError(failure)
+      throw toFailure(error)
     }
     release()
 
     const failure = failureFromResult(result, context)
     if (failure !== undefined) {
-      if (failure.kind !== 'cancelled') this.options.host.status(sessionId, selected.backend, selected.id, 'failed')
+      if (failure.kind !== 'cancelled') emitTerminal('failed')
       throw failureError(failure)
     }
-    this.options.host.status(sessionId, selected.backend, selected.id, 'finished')
+    emitTerminal('finished')
 
     const answer = textOf(result)
     yield { type: 'block-start', index: 0, blockType: 'text' }
