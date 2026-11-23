@@ -6,9 +6,9 @@
  * @module @deepseek-ai/dsh-motif-core/brand-store
  */
 
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifBrandProblem } from './types.ts'
+import { mkdir, readFile, readdir, realpath, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
+import { isAbsolute, join, relative } from 'node:path'
+import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifBrandProblem, MotifTimelineEntry } from './types.ts'
 
 /** Raised when a Brand form or folder cannot be accepted. */
 export class MotifBrandError extends Error {
@@ -63,15 +63,26 @@ interface StoredBrand {
 
 /**
  * Turn a display name into a folder slug.
+ *
+ * Unicode letters and numbers are preserved, so Arabic (and any other
+ * non-ASCII) names keep their identity instead of collapsing into one shared
+ * fallback: two distinct Arabic names produce two distinct folders. The name
+ * is NFKC-normalized first, which folds compatibility spellings (and NFC/NFD
+ * variants of the same text) into one slug; every run of anything that is
+ * not a letter or number - punctuation, symbols, emoji, path separators, and
+ * control characters - becomes a single dash, so a slug can never escape its
+ * directory or carry invisible characters.
  * @param name - user-facing name.
- * @returns lowercase slug, never empty.
+ * @returns lowercase slug of at most 48 code points, never empty.
  */
 export function slugify(name: string): string {
-  const slug = name.normalize('NFKD')
+  const slug = [...name.normalize('NFKC')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')]
     .slice(0, 48)
+    .join('')
+    .replace(/-+$/g, '')
   return slug === '' ? 'brand' : slug
 }
 
@@ -143,38 +154,175 @@ function decodeLogo(dataUrl: string): { bytes: Buffer; extension: string } {
  * @returns the stored Brand view.
  * @throws {MotifBrandError} on an empty name, an existing folder, or a bad logo.
  */
+/** Monotonic suffix keeping one process's temporary files distinct. */
+let temporaryCounter = 0
+
+/**
+ * Write one file beside its final name, then rename it into place, so a
+ * reader never meets a half-written file and a failed write leaves no final
+ * name behind.
+ * @param path - final file path.
+ * @param contents - bytes to persist.
+ */
+async function writeFileAtomic(path: string, contents: string | Buffer): Promise<void> {
+  const temporary = `${path}.tmp-${process.pid}-${temporaryCounter += 1}`
+  try {
+    await writeFile(temporary, contents)
+    await rename(temporary, path)
+  } catch (reason: unknown) {
+    await unlink(temporary).catch(() => {})
+    throw reason
+  }
+}
+
+/**
+ * Create a Brand folder and its definition.
+ *
+ * The folder is claimed with one exclusive `mkdir`: two concurrent requests
+ * for the same name resolve deterministically — the first succeeds, every
+ * other fails with EEXIST and overwrites nothing. Files appear through
+ * temporary writes renamed into place, and any failure removes only what this
+ * operation created.
+ * @param root - directory holding every Brand folder.
+ * @param request - validated form payload.
+ * @returns the stored Brand view.
+ * @throws {MotifBrandError} on an empty name, an existing folder, or a bad logo.
+ */
 export async function createBrand(root: string, request: MotifBrandCreateRequest): Promise<MotifBrand> {
   const name = request.name.trim()
   if (name === '') throw new MotifBrandError('Brand name is required')
   const id = slugify(name)
   const path = join(root, id)
-  if (await stat(path).then(() => true, () => false)) {
-    throw new MotifBrandError(`A Brand folder named “${id}” already exists`)
-  }
   const identity = normalizeIdentity(request.identity ?? IDENTITY_FALLBACK)
-  await mkdir(join(path, 'assets'), { recursive: true })
-  await mkdir(join(path, 'timeline'), { recursive: true })
-  let logo: string | undefined
-  if (request.logo !== undefined && request.logo !== '') {
-    const decoded = decodeLogo(request.logo)
-    await writeFile(join(path, 'assets', `logo.${decoded.extension}`), decoded.bytes)
-    logo = request.logo
+  // The logo is decoded before the folder is claimed so a bad logo fails
+  // without touching disk at all.
+  const decoded = request.logo === undefined || request.logo === '' ? undefined : decodeLogo(request.logo)
+
+  await mkdir(root, { recursive: true })
+  try {
+    await mkdir(path)
+  } catch (reason: unknown) {
+    if ((reason as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new MotifBrandError(`A Brand folder named “${id}” already exists`)
+    }
+    throw reason
   }
-  const updatedAt = new Date().toISOString()
-  const stored: StoredBrand = { version: 1, name, identity, ...logo === undefined ? {} : { logo }, updatedAt }
-  await writeFile(join(path, 'brand.json'), `${JSON.stringify(stored, null, 2)}\n`)
-  await writeFile(join(path, 'brand.md'), brandMarkdown(name, identity))
-  return { id, name, path, identity, ...logo === undefined ? {} : { logo }, updatedAt, videoCount: 0 }
+
+  // The exclusive claim makes everything inside `path` this operation's own;
+  // cleanup removes only files it wrote and only directories it created.
+  const files: string[] = []
+  const directories = [join(path, 'assets'), join(path, 'timeline')]
+  try {
+    for (const directory of directories) {
+      await mkdir(directory)
+    }
+    let logo: string | undefined
+    if (decoded !== undefined) {
+      const target = join(path, 'assets', `logo.${decoded.extension}`)
+      await writeFileAtomic(target, decoded.bytes)
+      files.push(target)
+      logo = request.logo
+    }
+    const updatedAt = new Date().toISOString()
+    const stored: StoredBrand = { version: 1, name, identity, ...logo === undefined ? {} : { logo }, updatedAt }
+    const metadata = join(path, 'brand.json')
+    await writeFileAtomic(metadata, `${JSON.stringify(stored, null, 2)}\n`)
+    files.push(metadata)
+    const definition = join(path, 'brand.md')
+    await writeFileAtomic(definition, brandMarkdown(name, identity))
+    files.push(definition)
+    return { id, name, path, identity, ...logo === undefined ? {} : { logo }, updatedAt, videoCount: 0 }
+  } catch (reason: unknown) {
+    for (const file of files) {
+      await unlink(file).catch(() => {})
+    }
+    for (const directory of [...directories].reverse()) {
+      await rmdir(directory).catch(() => {})
+    }
+    // rmdir refuses a folder holding anything foreign, so only an empty,
+    // fully-cleaned claim is removed.
+    await rmdir(path).catch(() => {})
+    throw reason
+  }
 }
 
-/** Count timeline entries that look like video work products. */
+/**
+ * Remove a Brand folder only while it still holds exactly the Brand this
+ * operation wrote: the stored metadata must parse and match the name and
+ * creation instant of the folder the caller just created. Any mismatch -
+ * foreign, replaced, or unreadable content - keeps the folder, so a rollback
+ * can never delete pre-existing user data.
+ * @param brand - the Brand view returned by {@link createBrand}.
+ * @returns whether the folder was removed.
+ */
+export async function removeCreatedBrand(brand: MotifBrand): Promise<boolean> {
+  let stored: StoredBrand
+  try {
+    stored = JSON.parse(await readFile(join(brand.path, 'brand.json'), 'utf8')) as StoredBrand
+  } catch {
+    return false
+  }
+  if (stored?.version !== 1 || stored.name !== brand.name || stored.updatedAt !== brand.updatedAt) {
+    return false
+  }
+  // Refuse cleanup if anything appeared after creation. Never recursively
+  // delete a workspace: an agent or another process may already have written it.
+  try {
+    const top = await readdir(brand.path)
+    if (top.some(name => !['brand.json', 'brand.md', 'assets', 'timeline'].includes(name))) return false
+    if ((await readdir(join(brand.path, 'timeline'))).length !== 0) return false
+    const assets = await readdir(join(brand.path, 'assets'))
+    const decoded = brand.logo ? decodeLogo(brand.logo) : undefined
+    const expectedLogo = decoded ? `logo.${decoded.extension}` : undefined
+    if (assets.some(name => name !== expectedLogo) || assets.length !== (expectedLogo ? 1 : 0)) return false
+    if (await readFile(join(brand.path, 'brand.md'), 'utf8') !== brandMarkdown(brand.name, brand.identity)) return false
+    if (decoded !== undefined && expectedLogo !== undefined && !(await readFile(join(brand.path, 'assets', expectedLogo))).equals(decoded.bytes)) return false
+    if (expectedLogo) await unlink(join(brand.path, 'assets', expectedLogo))
+    await rmdir(join(brand.path, 'assets'))
+    await rmdir(join(brand.path, 'timeline'))
+    await unlink(join(brand.path, 'brand.md'))
+    await unlink(join(brand.path, 'brand.json'))
+    await rmdir(brand.path)
+    return true
+  } catch { return false }
+
+}
+
+/** Video containers Motif can ingest as a Source Video or write as an edit result. */
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.m4v'])
+
+/**
+ * True when a file name is a video asset Motif can work with.
+ * Captions (.srt/.vtt), images, Markdown, and JSON are not videos.
+ * @param name - bare file name.
+ */
+export function isVideoAsset(name: string): boolean {
+  const lower = name.toLowerCase()
+  const dot = lower.lastIndexOf('.')
+  return dot > 0 && VIDEO_EXTENSIONS.has(lower.slice(dot))
+}
+
+/**
+ * Count actual video assets anywhere in the Brand folder. The timeline
+ * directory holds the Markdown/JSON edit log, not footage, so its entries
+ * only count when they are video files.
+ */
 async function countVideos(path: string): Promise<number> {
-  const entries = await readdir(join(path, 'timeline'), { withFileTypes: true })
-    .catch((error: unknown) => {
-      if (isMissingError(error)) return []
-      throw error
-    })
-  return entries.filter(entry => entry.isFile() && !entry.name.startsWith('.')).length
+  let count = 0
+  const walk = async (dir: string): Promise<void> => {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      if (entry.isDirectory()) {
+        await walk(join(dir, entry.name))
+      } else if (entry.isFile() && isVideoAsset(entry.name)) {
+        count += 1
+      }
+    }
+  }
+  await walk(path)
+  return count
+
 }
 
 /**
@@ -261,4 +409,29 @@ export async function listBrands(
   workspaceIdOf: (path: string) => string | undefined,
 ): Promise<MotifBrand[]> {
   return (await listBrandsDetailed(root, workspaceIdOf)).brands
+}
+
+/**
+ * List one Brand's timeline files, most recently modified first.
+ * @param root - directory holding every Brand folder.
+ * @param brandId - Brand folder slug; anything outside the slug alphabet is rejected.
+ * @returns the timeline entries, empty when the Brand has no timeline folder yet.
+ * @throws {MotifBrandError} when the id is not a folder slug.
+ */
+export async function listTimeline(root: string, brandId: string): Promise<MotifTimelineEntry[]> {
+  if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(brandId)) throw new MotifBrandError('Unknown Brand folder')
+  const dir = join(root, brandId, 'timeline')
+  const base = await realpath(root)
+  let canonical: string
+  try { canonical = await realpath(dir) }
+  catch (reason) { if ((reason as NodeJS.ErrnoException).code === 'ENOENT') return []; throw reason }
+  const inside = relative(base, canonical)
+  if (inside === '..' || inside.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(inside)) throw new MotifBrandError('Timeline is outside its Brand root')
+  const entries = await readdir(canonical, { withFileTypes: true })
+  const files = entries.filter(entry => entry.isFile() && !entry.name.startsWith('.'))
+  const timeline = await Promise.all(files.map(async (entry) => {
+    const info = await stat(join(dir, entry.name))
+    return { name: entry.name, bytes: info.size, updatedAt: info.mtime.toISOString() }
+  }))
+  return timeline.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
 }
