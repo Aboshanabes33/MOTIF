@@ -8,6 +8,8 @@
 
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { BrandSchemaError, parseStoredBrand } from './brand-schema.ts'
+import type { StoredBrand } from './brand-schema.ts'
 import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity } from './types.ts'
 
 /** Raised when a Brand form or folder cannot be accepted. */
@@ -24,15 +26,6 @@ const IDENTITY_FALLBACK: MotifBrandIdentity = {
   arabicFont: 'IBM Plex Sans Arabic',
   motion: 'soft',
   caption: 'word',
-}
-
-/** Stored schema, versioned so a later release can migrate it. */
-interface StoredBrand {
-  version: 1
-  name: string
-  identity: MotifBrandIdentity
-  logo?: string
-  updatedAt: string
 }
 
 /**
@@ -105,9 +98,9 @@ export function normalizeIdentity(identity: MotifBrandIdentity): MotifBrandIdent
 function decodeLogo(dataUrl: string): { bytes: Buffer; extension: string } {
   const match = /^data:image\/(png|jpeg|jpg|webp|svg\+xml);base64,(.+)$/s.exec(dataUrl)
   if (match === null) throw new MotifBrandError('Logo must be a PNG, JPEG, WebP, or SVG data URL')
-  const mime = match[1]!
+  const [, mime = '', data = ''] = match
   const extension = mime === 'jpeg' ? 'jpg' : mime === 'svg+xml' ? 'svg' : mime
-  return { bytes: Buffer.from(match[2]!, 'base64'), extension }
+  return { bytes: Buffer.from(data, 'base64'), extension }
 }
 
 /**
@@ -154,15 +147,16 @@ async function countVideos(path: string): Promise<number> {
  * @returns the Brand view, or undefined when the folder has no `brand.json`.
  */
 export async function readBrand(path: string, workspaceId?: string): Promise<MotifBrand | undefined> {
-  const raw = await readFile(join(path, 'brand.json'), 'utf8').catch(() => undefined)
+  const file = join(path, 'brand.json')
+  const raw = await readFile(file, 'utf8').catch((reason: unknown) => {
+    if ((reason as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw reason
+  })
   if (raw === undefined) return undefined
-  let stored: StoredBrand
-  try {
-    stored = JSON.parse(raw) as StoredBrand
-  } catch {
-    return undefined
-  }
-  if (typeof stored.name !== 'string' || stored.name.trim() === '') return undefined
+  let value: unknown
+  try { value = JSON.parse(raw) }
+  catch { throw new BrandSchemaError(file, 'Brand metadata is not valid JSON') }
+  const stored = parseStoredBrand(value, file)
   const identity = { ...IDENTITY_FALLBACK, ...stored.identity }
   return {
     id: path.split(/[\\/]/).filter(Boolean).at(-1) ?? slugify(stored.name),
