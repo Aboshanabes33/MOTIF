@@ -86,6 +86,22 @@ export interface MotifBrandCreateResult {
   readonly workspaceId: string
 }
 
+/** Analyze one public web page into a Brand identity suggestion. */
+export interface MotifWebsiteAnalysisRequest {
+  /** User-entered address; http or https only. */
+  readonly url: string
+}
+
+/** Identity suggestion read from one web page, for the user to review in the form. */
+export interface MotifWebsiteSuggestion {
+  /** Suggested Brand name from the document title, when the page declares one. */
+  readonly name?: string
+  /** Suggested identity; unset fields keep the Brand form defaults. */
+  readonly identity: MotifBrandIdentity
+  /** Final page URL after redirects. */
+  readonly source: string
+}
+
 /** One file in a Brand's timeline folder, as the editor surface shows it. */
 export interface MotifTimelineEntry {
   /** File name within the timeline folder. */

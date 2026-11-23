@@ -14,6 +14,7 @@ import { dshPath } from '@deepseek-ai/dsh-home-paths'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { createBrand, listBrands, listTimeline } from './brand-store.ts'
+import { analyzeWebsite } from './website-analysis.ts'
 import {
   DEFAULT_COMMANDS,
   inspectConnections,
@@ -30,10 +31,14 @@ import type {
   MotifSnapshot,
   MotifTimelineEntry,
   MotifTimelineRequest,
+  MotifWebsiteAnalysisRequest,
+  MotifWebsiteSuggestion,
 } from './types.ts'
 
 export type * from './types.ts'
 export { createBrand, listBrands, listTimeline, brandMarkdown, normalizeIdentity, slugify, MotifBrandError } from './brand-store.ts'
+export { analyzeWebsite, parseWebsiteUrl } from './website-analysis.ts'
+export type { WebsiteAnalysisInternals } from './website-analysis.ts'
 export {
   DEFAULT_COMMANDS,
   inspectConnections,
@@ -129,6 +134,17 @@ export class MotifController extends TypertRemoteService {
     const workspace = await this.ctx.workspaceRegistry.create(brand.path)
     await workspace.setTitle(brand.name)
     return { brand: { ...brand, workspaceId: workspace.id }, workspaceId: workspace.id }
+  }
+
+  /**
+   * Analyze one public web page into a Brand identity suggestion for the form.
+   * @param request - user-entered address.
+   * @returns the suggested name and identity, plus the final page URL.
+   * @throws {MotifBrandError} on an unusable address, unreachable page, or non-HTML answer.
+   */
+  @Remote('analyzeWebsite')
+  analyzeWebsite(request: MotifWebsiteAnalysisRequest): Promise<MotifWebsiteSuggestion> {
+    return analyzeWebsite(request.url)
   }
 
   /**
