@@ -542,6 +542,43 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('saves a validated default model selection without a Session', async () => {
+    const { ctx } = await harness()
+    let stored = { provider: 'deepseek-official', model: 'deepseek-chat' }
+    const remote = await createSessionTestRemote(ctx, {
+      defaultModelSelection: () => stored,
+      saveDefaultModelSelection: (selection) => { stored = selection },
+      cwd: '/tmp',
+    })
+
+    const selected = expectValue(await remote.selectDefaultModel(request({
+      provider: 'deepseek-official',
+      model: 'deepseek-reasoner',
+      reasoningEffort: 'max',
+    })))
+    expect(selected.selected).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-reasoner',
+      reasoningEffort: 'max',
+    })
+    expect(stored).toEqual(selected.selected)
+
+    const rejected = await remote.selectDefaultModel(request({
+      provider: 'missing',
+      model: 'model',
+    }))
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: {
+        code: 'session/model-unavailable',
+        message: 'Select an available model before sending a message.',
+        details: { provider: 'missing', model: 'model' },
+      },
+    })
+    expect(stored).toEqual(selected.selected)
+    await ctx.fiber.dispose()
+  })
+
   it('follows default changes until an explicit selection through the Web create entrypoint', async () => {
     const { ctx, agent: template } = await harness()
     onTestFinished(() => ctx.fiber.dispose())

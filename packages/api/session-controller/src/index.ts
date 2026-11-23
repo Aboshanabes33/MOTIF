@@ -53,6 +53,7 @@ import type {
   SessionOpenWorkspacePathValue,
   SessionEventsPage, SessionPageRequest, SessionEventFrame, SessionObserveEventRequest,
   SessionProjectionFrame, SessionStateRequest, SessionState, SessionWaitRequest, SessionWaitValue,
+  ModelSelection,
   SessionPromptRequest,
   SessionPromptValue,
   SessionRenameRequest,
@@ -289,6 +290,17 @@ export class SessionController extends TypertRemoteService {
   @Remote('selectModel')
   selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue> {
     return this.commands.selectModel(request)
+  }
+
+  /**
+   * Select the deployment default model from a settings surface; Sessions
+   * created later start with it. No Session is required or affected.
+   * @param request - requested provider, model, and optional reasoning effort.
+   * @returns the normalized selection stored as the default.
+   */
+  @Remote('selectDefaultModel')
+  selectDefaultModel(request: ModelSelection): Promise<SessionSelectModelValue> {
+    return this.commands.selectDefaultModel(request)
   }
 
   /**
