@@ -3245,6 +3245,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-model-selection':
         specifier: workspace:*
         version: link:../../client/ui-model-selection
+      '@deepseek-ai/dsh-client-ui-motif':
+        specifier: workspace:*
+        version: link:../../client/ui-motif
       '@deepseek-ai/dsh-client-ui-open-in-app':
         specifier: workspace:*
         version: link:../../client/ui-open-in-app
@@ -3413,6 +3416,9 @@ importers:
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
         version: link:../../util/launch-environment
+      '@deepseek-ai/dsh-llm-motif-relay':
+        specifier: workspace:*
+        version: link:../../llm/llm-motif-relay
       '@deepseek-ai/dsh-mcp-account':
         specifier: workspace:*
         version: link:../../mcp/mcp-account
@@ -3425,6 +3431,9 @@ importers:
       '@deepseek-ai/dsh-message-quotes':
         specifier: workspace:*
         version: link:../../session/message-quotes
+      '@deepseek-ai/dsh-motif-core':
+        specifier: workspace:*
+        version: link:../../motif/motif-core
       '@deepseek-ai/dsh-office-kit':
         specifier: workspace:*
         version: link:../../document/office-kit
@@ -3461,6 +3470,12 @@ importers:
       '@deepseek-ai/dsh-skill-office':
         specifier: workspace:*
         version: link:../../skill/skill-office
+      '@deepseek-ai/dsh-subagent-claude-code':
+        specifier: workspace:*
+        version: link:../../subagent/subagent-claude-code
+      '@deepseek-ai/dsh-subagent-codex':
+        specifier: workspace:*
+        version: link:../../subagent/subagent-codex
       '@deepseek-ai/dsh-subprocess':
         specifier: workspace:*
         version: link:../../subprocess/subprocess
@@ -5406,6 +5421,36 @@ importers:
       react-dom:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
+
+  packages/client/ui-motif:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../locale
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:*
+        version: link:../ui-conversation
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../ui-primitives
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:*
+        version: link:../ui-settings
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../ui-slots
+      '@deepseek-ai/dsh-client-ui-workspace':
+        specifier: workspace:*
+        version: link:../ui-workspace
+      '@deepseek-ai/dsh-motif-core':
+        specifier: workspace:*
+        version: link:../../motif/motif-core
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
 
   packages/client/ui-open-in-app:
     devDependencies:
@@ -15476,6 +15521,31 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../core/tools
+
+  packages/motif/motif-core:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:*
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../util/home-paths
+      '@deepseek-ai/dsh-llm-motif-relay':
+        specifier: workspace:*
+        version: link:../../llm/llm-motif-relay
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:*
+        version: link:../../typert/protocol
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../workspace/workspace
 
   packages/plan/plan-mode:
     dependencies:

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
-import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
+import type { MotifActionResult, MotifApiKeySaveRequest, MotifApiKeySaveResult, MotifApiKeyStatus, MotifApiKeyTestRequest, MotifApiKeyTestResult, MotifApiProvider, MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
 import type { MotifCopy } from './locales.ts'
 import styles from './MotifSection.module.css'
 
@@ -20,6 +20,14 @@ export interface MotifInjected {
   createBrand: (request: MotifBrandCreateRequest) => Promise<{ workspaceId: string }>
   /** Open a Brand's workspace. */
   openBrand: (workspaceId: string) => void
+  /** Validate, store, and verify one provider API key. */
+  saveApiKey: (request: MotifApiKeySaveRequest) => Promise<MotifApiKeySaveResult>
+  /** Verify a draft key, or the stored key when the request carries none. */
+  testApiKey: (request: MotifApiKeyTestRequest) => Promise<MotifApiKeyTestResult>
+  /** Remove one provider's stored key. */
+  deleteApiKey: (provider: MotifApiProvider) => Promise<MotifActionResult>
+  /** UI-safe status of one provider's stored key. */
+  apiKeyStatus: (provider: MotifApiProvider) => Promise<MotifApiKeyStatus>
 }
 
 type Props = { [K in keyof MotifInjected]?: MotifInjected[K] | undefined }
@@ -60,7 +68,6 @@ function useSnapshot(load: (() => Promise<MotifSnapshot>) | undefined) {
     void refresh()
     // The section is mounted once per settings visit; the host is polled by
     // explicit actions, so one read is enough to paint it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { snapshot, error, loading, refresh }
@@ -78,7 +85,7 @@ function ProviderMark({ backend }: { backend: 'claude-code' | 'codex' }) {
  * @param props - slot inject face.
  * @returns the AI section.
  */
-export function AiSection({ t = key => key, load, install, signIn, test }: Props) {
+export function AiSection({ t = key => key, load, install, signIn, test, saveApiKey, testApiKey, deleteApiKey, apiKeyStatus }: Props) {
   const { snapshot, error, loading, refresh } = useSnapshot(load)
   const [busy, setBusy] = useState<string | undefined>()
   const [messages, setMessages] = useState<Record<string, string>>({})
@@ -178,10 +185,7 @@ export function AiSection({ t = key => key, load, install, signIn, test }: Props
           <div className={styles.apiCard} style={{ marginTop: 14 }}>
             <strong>{t('ai.noSubscription')}</strong>
             <p style={{ color: '#94918c', fontSize: 13, margin: '6px 0 0' }}>{t('ai.apiKeyBody')}</p>
-            <div className={styles.apiRow}>
-              <input type="password" placeholder={t('ai.apiKeyPlaceholder')} aria-label={t('ai.apiKeyPlaceholder')} />
-              <button type="button" className={styles.secondary}>{t('ai.saveAndTest')}</button>
-            </div>
+            <ApiKeyCard t={t} saveApiKey={saveApiKey} testApiKey={testApiKey} deleteApiKey={deleteApiKey} apiKeyStatus={apiKeyStatus} />
           </div>
 
           <div className={styles.aiFooter} style={{ marginTop: 18 }}>
@@ -194,6 +198,135 @@ export function AiSection({ t = key => key, load, install, signIn, test }: Props
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+
+/** Display message from one thrown value. */
+function errorText(reason: unknown, fallback: string): string {
+  return reason instanceof Error ? reason.message : fallback
+}
+
+/**
+ * The no-subscription card: validate, store, and verify one provider API key,
+ * and manage the stored key. The key value never leaves this card except to
+ * the Host save/test Remotes.
+ */
+export function ApiKeyCard({ t, saveApiKey, testApiKey, deleteApiKey, apiKeyStatus }: {
+  t: (key: MotifCopy, vars?: Readonly<Record<string, string | number>>) => string
+  saveApiKey: MotifInjected['saveApiKey'] | undefined
+  testApiKey: MotifInjected['testApiKey'] | undefined
+  deleteApiKey: MotifInjected['deleteApiKey'] | undefined
+  apiKeyStatus: MotifInjected['apiKeyStatus'] | undefined
+}) {
+  const supported = saveApiKey !== undefined && testApiKey !== undefined && deleteApiKey !== undefined && apiKeyStatus !== undefined
+  const [provider, setProvider] = useState<MotifApiProvider>('anthropic')
+  const [draft, setDraft] = useState('')
+  const [status, setStatus] = useState<MotifApiKeyStatus | undefined>()
+  const [busy, setBusy] = useState<'save' | 'test' | 'remove' | undefined>()
+  const [result, setResult] = useState<{ ok: boolean; text: string } | undefined>()
+
+  useEffect(() => {
+    if (apiKeyStatus === undefined) return
+    let live = true
+    apiKeyStatus(provider).then(
+      (next) => { if (live) setStatus(next) },
+      () => { if (live) setStatus(undefined) },
+    )
+    return () => { live = false }
+  }, [apiKeyStatus, provider])
+
+  const choose = (next: MotifApiProvider): void => {
+    setProvider(next)
+    setDraft('')
+    setResult(undefined)
+  }
+
+  const save = async (): Promise<void> => {
+    if (saveApiKey === undefined) return
+    setBusy('save')
+    setResult(undefined)
+    try {
+      const outcome = await saveApiKey({ provider, apiKey: draft })
+      setDraft('')
+      setStatus(outcome.status)
+      setResult(outcome.test.ok
+        ? { ok: true, text: t('ai.apiKey.saved') }
+        : { ok: false, text: t('ai.apiKey.savedUnverified', { detail: outcome.test.detail }) })
+    } catch (reason: unknown) {
+      setResult({ ok: false, text: errorText(reason, t('ai.apiKey.failed')) })
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const retest = async (): Promise<void> => {
+    if (testApiKey === undefined) return
+    setBusy('test')
+    setResult(undefined)
+    try {
+      const outcome = await testApiKey({ provider })
+      setResult(outcome.ok
+        ? { ok: true, text: outcome.detail }
+        : { ok: false, text: t('ai.apiKey.testFailed', { detail: outcome.detail }) })
+    } catch (reason: unknown) {
+      setResult({ ok: false, text: errorText(reason, t('ai.apiKey.failed')) })
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const remove = async (): Promise<void> => {
+    if (deleteApiKey === undefined || apiKeyStatus === undefined) return
+    setBusy('remove')
+    setResult(undefined)
+    try {
+      await deleteApiKey(provider)
+      setStatus(await apiKeyStatus(provider))
+      setResult({ ok: true, text: t('ai.apiKey.removed') })
+    } catch (reason: unknown) {
+      setResult({ ok: false, text: errorText(reason, t('ai.apiKey.failed')) })
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  if (!supported) {
+    return <p className={styles.apiNote}>{t('ai.apiKey.unavailable')}</p>
+  }
+
+  return (
+    <div className={styles.apiKeyCard}>
+      <div className={styles.segmented} role="group" aria-label={t('ai.apiKey.provider')}>
+        <button type="button" aria-pressed={provider === 'anthropic'} disabled={busy !== undefined}
+          onClick={() => { choose('anthropic') }}>{t('ai.apiKey.provider.anthropic')}</button>
+        <button type="button" aria-pressed={provider === 'openai'} disabled={busy !== undefined}
+          onClick={() => { choose('openai') }}>{t('ai.apiKey.provider.openai')}</button>
+      </div>
+      {status?.configured === true && (
+        <div className={styles.apiStored}>
+          <span>{t('ai.apiKey.configured', { masked: status.masked ?? '' })}</span>
+          <button type="button" className={styles.ghost} disabled={busy !== undefined} onClick={() => { void retest() }}>
+            {busy === 'test' ? t('ai.apiKey.testing') : t('ai.apiKey.retest')}
+          </button>
+          <button type="button" className={styles.ghost} disabled={busy !== undefined} onClick={() => { void remove() }}>
+            {busy === 'remove' ? t('ai.working') : t('ai.apiKey.remove')}
+          </button>
+        </div>
+      )}
+      <div className={styles.apiRow}>
+        <input type="password" value={draft} placeholder={t('ai.apiKeyPlaceholder')} aria-label={t('ai.apiKeyPlaceholder')}
+          disabled={busy !== undefined}
+          onChange={(event) => { setDraft(event.target.value) }} />
+        <button type="button" className={styles.secondary} disabled={busy !== undefined || draft.trim() === ''}
+          onClick={() => { void save() }}>
+          {busy === 'save' ? t('ai.apiKey.saving') : t('ai.saveAndTest')}
+        </button>
+      </div>
+      {result !== undefined && (
+        <p className={result.ok ? styles.apiResultOk : styles.apiResultError} role={result.ok ? 'status' : 'alert'}>{result.text}</p>
+      )}
     </div>
   )
 }
@@ -235,7 +368,8 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
   if (creating) {
     return (
       <NewBrand t={t} onCancel={() => { setCreating(false) }} onCreated={async (request) => {
-        const result = await createBrand!(request)
+        if (createBrand === undefined) throw new Error('MOTIF: Brand creation requested without a Host createBrand injection')
+        const result = await createBrand(request)
         await refresh()
         setCreating(false)
         openBrand?.(result.workspaceId)
@@ -252,7 +386,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
         </div>
         <div className={styles.searchRow}>
           <input value={query} placeholder={t('brands.search')} aria-label={t('brands.search')}
-            onChange={event => { setQuery(event.target.value) }} />
+            onChange={(event) => { setQuery(event.target.value) }} />
           <button type="button" className={styles.primary} onClick={() => { setCreating(true) }}>+ {t('brands.new')}</button>
         </div>
       </div>
@@ -378,7 +512,7 @@ function NewBrand({ t, onCancel, onCreated }: {
           <div className={styles.panel}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.name')}>
-                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={event => { setName(event.target.value) }} autoFocus />
+                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={(event) => { setName(event.target.value) }} autoFocus />
               </Field>
               <Field label={t('brand.form.website')}>
                 <input placeholder={t('brand.form.websitePlaceholder')} />
@@ -408,7 +542,7 @@ function NewBrand({ t, onCancel, onCreated }: {
                 ['dark', 'brand.form.dark'],
               ] as const).map(([key, label]) => (
                 <Field key={key} label={t(label)}>
-                  <input type="color" value={identity[key]} onChange={event => { set(key, event.target.value.toUpperCase()) }
+                  <input type="color" value={identity[key]} onChange={(event) => { set(key, event.target.value.toUpperCase()) }
                   } />
                   <code>{identity[key]}</code>
                 </Field>
@@ -418,10 +552,10 @@ function NewBrand({ t, onCancel, onCreated }: {
             <h2 style={{ marginTop: 18 }}>{t('brand.form.fonts')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.latinFont')}>
-                <input value={identity.latinFont} onChange={event => { set('latinFont', event.target.value) }} />
+                <input value={identity.latinFont} onChange={(event) => { set('latinFont', event.target.value) }} />
               </Field>
               <Field label={t('brand.form.arabicFont')}>
-                <input value={identity.arabicFont} onChange={event => { set('arabicFont', event.target.value) }} />
+                <input value={identity.arabicFont} onChange={(event) => { set('arabicFont', event.target.value) }} />
               </Field>
             </div>
 
@@ -430,14 +564,14 @@ function NewBrand({ t, onCancel, onCreated }: {
                 { value: 'soft', label: t('brand.form.motionSoft') },
                 { value: 'snap', label: t('brand.form.motionSnap') },
                 { value: 'fade', label: t('brand.form.motionFade') },
-              ]} onChange={value => { set('motion', value) }} />
+              ]} onChange={(value) => { set('motion', value) }} />
             </Field>
             <Field label={t('brand.form.caption')}>
               <Segmented value={identity.caption as 'word' | 'plain' | 'boxed'} options={[
                 { value: 'word', label: t('brand.form.captionWord') },
                 { value: 'plain', label: t('brand.form.captionPlain') },
                 { value: 'boxed', label: t('brand.form.captionBoxed') },
-              ]} onChange={value => { set('caption', value) }} />
+              ]} onChange={(value) => { set('caption', value) }} />
             </Field>
           </div>
         </div>
