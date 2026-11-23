@@ -119,7 +119,11 @@ export function AiSection({ t = key => key, load, install, signIn, test, saveApi
     }
   }
 
-  const connected = snapshot?.connections.find(connection => connection.signedIn === 'yes')
+  const activity = snapshot?.activity ?? []
+  const running = activity.find(entry => entry.state === 'running')
+  const latest = activity[0]
+  const labelOf = (backend: string): string =>
+    snapshot?.connections.find(connection => connection.backend === backend)?.label ?? backend
 
   return (
     <div className={styles.root}>
@@ -150,6 +154,7 @@ export function AiSection({ t = key => key, load, install, signIn, test, saveApi
           <div className={styles.cards}>
             {(snapshot?.connections ?? []).map((connection: MotifConnection) => {
               const cardBusy = busy?.startsWith(connection.backend) === true
+              const cardActivity = activity.find(entry => entry.backend === connection.backend)
               const pill = connection.signedIn === 'yes'
                 ? { label: t('ai.connected'), className: styles.pillConnected }
                 : connection.signedIn === 'no'
@@ -169,6 +174,12 @@ export function AiSection({ t = key => key, load, install, signIn, test, saveApi
                     )}
                   </div>
                   <span className={`${styles.pill} ${pill.className}`}>{pill.label}</span>
+                  {cardActivity?.state === 'running' && (
+                    <span className={`${styles.pill} ${styles.pillRunning}`}>{t('ai.pillRunning')}</span>
+                  )}
+                  {cardActivity !== undefined && cardActivity.state !== 'running' && (
+                    <span className={`${styles.pill} ${styles.pillNeutral}`}>{t('ai.pillSelected', { model: cardActivity.model })}</span>
+                  )}
                   <div className={styles.connectionFoot}>
                     {!connection.installed && (
                       <button type="button" className={styles.primary} disabled={cardBusy}
@@ -202,9 +213,11 @@ export function AiSection({ t = key => key, load, install, signIn, test, saveApi
 
           <div className={styles.aiFooter} style={{ marginTop: 18 }}>
             <span className={styles.active}>
-              {connected === undefined
-                ? t('ai.noneActive')
-                : <>{t('ai.active')}: <strong>{connected.label}</strong> · {t('ai.connected')}</>}
+              {running !== undefined
+                ? <>{t('ai.running', { name: labelOf(running.backend) })}</>
+                : latest !== undefined
+                  ? <>{t('ai.active')}: <strong>{labelOf(latest.backend)}</strong> · {latest.model}</>
+                  : t('ai.noneActive')}
             </span>
             <button type="button" className={styles.secondary} onClick={() => { void refresh() }}>{t('ai.step1')}</button>
           </div>
@@ -387,6 +400,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand, an
     return (
       <NewBrand t={t} initial={prefill} onCancel={() => { setCreating(false); setPrefill(undefined) }} onCreated={async (request) => {
         const result = await create(request)
+
 
 
         await refresh()
@@ -964,12 +978,20 @@ export function BrandEditor({ brand, t = key => key, onClose, loadTimeline, send
 
 /** Blank-session home: the Brands page replaces the generic chat hero. */
 export function MotifHome({ t = key => key, load, createBrand, openBrand }: Props) {
+  const { snapshot } = useSnapshot(load)
+  const activity = snapshot?.activity ?? []
+  const running = activity.find(entry => entry.state === 'running')
+  const latest = activity[0]
   return (
     <div className={styles.home}>
       <BrandsSection t={t} load={load} createBrand={createBrand} openBrand={openBrand} />
       <div className={styles.homeStatus}>
         <span />
-        {t('editor.aiActive', { name: 'Claude Code' })}
+        {running !== undefined
+          ? t('editor.aiRunning', { name: running.model })
+          : latest !== undefined
+            ? t('editor.aiActive', { name: latest.model })
+            : t('ai.noneActive')}
       </div>
     </div>
   )

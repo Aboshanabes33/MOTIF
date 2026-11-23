@@ -96,9 +96,10 @@ export interface RelayHost {
    * Publish one coarse status fact.
    * @param sessionId - Session whose turn is delegating.
    * @param backend - command-line backend that ran the send.
+   * @param model - relay model selected for the send.
    * @param status - state reached.
    */
-  status(sessionId: SessionId, backend: string, status: RelayStatus): void
+  status(sessionId: SessionId, backend: string, model: string, status: RelayStatus): void
 }
 
 /** Fixed budgets applied to every relay send. */
@@ -224,7 +225,7 @@ export class RelayAdapter extends LlmAdapter {
       throw failureError(missingSignInFailure(context))
     }
 
-    this.options.host.status(sessionId, selected.backend, 'started')
+    this.options.host.status(sessionId, selected.backend, selected.id, 'started')
 
     if (options.signal?.aborted === true) {
       throw new LlmError('motif-relay: the send was cancelled before the run started', 'ABORTED')
@@ -251,7 +252,7 @@ export class RelayAdapter extends LlmAdapter {
     const emitTerminal = (status: 'finished' | 'failed'): void => {
       if (terminalEmitted) return
       terminalEmitted = true
-      this.options.host.status(sessionId, selected.backend, status)
+      this.options.host.status(sessionId, selected.backend, selected.id, status)
     }
 
     const aborted = new Promise<never>((_resolve, reject) => {
@@ -299,7 +300,7 @@ export class RelayAdapter extends LlmAdapter {
       release()
       throw toFailure(error)
     }
-    this.options.host.status(sessionId, selected.backend, 'working')
+    this.options.host.status(sessionId, selected.backend, selected.id, 'working')
 
     let result: SubagentResult
     try {
