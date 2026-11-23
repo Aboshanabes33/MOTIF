@@ -154,6 +154,8 @@ async function installed(command: string, internals: ConnectionInternals): Promi
 
 /**
  * Read both connection cards without starting a process beyond `--version`.
+ * Both probes start before either is awaited, so one slow or failing tool
+ * never delays the other's card; the returned order stays deterministic.
  * @param commands - executable names.
  * @param internals - test seams.
  * @returns one card per backend.
@@ -167,9 +169,11 @@ export async function inspectConnections(
     // A test environment supplies the credential roots; keep the real platform otherwise.
     Object.assign(facts, { env: internals.env, home: internals.env.HOME ?? internals.env.USERPROFILE ?? facts.home })
   }
+  const backends = ['claude-code', 'codex'] as const
+  const pending = backends.map(backend => probe(backend, commands, internals))
   const cards: MotifConnection[] = []
-  for (const backend of ['claude-code', 'codex'] as const) {
-    const found = await probe(backend, commands, internals)
+  for (const [index, backend] of backends.entries()) {
+    const found = await pending[index]
     const state = detectSignInState(backend, facts)
     const signedIn = state === 'present' ? 'yes' : state === 'absent' ? 'no' : 'unknown'
     cards.push({
