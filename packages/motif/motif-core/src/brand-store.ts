@@ -152,10 +152,40 @@ export async function createBrand(root: string, request: MotifBrandCreateRequest
   return { id, name, path, identity, ...logo === undefined ? {} : { logo }, updatedAt, videoCount: 0 }
 }
 
-/** Count timeline entries that look like video work products. */
+/** Video containers Motif can ingest as a Source Video or write as an edit result. */
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.m4v'])
+
+/**
+ * True when a file name is a video asset Motif can work with.
+ * Captions (.srt/.vtt), images, Markdown, and JSON are not videos.
+ * @param name - bare file name.
+ */
+export function isVideoAsset(name: string): boolean {
+  const lower = name.toLowerCase()
+  const dot = lower.lastIndexOf('.')
+  return dot > 0 && VIDEO_EXTENSIONS.has(lower.slice(dot))
+}
+
+/**
+ * Count actual video assets anywhere in the Brand folder. The timeline
+ * directory holds the Markdown/JSON edit log, not footage, so its entries
+ * only count when they are video files.
+ */
 async function countVideos(path: string): Promise<number> {
-  const entries = await readdir(join(path, 'timeline'), { withFileTypes: true }).catch(() => [])
-  return entries.filter(entry => entry.isFile() && !entry.name.startsWith('.')).length
+  let count = 0
+  const walk = async (dir: string): Promise<void> => {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      if (entry.isDirectory()) {
+        await walk(join(dir, entry.name))
+      } else if (entry.isFile() && isVideoAsset(entry.name)) {
+        count += 1
+      }
+    }
+  }
+  await walk(path)
+  return count
 }
 
 /**

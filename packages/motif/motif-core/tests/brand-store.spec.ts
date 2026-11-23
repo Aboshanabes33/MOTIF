@@ -77,6 +77,7 @@ describe('Brand folders', () => {
     const dir = await root()
     await createBrand(dir, { name: 'Timeline', identity: IDENTITY })
     await writeFile(join(dir, 'timeline', 'timeline', 'main.json'), '{}')
+    await writeFile(join(dir, 'timeline', 'timeline', 'edit.mp4'), '')
 
     expect((await listBrands(dir, () => undefined)).at(0)?.videoCount).toBe(1)
   })
