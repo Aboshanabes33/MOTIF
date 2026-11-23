@@ -8,11 +8,37 @@
 
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity } from './types.ts'
+import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifBrandProblem } from './types.ts'
 
 /** Raised when a Brand form or folder cannot be accepted. */
 export class MotifBrandError extends Error {
   override name = 'MotifBrandError'
+}
+
+/** Raised when a Brand folder's stored metadata cannot be understood. */
+export class MotifBrandCorruptError extends MotifBrandError {
+  override name = 'MotifBrandCorruptError'
+  /** Machine-readable reason, safe for the UI to branch on. */
+  readonly code = 'BRAND_CORRUPT' as const
+  /** Brand folder whose `brand.json` failed to parse or validate. */
+  readonly brandPath: string
+  constructor(brandPath: string, reason: string) {
+    super(`Brand at ${brandPath} has unreadable metadata: ${reason}`)
+    this.brandPath = brandPath
+  }
+}
+
+/** Full result of listing: the Brands that read plus the folders that did not. */
+export interface MotifBrandList {
+  readonly brands: MotifBrand[]
+  readonly problems: MotifBrandProblem[]
+}
+
+/** True when an fs failure means "not there" rather than "broken". */
+function isMissingError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false
+  const code = (error as NodeJS.ErrnoException).code
+  return code === 'ENOENT' || code === 'ENOTDIR'
 }
 
 const IDENTITY_FALLBACK: MotifBrandIdentity = {
@@ -105,9 +131,9 @@ export function normalizeIdentity(identity: MotifBrandIdentity): MotifBrandIdent
 function decodeLogo(dataUrl: string): { bytes: Buffer; extension: string } {
   const match = /^data:image\/(png|jpeg|jpg|webp|svg\+xml);base64,(.+)$/s.exec(dataUrl)
   if (match === null) throw new MotifBrandError('Logo must be a PNG, JPEG, WebP, or SVG data URL')
-  const mime = match[1]!
+  const [, mime = '', data = ''] = match
   const extension = mime === 'jpeg' ? 'jpg' : mime === 'svg+xml' ? 'svg' : mime
-  return { bytes: Buffer.from(match[2]!, 'base64'), extension }
+  return { bytes: Buffer.from(data, 'base64'), extension }
 }
 
 /**
@@ -143,7 +169,11 @@ export async function createBrand(root: string, request: MotifBrandCreateRequest
 
 /** Count timeline entries that look like video work products. */
 async function countVideos(path: string): Promise<number> {
-  const entries = await readdir(join(path, 'timeline'), { withFileTypes: true }).catch(() => [])
+  const entries = await readdir(join(path, 'timeline'), { withFileTypes: true })
+    .catch((error: unknown) => {
+      if (isMissingError(error)) return []
+      throw error
+    })
   return entries.filter(entry => entry.isFile() && !entry.name.startsWith('.')).length
 }
 
@@ -154,15 +184,21 @@ async function countVideos(path: string): Promise<number> {
  * @returns the Brand view, or undefined when the folder has no `brand.json`.
  */
 export async function readBrand(path: string, workspaceId?: string): Promise<MotifBrand | undefined> {
-  const raw = await readFile(join(path, 'brand.json'), 'utf8').catch(() => undefined)
+  const raw = await readFile(join(path, 'brand.json'), 'utf8')
+    .catch((error: unknown) => {
+      if (isMissingError(error)) return undefined
+      throw error
+    })
   if (raw === undefined) return undefined
   let stored: StoredBrand
   try {
     stored = JSON.parse(raw) as StoredBrand
-  } catch {
-    return undefined
+  } catch (error) {
+    throw new MotifBrandCorruptError(path, error instanceof Error ? error.message : String(error))
   }
-  if (typeof stored.name !== 'string' || stored.name.trim() === '') return undefined
+  if (typeof stored.name !== 'string' || stored.name.trim() === '') {
+    throw new MotifBrandCorruptError(path, 'brand.json has no usable name')
+  }
   const identity = { ...IDENTITY_FALLBACK, ...stored.identity }
   return {
     id: path.split(/[\\/]/).filter(Boolean).at(-1) ?? slugify(stored.name),
@@ -177,6 +213,44 @@ export async function readBrand(path: string, workspaceId?: string): Promise<Mot
 }
 
 /**
+ * List every Brand folder under one root, keeping the failures visible.
+ * A missing root is an empty list; an unreadable root throws. A folder whose
+ * `brand.json` is corrupt or unreadable lands in `problems` so the caller can
+ * say so instead of silently showing nothing.
+ * @param root - directory holding Brand folders.
+ * @param workspaceIdOf - maps a folder path to its registered Workspace id.
+ * @returns Brands, most recently edited first, plus per-folder problems.
+ */
+export async function listBrandsDetailed(
+  root: string,
+  workspaceIdOf: (path: string) => string | undefined,
+): Promise<MotifBrandList> {
+  const entries = await readdir(root, { withFileTypes: true })
+    .catch((error: unknown) => {
+      if (isMissingError(error)) return []
+      throw error
+    })
+  const brands: MotifBrand[] = []
+  const problems: MotifBrandProblem[] = []
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+    const path = join(root, entry.name)
+    try {
+      const brand = await readBrand(path, workspaceIdOf(path))
+      if (brand !== undefined) brands.push(brand)
+    } catch (error) {
+      problems.push({
+        path,
+        kind: error instanceof MotifBrandCorruptError ? 'corrupt' : 'unreadable',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+  brands.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+  return { brands, problems }
+}
+
+/**
  * List every readable Brand folder under one root.
  * @param root - directory holding Brand folders.
  * @param workspaceIdOf - maps a folder path to its registered Workspace id.
@@ -186,13 +260,5 @@ export async function listBrands(
   root: string,
   workspaceIdOf: (path: string) => string | undefined,
 ): Promise<MotifBrand[]> {
-  const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
-  const brands: MotifBrand[] = []
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.startsWith('.')) continue
-    const path = join(root, entry.name)
-    const brand = await readBrand(path, workspaceIdOf(path))
-    if (brand !== undefined) brands.push(brand)
-  }
-  return brands.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+  return (await listBrandsDetailed(root, workspaceIdOf)).brands
 }

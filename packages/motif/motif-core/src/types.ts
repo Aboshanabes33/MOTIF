@@ -60,10 +60,22 @@ export interface MotifBrand {
   readonly videoCount: number
 }
 
+/** One Brand folder that could not be read while listing. */
+export interface MotifBrandProblem {
+  /** Absolute folder that failed. */
+  readonly path: string
+  /** `corrupt` for unreadable `brand.json`, `unreadable` for I/O failures. */
+  readonly kind: 'corrupt' | 'unreadable'
+  /** Actionable one-sentence description. */
+  readonly message: string
+}
+
 /** One full read for the shell. */
 export interface MotifSnapshot {
   /** Brands in most-recently-edited order. */
   readonly brands: readonly MotifBrand[]
+  /** Brand folders that failed to read; empty when every folder read. */
+  readonly brandProblems: readonly MotifBrandProblem[]
   /** Both backend cards. */
   readonly connections: readonly MotifConnection[]
 }

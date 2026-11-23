@@ -540,6 +540,34 @@
   text-align: center;
 }
 
+.problems {
+  border: 1px solid #5a3d2b;
+  background: #241a12;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.problemsTitle {
+  color: #e8b57c;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.problemRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #c9c4bc;
+  font-size: 13px;
+  padding: 6px 0;
+}
+
+.problemRow + .problemRow {
+  border-top: 1px solid #3a2d20;
+}
+
 .searchRow {
   display: flex;
   gap: 10px;

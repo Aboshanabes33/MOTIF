@@ -13,7 +13,7 @@ import z from '@deepseek-ai/schemastery'
 import { dshPath } from '@deepseek-ai/dsh-home-paths'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { createBrand, listBrands } from './brand-store.ts'
+import { createBrand, listBrandsDetailed } from './brand-store.ts'
 import {
   DEFAULT_COMMANDS,
   inspectConnections,
@@ -31,7 +31,8 @@ import type {
 } from './types.ts'
 
 export type * from './types.ts'
-export { createBrand, listBrands, brandMarkdown, normalizeIdentity, slugify, MotifBrandError } from './brand-store.ts'
+export { createBrand, listBrands, listBrandsDetailed, brandMarkdown, normalizeIdentity, slugify, MotifBrandError, MotifBrandCorruptError } from './brand-store.ts'
+export type { MotifBrandList } from './brand-store.ts'
 export {
   DEFAULT_COMMANDS,
   inspectConnections,
@@ -99,7 +100,7 @@ export class MotifController extends TypertRemoteService {
       workspace.path,
       workspace.id,
     ]))
-    const brands = await listBrands(this.config.root, (path) => {
+    const { brands, problems } = await listBrandsDetailed(this.config.root, (path) => {
       const absolute = resolve(path)
       const canonical = (() => {
         try {
@@ -110,7 +111,7 @@ export class MotifController extends TypertRemoteService {
       })()
       return workspaces.get(absolute) ?? workspaces.get(canonical)
     })
-    return { brands, connections: await inspectConnections(this.commands) }
+    return { brands, brandProblems: problems, connections: await inspectConnections(this.commands) }
   }
 
   /**
