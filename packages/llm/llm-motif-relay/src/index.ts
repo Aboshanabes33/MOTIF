@@ -135,7 +135,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
       throw new Error(`motif-relay: timelineExtensions entries must start with a dot, got ${JSON.stringify(extension)}`)
     }
   }
-  const models: RelayModel[] = (config.models ?? []).map(entry => {
+  const models: RelayModel[] = (config.models ?? []).map((entry) => {
     const provider = entry.provider ?? backend
     const id = entry.id ?? provider
     return {
@@ -156,7 +156,9 @@ export function resolveConfig(config: Config): ResolvedConfig {
     if (model.id === '') throw new Error('motif-relay: every model needs an id')
     if (model.provider === '') throw new Error('motif-relay: every model needs a provider')
   }
-  const defaultModel = config.model ?? offered[0]!.id
+  const firstOffered = offered.at(0)
+  if (firstOffered === undefined) throw new Error('motif-relay: models must not be empty')
+  const defaultModel = config.model ?? firstOffered.id
   if (!seen.has(defaultModel)) {
     throw new Error(`motif-relay: model ${JSON.stringify(defaultModel)} is not in models (${[...seen].join(', ')})`)
   }
@@ -228,8 +230,8 @@ export function apply(ctx: Context, config: Config): void {
       maxTimelineFiles: resolved.maxTimelineFiles,
       maxTimelineBytes: resolved.maxTimelineBytes,
     }),
-    status: (sessionId, backend, status) => {
-      ctx.emit('motif-relay/status', { sessionId, backend, status })
+    status: (sessionId, backend, model, status) => {
+      ctx.emit('motif-relay/status', { sessionId, backend, model, status })
     },
   }
   ctx.effect(() => ctx.llm.registerAdapter([resolved.providerName], new RelayAdapter({

@@ -35,7 +35,7 @@ afterEach(async () => {
 
 describe('Brand folders', () => {
   it('slugifies a display name without leaving an empty folder name', () => {
-    expect(slugify('Nakheel Café')).toBe('nakheel-cafe')
+    expect(slugify('Nakheel Café')).toBe('nakheel-café')
     expect(slugify('  ***  ')).toBe('brand')
   })
 
@@ -43,10 +43,10 @@ describe('Brand folders', () => {
     const dir = await root()
     const brand = await createBrand(dir, { name: 'Nakheel Café', identity: IDENTITY })
 
-    expect(brand.id).toBe('nakheel-cafe')
-    expect(await readFile(join(dir, 'nakheel-cafe', 'brand.md'), 'utf8'))
+    expect(brand.id).toBe('nakheel-café')
+    expect(await readFile(join(dir, 'nakheel-café', 'brand.md'), 'utf8'))
       .toContain('Primary colour: #0F5C4B')
-    const stored = JSON.parse(await readFile(join(dir, 'nakheel-cafe', 'brand.json'), 'utf8')) as { name: string }
+    const stored = JSON.parse(await readFile(join(dir, 'nakheel-café', 'brand.json'), 'utf8')) as { name: string }
     expect(stored.name).toBe('Nakheel Café')
     expect((await listBrands(dir, () => 'workspace-1')).at(0)).toMatchObject({
       name: 'Nakheel Café',
@@ -80,6 +80,7 @@ describe('Brand folders', () => {
     const dir = await root()
     await createBrand(dir, { name: 'Timeline', identity: IDENTITY })
     await writeFile(join(dir, 'timeline', 'timeline', 'main.json'), '{}')
+    await writeFile(join(dir, 'timeline', 'timeline', 'edit.mp4'), '')
 
     expect((await listBrands(dir, () => undefined)).at(0)?.videoCount).toBe(1)
   })
