@@ -693,6 +693,7 @@
 .chatHead { display: flex; align-items: center; justify-content: space-between; }
 .chatHead h3 { margin: 0; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase; color: #9b9892; }
 .chatHead span { font-size: 11px; color: #35d07f; }
+.chatHead span[data-available='false'] { color: #b1442f; }
 .requestList { flex: 1; overflow: auto; display: grid; gap: 10px; align-content: start; }
 .request {
   border: 1px solid #2f2f34;
@@ -700,9 +701,11 @@
   padding: 12px;
   background: #202023;
 }
-.request[data-latest='true'] { border-color: #ff5a36; }
+.request[data-state='sending'] { border-color: #ff5a36; }
+.request[data-state='failed'] { border-color: #b1442f; }
 .requestMeta { font-size: 11px; color: #8d8a84; margin-bottom: 6px; }
 .request p { margin: 0; font-size: 13px; line-height: 1.5; color: #d7d4ce; }
+.requestDetail { margin-top: 6px !important; font-size: 12px !important; color: #8d8a84 !important; }
 .composerRow { display: flex; gap: 8px; }
 .composerRow input {
   flex: 1;
@@ -736,8 +739,19 @@
 .previewType { font-size: clamp(24px, 4vw, 52px); line-height: 1.05; letter-spacing: -0.03em; text-align: center; }
 .previewBar { position: absolute; left: 6%; bottom: 18%; width: 34%; height: 10px; border-radius: 2px; }
 .previewArabic { position: absolute; left: 6%; bottom: 7%; font-size: clamp(14px, 1.6vw, 22px); }
-.transport { display: flex; align-items: center; gap: 12px; color: #9b9892; font-size: 12px; }
-.transport input { flex: 1; accent-color: #ff5a36; }
+.exportGroup { display: flex; align-items: center; gap: 10px; }
+.exportNote { font-size: 11px; color: #8d8a84; }
+.emptyNote { margin: 0; font-size: 13px; line-height: 1.5; color: #8d8a84; }
+.composerHint { margin: 0; font-size: 12px; color: #b89b5e; }
+.previewLogo {
+  position: absolute;
+  top: 10%;
+  left: 6%;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 10px;
+}
 .inUseCard {
   display: flex;
   align-items: center;
@@ -752,15 +766,83 @@
 .inUseCard em { margin-left: auto; font-style: normal; font-size: 11px; color: #8d8a84; }
 .swatches { display: flex; gap: 6px; }
 .swatches span { width: 22px; height: 22px; border-radius: 6px; border: 1px solid #3a3a3f; }
-.lanes { display: grid; gap: 6px; }
-.lane { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 10px; }
-.laneName { font-size: 11px; color: #8d8a84; text-transform: uppercase; letter-spacing: 0.06em; }
-.laneTrack {
-  position: relative;
-  height: 26px;
-  border-radius: 6px;
-  background: #1d1d20;
-  border: 1px solid #2a2a2e;
+.timeline { display: grid; gap: 10px; }
+.timelineTitle {
+  margin: 0;
+  font-size: 11px;
+  color: #8d8a84;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.timelineList { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.timelineRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #2f2f34;
+  background: #1b1b1e;
+}
+.timelineName {
+  font-size: 13px;
+  color: #e8e6e1;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .laneTrack span { position: absolute; top: 4px; bottom: 4px; border-radius: 4px; opacity: 0.85; }
+
+
+.startCard:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.startCard:disabled:hover {
+  border-color: #3a3a3e;
+}
+
+.websiteFlow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #2f2f34;
+  border-radius: 12px;
+  background: #1b1b1e;
+}
+
+.websiteFlowLabel {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 220px;
+  font-size: 12px;
+  color: #9b9892;
+}
+
+.websiteFlowLabel input {
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid #333338;
+  background: #1d1d20;
+  color: #f4f2ee;
+  font-size: 13px;
+}
+
+.websiteFlowStatus {
+  font-size: 12px;
+  color: #9b9892;
+}
+
+.websiteFlowError {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: #d06b5a;
+}
+.timelineMeta { font-size: 11px; color: #8d8a84; white-space: nowrap; }

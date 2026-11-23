@@ -6,9 +6,9 @@
  * @module @deepseek-ai/dsh-motif-core/brand-store
  */
 
-import { mkdir, readFile, readdir, rename, rmdir, unlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity } from './types.ts'
+import { mkdir, readFile, readdir, realpath, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
+import { isAbsolute, join, relative } from 'node:path'
+import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifTimelineEntry } from './types.ts'
 
 /** Raised when a Brand form or folder cannot be accepted. */
 export class MotifBrandError extends Error {
@@ -37,15 +37,26 @@ interface StoredBrand {
 
 /**
  * Turn a display name into a folder slug.
+ *
+ * Unicode letters and numbers are preserved, so Arabic (and any other
+ * non-ASCII) names keep their identity instead of collapsing into one shared
+ * fallback: two distinct Arabic names produce two distinct folders. The name
+ * is NFKC-normalized first, which folds compatibility spellings (and NFC/NFD
+ * variants of the same text) into one slug; every run of anything that is
+ * not a letter or number - punctuation, symbols, emoji, path separators, and
+ * control characters - becomes a single dash, so a slug can never escape its
+ * directory or carry invisible characters.
  * @param name - user-facing name.
- * @returns lowercase slug, never empty.
+ * @returns lowercase slug of at most 48 code points, never empty.
  */
 export function slugify(name: string): string {
-  const slug = name.normalize('NFKD')
+  const slug = [...name.normalize('NFKC')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')]
     .slice(0, 48)
+    .join('')
+    .replace(/-+$/g, '')
   return slug === '' ? 'brand' : slug
 }
 
@@ -209,10 +220,40 @@ export async function createBrand(root: string, request: MotifBrandCreateRequest
   }
 }
 
-/** Count timeline entries that look like video work products. */
+/** Video containers Motif can ingest as a Source Video or write as an edit result. */
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.m4v'])
+
+/**
+ * True when a file name is a video asset Motif can work with.
+ * Captions (.srt/.vtt), images, Markdown, and JSON are not videos.
+ * @param name - bare file name.
+ */
+export function isVideoAsset(name: string): boolean {
+  const lower = name.toLowerCase()
+  const dot = lower.lastIndexOf('.')
+  return dot > 0 && VIDEO_EXTENSIONS.has(lower.slice(dot))
+}
+
+/**
+ * Count actual video assets anywhere in the Brand folder. The timeline
+ * directory holds the Markdown/JSON edit log, not footage, so its entries
+ * only count when they are video files.
+ */
 async function countVideos(path: string): Promise<number> {
-  const entries = await readdir(join(path, 'timeline'), { withFileTypes: true }).catch(() => [])
-  return entries.filter(entry => entry.isFile() && !entry.name.startsWith('.')).length
+  let count = 0
+  const walk = async (dir: string): Promise<void> => {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      if (entry.isDirectory()) {
+        await walk(join(dir, entry.name))
+      } else if (entry.isFile() && isVideoAsset(entry.name)) {
+        count += 1
+      }
+    }
+  }
+  await walk(path)
+  return count
 }
 
 /**
@@ -263,4 +304,29 @@ export async function listBrands(
     if (brand !== undefined) brands.push(brand)
   }
   return brands.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+}
+
+/**
+ * List one Brand's timeline files, most recently modified first.
+ * @param root - directory holding every Brand folder.
+ * @param brandId - Brand folder slug; anything outside the slug alphabet is rejected.
+ * @returns the timeline entries, empty when the Brand has no timeline folder yet.
+ * @throws {MotifBrandError} when the id is not a folder slug.
+ */
+export async function listTimeline(root: string, brandId: string): Promise<MotifTimelineEntry[]> {
+  if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(brandId)) throw new MotifBrandError('Unknown Brand folder')
+  const dir = join(root, brandId, 'timeline')
+  const base = await realpath(root)
+  let canonical: string
+  try { canonical = await realpath(dir) }
+  catch (reason) { if ((reason as NodeJS.ErrnoException).code === 'ENOENT') return []; throw reason }
+  const inside = relative(base, canonical)
+  if (inside === '..' || inside.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(inside)) throw new MotifBrandError('Timeline is outside its Brand root')
+  const entries = await readdir(canonical, { withFileTypes: true })
+  const files = entries.filter(entry => entry.isFile() && !entry.name.startsWith('.'))
+  const timeline = await Promise.all(files.map(async (entry) => {
+    const info = await stat(join(dir, entry.name))
+    return { name: entry.name, bytes: info.size, updatedAt: info.mtime.toISOString() }
+  }))
+  return timeline.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
 }
