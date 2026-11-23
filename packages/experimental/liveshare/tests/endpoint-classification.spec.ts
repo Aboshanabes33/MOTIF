@@ -39,3 +39,7 @@ describe('owner-only namespaces', () => {
     for (const [endpoint, classOf] of presets) expect(classOf, endpoint).toBe('owner-only')
   })
 })
+
+it('keeps the deployment default model mutation owner-only', () => {
+  expect(VIEWER_ENDPOINT_CLASSES['session/selectDefaultModel']).toBe('owner-only')
+})

@@ -40,7 +40,7 @@ export const DEFAULT_COMMANDS: MotifCommands = { claudeCode: 'claude', codex: 'c
 /** Host integrations replaceable by tests. */
 export interface ConnectionInternals {
   /** Platform override for executable resolution (default `process.platform`). */
-  readonly platform?: string
+  readonly platform?: NodeJS.Platform
   /** Environment used for credential paths and child processes. */
   readonly env?: NodeJS.ProcessEnv
   /** Override the existence probe. */
@@ -52,8 +52,6 @@ export interface ConnectionInternals {
   }) => Promise<{ stdout: string; stderr: string }>
   /** Override the detached sign-in spawn. */
   readonly spawn?: (file: string, args: readonly string[]) => SignInChild
-  /** Override the platform (default `process.platform`). */
-  readonly platform?: NodeJS.Platform
 }
 
 /** The slice of a spawned sign-in process the launch confirmation needs. */
@@ -118,7 +116,7 @@ export function platformExecutable(command: string, platform: string): string {
 }
 
 /** Platform one operation resolves executables for. */
-function platformOf(internals: ConnectionInternals): string {
+function platformOf(internals: ConnectionInternals): NodeJS.Platform {
   return internals.platform ?? process.platform
 }
 
@@ -135,9 +133,17 @@ function startError(error: unknown, label: string, platform: string): string {
   return `${label} could not run: ${tail.slice(0, 300)}`
 }
 
+/** Omit absent options so exact-optional callers preserve the resolver defaults. */
+function commandOptions(internals: ConnectionInternals): { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv } {
+  return {
+    ...(internals.platform === undefined ? {} : { platform: internals.platform }),
+    ...(internals.env === undefined ? {} : { env: internals.env }),
+  }
+}
+
 async function installed(command: string, internals: ConnectionInternals): Promise<boolean> {
   const exec = internals.exec ?? (async (file, args, options) => {
-    const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+    const launch = resolveWindowsCommand(file, args, commandOptions(internals))
     return await run(launch.file, [...launch.args], {
       timeout: options.timeout,
       maxBuffer: options.maxBuffer,
@@ -173,7 +179,9 @@ export async function inspectConnections(
   const pending = backends.map(backend => probe(backend, commands, internals))
   const cards: MotifConnection[] = []
   for (const [index, backend] of backends.entries()) {
-    const found = await pending[index]
+    const pendingProbe = pending[index]
+    if (pendingProbe === undefined) throw new Error('Connection probe index is missing')
+    const found = await pendingProbe
     const state = detectSignInState(backend, facts)
     const signedIn = state === 'present' ? 'yes' : state === 'absent' ? 'no' : 'unknown'
     cards.push({
@@ -210,7 +218,7 @@ export async function installBackend(
     const command = commandOf(backend, commands)
     if (await installed(command, internals)) return { ok: true, message: `${LABELS[backend]} is already installed.` }
     const exec = internals.exec ?? (async (file, args, options) => {
-      const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+      const launch = resolveWindowsCommand(file, args, commandOptions(internals))
       return await run(launch.file, [...launch.args], {
         timeout: options.timeout,
         maxBuffer: options.maxBuffer,
@@ -337,7 +345,7 @@ export async function signInBackend(
       }
     }
     const spawnSignIn = internals.spawn ?? ((file: string, args: readonly string[]): SignInChild => {
-      const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+      const launch = resolveWindowsCommand(file, args, commandOptions(internals))
       return spawn(launch.file, [...launch.args], {
         detached: true,
         stdio: 'ignore',
@@ -379,7 +387,7 @@ export async function testBackend(
     return { ok: false, message: `Install the official ${LABELS[backend]} tool first.` }
   }
   const exec = internals.exec ?? (async (file, args, options) => {
-    const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+    const launch = resolveWindowsCommand(file, args, commandOptions(internals))
     return await run(launch.file, [...launch.args], {
       timeout: options.timeout,
       maxBuffer: options.maxBuffer,
