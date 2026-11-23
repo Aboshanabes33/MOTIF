@@ -56,7 +56,7 @@ export interface MotifBrand {
   readonly logo?: string
   /** ISO instant of the last local edit. */
   readonly updatedAt: string
-  /** Number of files currently in the Brand timeline. */
+  /** Number of video assets (`.mp4`, `.mov`, `.webm`, `.mkv`, `.m4v`) in the Brand folder. */
   readonly videoCount: number
 }
 
@@ -100,6 +100,22 @@ export interface MotifWebsiteSuggestion {
   readonly identity: MotifBrandIdentity
   /** Final page URL after redirects. */
   readonly source: string
+}
+
+/** One file in a Brand's timeline folder, as the editor surface shows it. */
+export interface MotifTimelineEntry {
+  /** File name within the timeline folder. */
+  readonly name: string
+  /** Size in bytes. */
+  readonly bytes: number
+  /** ISO instant of the last local modification. */
+  readonly updatedAt: string
+}
+
+/** Read one Brand's timeline folder. */
+export interface MotifTimelineRequest {
+  /** Stable folder slug of the Brand. */
+  readonly brandId: string
 }
 
 /** One backend-scoped action. */
