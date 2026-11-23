@@ -51,7 +51,16 @@ export interface ConnectionInternals {
     maxBuffer?: number
   }) => Promise<{ stdout: string; stderr: string }>
   /** Override the detached sign-in spawn. */
-  readonly spawn?: (file: string, args: readonly string[]) => { unref(): void }
+  readonly spawn?: (file: string, args: readonly string[]) => SignInChild
+  /** Override the platform (default `process.platform`). */
+  readonly platform?: NodeJS.Platform
+}
+
+/** The slice of a spawned sign-in process the launch confirmation needs. */
+export interface SignInChild {
+  unref(): void
+  on(event: 'error', listener: (error: Error) => void): unknown
+  on(event: 'spawn', listener: () => void): unknown
 }
 
 function commandOf(backend: MotifBackend, commands: MotifCommands): string {
@@ -190,9 +199,70 @@ export async function installBackend(
     : { ok: false, message: `${LABELS[backend]} still does not answer after installation.` }
 }
 
+const LABELS_COMMAND = 'Motif'
+
+/** One way to open an interactive terminal running the sign-in command. */
+interface TerminalLauncher {
+  readonly file: string
+  readonly args: (command: string) => readonly string[]
+}
+
+/**
+ * Terminal launchers for the host platform, most likely first. `login` is an
+ * interactive flow: it needs a real terminal the user can see and answer.
+ */
+function terminalLaunchers(platform: NodeJS.Platform): readonly TerminalLauncher[] {
+  if (platform === 'darwin') {
+    return [{
+      file: 'osascript',
+      args: command => ['-e', 'tell application "Terminal" to activate', '-e', `tell application "Terminal" to do script "${command} login"`],
+    }]
+  }
+  if (platform === 'win32') {
+    return [{ file: 'cmd', args: command => ['/c', 'start', `${LABELS_COMMAND} sign-in`, 'cmd', '/k', command, 'login'] }]
+  }
+  return [
+    { file: 'x-terminal-emulator', args: command => ['-e', command, 'login'] },
+    { file: 'gnome-terminal', args: command => ['--', command, 'login'] },
+    { file: 'konsole', args: command => ['-e', command, 'login'] },
+  ]
+}
+
+/** True when this platform has any terminal launcher worth trying. */
+function hasTerminalLauncher(platform: NodeJS.Platform): boolean {
+  return platform === 'darwin' || platform === 'win32' || platform === 'linux' || platform === 'freebsd'
+}
+
+/**
+ * Terminal launchers interpolate the command into a host string (AppleScript
+ * on macOS, `cmd start` arguments on Windows), so a configured command name
+ * carrying quoting or command-separator characters would change what the
+ * terminal runs. Such a command skips the windowed launchers entirely; the
+ * detached spawn fallback passes arguments as an array and stays safe.
+ * @param command - configured executable name or path.
+ * @returns true when interpolation cannot alter the launched command.
+ */
+export function terminalSafeCommand(command: string): boolean {
+  return command !== '' && !/["\\`$&|;<>%^\r\n]/.test(command)
+}
+
+/**
+ * Confirm a detached child actually started: resolve on the `spawn` event,
+ * reject on the `error` event. Merely calling spawn() proves nothing.
+ */
+function confirmLaunch(child: SignInChild): Promise<void> {
+  return new Promise<void>((resolvePromise, reject) => {
+    child.on('error', reject)
+    child.on('spawn', () => { resolvePromise() })
+  })
+}
+
 /**
  * Start the provider's own sign-in flow. The process owns the browser and the
  * credentials; Motif only starts it and later re-reads the native evidence.
+ * `login` is interactive, so Motif first tries to open it in a real terminal
+ * window; without any terminal it starts the command detached and says so
+ * honestly. Success is only reported after the launch is confirmed.
  * @param backend - backend to sign in.
  * @param commands - executable names.
  * @param internals - test seams.
@@ -207,16 +277,38 @@ export async function signInBackend(
   if (!await installed(command, internals)) {
     return { ok: false, message: `Install the official ${LABELS[backend]} tool first.` }
   }
-  const platform = platformOf(internals)
+  const platform = internals.platform ?? process.platform
+  const exec = internals.exec ?? (async (file, args, options) => await run(file, [...args], {
+    timeout: options.timeout,
+    maxBuffer: options.maxBuffer,
+    env: internals.env,
+    windowsHide: true,
+  }))
+  if (hasTerminalLauncher(platform) && terminalSafeCommand(command)) {
+    for (const launcher of terminalLaunchers(platform)) {
+      try {
+        await exec(launcher.file, launcher.args(command), { timeout: 10_000 })
+        return {
+          ok: true,
+          message: `A terminal opened running \`${command} login\`. Finish the sign-in there - it opens ${LABELS[backend]}'s own page - then run Test.`,
+        }
+      } catch {
+        // That terminal is not available; try the next one.
+      }
+    }
+  }
+  const spawnSignIn = internals.spawn ?? ((file: string, args: readonly string[]): SignInChild => {
+    const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
+    return spawn(launch.file, [...launch.args], {
+      detached: true,
+      stdio: 'ignore',
+      env: internals.env,
+      windowsHide: true,
+    })
+  })
   try {
-    const child = (internals.spawn ?? ((file: string, args: readonly string[]) => {
-      const launch = resolveWindowsCommand(file, args, { platform: internals.platform, env: internals.env })
-      return spawn(launch.file, [...launch.args], {
-        detached: true,
-        stdio: 'ignore',
-        env: internals.env,
-        windowsHide: true,
-      }) }))(platformExecutable(command, platform), ['login'])
+    const child = spawnSignIn(platformExecutable(command, platform), ['login'])
+    await confirmLaunch(child)
     child.unref()
   } catch (error: unknown) {
     return {
@@ -226,7 +318,7 @@ export async function signInBackend(
   }
   return {
     ok: true,
-    message: `A ${LABELS[backend]} sign-in window opened. Finish it in your browser, then run Test.`,
+    message: `Started \`${command} login\` in the background, but no terminal could be opened for it. If nothing asks you to sign in, run \`${command} login\` in a terminal yourself, then run Test.`,
   }
 }
 

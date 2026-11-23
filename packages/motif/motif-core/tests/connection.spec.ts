@@ -47,6 +47,15 @@ describe('AI connection', () => {
 
   it('starts the provider login detached and reports it', async () => {
     const seams = internals()
+    // No terminal window is available in this seam, so the detached fallback runs.
+    seams.exec.mockImplementation(async (_file: string, args: readonly string[]) => {
+      if (args[0] === '--version') return { stdout: '1.0.0', stderr: '' }
+      throw new Error('no terminal')
+    })
+    seams.spawn.mockReturnValue({
+      unref: () => {},
+      on: (event: string, listener: () => void) => { if (event === 'spawn') queueMicrotask(listener) },
+    })
     await expect(signInBackend('claude-code', undefined, seams)).resolves.toMatchObject({ ok: true })
     expect(seams.spawn).toHaveBeenCalledWith('claude', ['login'])
   })
