@@ -3,6 +3,7 @@ import type { ChangeEvent, ReactNode } from 'react'
 import type { MotifActionResult, MotifApiKeySaveRequest, MotifApiKeySaveResult, MotifApiKeyStatus, MotifApiKeyTestRequest, MotifApiKeyTestResult, MotifApiProvider, MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot, MotifTimelineEntry, MotifWebsiteSuggestion } from '@deepseek-ai/dsh-motif-core/types'
 import type { MotifCopy } from './locales.ts'
 import styles from './MotifSection.module.css'
+import { MAX_LOGO_BYTES, validateLogoBytes } from './logo.ts'
 
 /** Values every Motif settings surface receives through its slot `inject`. */
 export interface MotifInjected {
@@ -400,10 +401,6 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand, an
     return (
       <NewBrand t={t} initial={prefill} onCancel={() => { setCreating(false); setPrefill(undefined) }} onCreated={async (request) => {
         const result = await create(request)
-
-
-
-
         await refresh()
         setCreating(false)
         setPrefill(undefined)
@@ -549,15 +546,43 @@ function NewBrand({ t, initial, onCancel, onCreated }: {
     setIdentity(previous => ({ ...previous, [key]: value }))
   }
 
+  const [uploading, setUploading] = useState(false)
+  const uploadSequence = useRef(0)
   const upload = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0]
-    if (file === undefined) return
+    const sequence = ++uploadSequence.current
+    setUploading(false)
+    event.target.value = ''
+    setError(undefined)
+    if (!file) return
+    // Reject before reading the file into memory.
+    if (file.size === 0 || file.size > MAX_LOGO_BYTES) {
+      setError('Logo must be between 1 byte and 2 MiB')
+      return
+    }
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setError('Choose a PNG, JPEG, or WebP logo. SVG is not supported')
+      return
+    }
+    setUploading(true)
     const reader = new FileReader()
     reader.onload = () => {
-      setLogo(typeof reader.result === 'string' ? reader.result : undefined)
-      setLogoName(file.name)
+      if (sequence !== uploadSequence.current) return
+      try {
+        const bytes = new Uint8Array(reader.result as ArrayBuffer)
+        validateLogoBytes(bytes, file.type)
+        let binary = ''
+        for (const byte of bytes) binary += String.fromCharCode(byte)
+        setLogo(`data:${file.type};base64,${btoa(binary)}`)
+        setLogoName(file.name)
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not read logo')
+      } finally { setUploading(false) }
     }
-    reader.readAsDataURL(file)
+    reader.onerror = () => {
+      if (sequence === uploadSequence.current) { setError('Could not read logo'); setUploading(false) }
+    }
+    reader.readAsArrayBuffer(file)
   }
 
   const save = async (): Promise<void> => {
@@ -604,7 +629,7 @@ function NewBrand({ t, initial, onCancel, onCreated }: {
               </div>
               <label className={styles.secondary} style={{ cursor: 'pointer' }}>
                 {logo === undefined ? t('brand.form.upload') : t('brand.form.replace')}
-                <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style={{ display: 'none' }} onChange={upload} />
+                <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={t('brand.form.logo')} disabled={uploading} style={{ display: 'none' }} onChange={upload} />
               </label>
             </div>
 
@@ -685,8 +710,8 @@ function NewBrand({ t, initial, onCancel, onCreated }: {
 
         {error !== undefined && <div className={`${styles.error} ${styles.formFooter}`}>{error}</div>}
         <div className={styles.formFooter}>
-          <button type="button" className={styles.secondary} onClick={onCancel} disabled={saving}>{t('brand.form.cancel')}</button>
-          <button type="button" className={styles.primary} onClick={() => { void save() }} disabled={saving}>
+          <button type="button" className={styles.secondary} onClick={onCancel} disabled={saving || uploading}>{t('brand.form.cancel')}</button>
+          <button type="button" className={styles.primary} onClick={() => { void save() }} disabled={saving || uploading}>
             {saving ? t('brand.form.saving') : t('brand.form.save')}
           </button>
         </div>

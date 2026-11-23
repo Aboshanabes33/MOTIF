@@ -8,6 +8,7 @@
 
 import { mkdir, readFile, readdir, realpath, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, relative } from 'node:path'
+import { decodeLogo, MAX_LOGO_BYTES } from './logo.ts'
 import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifBrandProblem, MotifTimelineEntry } from './types.ts'
 
 /** Raised when a Brand form or folder cannot be accepted. */
@@ -58,6 +59,7 @@ interface StoredBrand {
   name: string
   identity: MotifBrandIdentity
   logo?: string
+  logoFile?: string
   updatedAt: string
 }
 
@@ -136,15 +138,6 @@ export function normalizeIdentity(identity: MotifBrandIdentity): MotifBrandIdent
     motion: text('Motion style', identity.motion),
     caption: text('Caption look', identity.caption),
   }
-}
-
-/** Decode a `data:image/...;base64,...` logo and pick its extension. */
-function decodeLogo(dataUrl: string): { bytes: Buffer; extension: string } {
-  const match = /^data:image\/(png|jpeg|jpg|webp|svg\+xml);base64,(.+)$/s.exec(dataUrl)
-  if (match === null) throw new MotifBrandError('Logo must be a PNG, JPEG, WebP, or SVG data URL')
-  const [, mime = '', data = ''] = match
-  const extension = mime === 'jpeg' ? 'jpg' : mime === 'svg+xml' ? 'svg' : mime
-  return { bytes: Buffer.from(data, 'base64'), extension }
 }
 
 /**
@@ -348,13 +341,36 @@ export async function readBrand(path: string, workspaceId?: string): Promise<Mot
     throw new MotifBrandCorruptError(path, 'brand.json has no usable name')
   }
   const identity = { ...IDENTITY_FALLBACK, ...stored.identity }
+  let logo: string | undefined
+  // Only the exact local asset names are accepted, never an arbitrary path.
+  if (stored.logoFile !== undefined) {
+    if (!/^assets\/logo\.(png|jpg|webp)$/.test(stored.logoFile)) throw new MotifBrandError('Invalid logo asset path')
+    const rootPath = await realpath(path)
+    const logoPath = await realpath(join(path, stored.logoFile))
+    const inside = relative(rootPath, logoPath)
+    if (inside === '..' || inside.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(inside)) throw new MotifBrandError('Logo asset points outside its Brand')
+    const file = await import('node:fs/promises').then(fs => fs.open(logoPath, 'r'))
+    try {
+      if ((await file.stat()).size > MAX_LOGO_BYTES) throw new MotifBrandError('Logo exceeds the 2 MiB limit')
+      const bounded = Buffer.alloc(MAX_LOGO_BYTES + 1)
+      const { bytesRead } = await file.read(bounded, 0, bounded.length, 0)
+      const bytes = bounded.subarray(0, bytesRead)
+      const extension = stored.logoFile.split('.').at(-1)
+      logo = `data:image/${extension === 'jpg' ? 'jpeg' : extension};base64,${bytes.toString('base64')}`
+      decodeLogo(logo)
+    } finally { await file.close() }
+  } else if (stored.logo !== undefined) {
+    // Existing inline logos remain readable only if they pass today's checks.
+    decodeLogo(stored.logo)
+    logo = stored.logo
+  }
   return {
     id: path.split(/[\\/]/).filter(Boolean).at(-1) ?? slugify(stored.name),
     ...workspaceId === undefined ? {} : { workspaceId },
     name: stored.name,
     path,
     identity,
-    ...stored.logo === undefined ? {} : { logo: stored.logo },
+    ...logo === undefined ? {} : { logo },
     updatedAt: stored.updatedAt ?? new Date(0).toISOString(),
     videoCount: await countVideos(path),
   }
