@@ -220,6 +220,48 @@ export async function createBrand(root: string, request: MotifBrandCreateRequest
   }
 }
 
+/**
+ * Remove a Brand folder only while it still holds exactly the Brand this
+ * operation wrote: the stored metadata must parse and match the name and
+ * creation instant of the folder the caller just created. Any mismatch -
+ * foreign, replaced, or unreadable content - keeps the folder, so a rollback
+ * can never delete pre-existing user data.
+ * @param brand - the Brand view returned by {@link createBrand}.
+ * @returns whether the folder was removed.
+ */
+export async function removeCreatedBrand(brand: MotifBrand): Promise<boolean> {
+  let stored: StoredBrand
+  try {
+    stored = JSON.parse(await readFile(join(brand.path, 'brand.json'), 'utf8')) as StoredBrand
+  } catch {
+    return false
+  }
+  if (stored?.version !== 1 || stored.name !== brand.name || stored.updatedAt !== brand.updatedAt) {
+    return false
+  }
+  // Refuse cleanup if anything appeared after creation. Never recursively
+  // delete a workspace: an agent or another process may already have written it.
+  try {
+    const top = await readdir(brand.path)
+    if (top.some(name => !['brand.json', 'brand.md', 'assets', 'timeline'].includes(name))) return false
+    if ((await readdir(join(brand.path, 'timeline'))).length !== 0) return false
+    const assets = await readdir(join(brand.path, 'assets'))
+    const decoded = brand.logo ? decodeLogo(brand.logo) : undefined
+    const expectedLogo = decoded ? `logo.${decoded.extension}` : undefined
+    if (assets.some(name => name !== expectedLogo) || assets.length !== (expectedLogo ? 1 : 0)) return false
+    if (await readFile(join(brand.path, 'brand.md'), 'utf8') !== brandMarkdown(brand.name, brand.identity)) return false
+    if (decoded !== undefined && expectedLogo !== undefined && !(await readFile(join(brand.path, 'assets', expectedLogo))).equals(decoded.bytes)) return false
+    if (expectedLogo) await unlink(join(brand.path, 'assets', expectedLogo))
+    await rmdir(join(brand.path, 'assets'))
+    await rmdir(join(brand.path, 'timeline'))
+    await unlink(join(brand.path, 'brand.md'))
+    await unlink(join(brand.path, 'brand.json'))
+    await rmdir(brand.path)
+    return true
+  } catch { return false }
+
+}
+
 /** Video containers Motif can ingest as a Source Video or write as an edit result. */
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.m4v'])
 

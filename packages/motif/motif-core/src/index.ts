@@ -13,9 +13,10 @@ import z from '@deepseek-ai/schemastery'
 import { dshPath } from '@deepseek-ai/dsh-home-paths'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { createBrandWithWorkspace } from './create-brand-workspace.ts'
 import type {} from '@deepseek-ai/dsh-credentials'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
-import { createBrand, listBrands, listTimeline } from './brand-store.ts'
+import { listBrands, listTimeline } from './brand-store.ts'
 import { analyzeWebsite } from './website-analysis.ts'
 import {
   apiKeyStatus,
@@ -55,7 +56,9 @@ import type {
 } from './types.ts'
 
 export type * from './types.ts'
-export { createBrand, listBrands, listTimeline, brandMarkdown, normalizeIdentity, slugify, MotifBrandError } from './brand-store.ts'
+export { createBrand, listBrands, listTimeline, brandMarkdown, normalizeIdentity, slugify, MotifBrandError, removeCreatedBrand } from './brand-store.ts'
+export { createBrandWithWorkspace } from './create-brand-workspace.ts'
+export type { BrandWorkspaceRegistry } from './create-brand-workspace.ts'
 export { analyzeWebsite, parseWebsiteUrl } from './website-analysis.ts'
 export type { WebsiteAnalysisInternals } from './website-analysis.ts'
 export {
@@ -162,10 +165,7 @@ export class MotifController extends TypertRemoteService {
   @Remote('createBrand')
   async createBrand(request: MotifBrandCreateRequest): Promise<MotifBrandCreateResult> {
     this.ctx.logger.info('motif: creating Brand %s', request.name)
-    const brand = await createBrand(this.config.root, request)
-    const workspace = await this.ctx.workspaceRegistry.create(brand.path)
-    await workspace.setTitle(brand.name)
-    return { brand: { ...brand, workspaceId: workspace.id }, workspaceId: workspace.id }
+    return await createBrandWithWorkspace(this.config.root, request, this.ctx.workspaceRegistry)
   }
 
   /**
