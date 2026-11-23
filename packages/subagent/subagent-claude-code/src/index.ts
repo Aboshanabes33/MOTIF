@@ -7,6 +7,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { parseCredentialKey, redactCredential } from '@deepseek-ai/dsh-credentials'
+import type {} from '@deepseek-ai/dsh-credentials'
 import z from '@deepseek-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import {
@@ -45,6 +47,8 @@ export interface Config {
    * credential-scrubbed parent environment.
    */
   env?: Record<string, string>
+  /** Host record resolved fresh for each run. A saved key wins over CLI login. */
+  credentialRecord?: string
   /**
    * Native non-interactive mode fixed for this Provider instance. Defaults to
    * `dontAsk`; `acceptEdits` accepts edits, `auto` uses the native classifier,
@@ -60,12 +64,13 @@ export const Config: z<Config> = z.object({
   providerName: z.string().min(1).default(DEFAULT_PROVIDER_NAME),
   model: z.string().min(1),
   env: z.dict(z.string()).default({}),
+  credentialRecord: z.string().min(1),
   permissionMode: z.union([...CLAUDE_CODE_PERMISSION_MODES])
     .default(DEFAULT_CLAUDE_CODE_PERMISSION_MODE),
   disposeGraceMs: z.number().default(DEFAULT_DISPOSE_GRACE_MS),
 })
 
-type ResolvedConfig = Omit<Required<Config>, 'model'> & Pick<Config, 'model'>
+type ResolvedConfig = Omit<Required<Config>, 'model' | 'credentialRecord'> & Pick<Config, 'model' | 'credentialRecord'>
 /* jscpd:ignore-end */
 
 /* jscpd:ignore-start -- Cordis registration and shared-seam plumbing mirror
@@ -97,21 +102,53 @@ class ClaudeCodeProvider implements SubagentProvider {
       )
       throw failure
     }
+    let apiKey: string | undefined
+    if (this.config.credentialRecord !== undefined) {
+      try {
+        const store = this.ctx.get('credentials')
+        if (store === undefined) throw new Error()
+        const record = await store.readRecord(parseCredentialKey(this.config.credentialRecord))
+        if (record !== undefined) {
+          if (record.kind !== 'api-key' || !record.key?.trim()) throw new Error()
+          apiKey = record.key
+        }
+      } catch {
+        throw new Error('Could not read the stored anthropic key. Check Settings > AI; no other authentication method was tried.')
+      }
+    }
     const spec: ClaudeCodeRunSpec = {
       cwd,
       ...this.config.model === undefined ? {} : { model: this.config.model },
       permissionMode: this.config.permissionMode,
-      env: this.config.env,
+      env: apiKey === undefined ? this.config.env : { ...this.config.env, ANTHROPIC_API_KEY: apiKey, CLAUDE_CODE_OAUTH_TOKEN: '', ANTHROPIC_AUTH_TOKEN: '' },
+      ...apiKey === undefined ? {} : { apiKeyMode: true },
       disposeGraceMs: this.config.disposeGraceMs,
       spawn: spawnSpec => this.ctx.subprocess.spawn(spawnSpec),
       onError: (error, stopReason) => {
+        if (apiKey !== undefined) {
+          this.ctx.logger.warn('Anthropic API-key execution failed; check Settings > AI.')
+          return
+        }
         this.ctx.logger.warn(
           `subagent-claude-code "${this.name}": child run failed (${stopReason}): %o`,
           error,
         )
       },
     }
-    return startClaudeCodeRun(request, spec)
+    try {
+      const run = await startClaudeCodeRun(request, spec)
+      if (apiKey === undefined) return run
+      const secret = apiKey
+      const safeError = () => new Error('Anthropic API-key request failed. Check the key, API access and billing in Settings > AI. No OAuth fallback was attempted.')
+      return {
+        id: run.id,
+        result: run.result.then(result => redactCredential(result, secret), () => { throw safeError() }),
+        dispose: async () => { try { await run.dispose() } catch { throw safeError() } },
+      }
+    } catch (error) {
+      if (apiKey === undefined) throw error
+      throw new Error('Anthropic API-key runtime could not start. Check the key and runtime in Settings > AI. No OAuth fallback was attempted.')
+    }
   }
 }
 
@@ -125,6 +162,7 @@ export function apply(ctx: Context, config: Config): void {
     providerName: config.providerName ?? DEFAULT_PROVIDER_NAME,
     ...config.model === undefined ? {} : { model: config.model },
     env: config.env as Record<string, string>,
+    ...config.credentialRecord === undefined ? {} : { credentialRecord: config.credentialRecord },
     permissionMode: config.permissionMode ?? DEFAULT_CLAUDE_CODE_PERMISSION_MODE,
     disposeGraceMs: config.disposeGraceMs as number,
   }

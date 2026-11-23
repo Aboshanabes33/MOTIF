@@ -26,7 +26,7 @@ function harness(options: HarnessOptions = {}) {
         dispose,
       } as never
     },
-    status: (_session, _backend, status) => { statuses.push(status) },
+    status: (_session, _backend, _model, status) => { statuses.push(status) },
   }
   const adapter = new RelayAdapter({
     models: [MODEL],

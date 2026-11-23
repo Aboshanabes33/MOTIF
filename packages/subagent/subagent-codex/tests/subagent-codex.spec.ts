@@ -1,3 +1,5 @@
+import { MemoryCredentials } from '../../../credentials/credentials/tests/memory.ts'
+import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import { mountWorkingDirectoryFixture } from '../../subagent/tests/working-directory-fixture.ts'
 import { randomUUID } from 'node:crypto'
 import { startExternalActivation, externalTestParent } from '../../subagent/tests/external-activation-helpers.ts'
@@ -2330,4 +2332,93 @@ describe('disposeCodexChild', () => {
     child.settle()
     await disposal
   })
+})
+
+
+describe('Host stored-key execution', () => {
+  it('uses ephemeral API-key login before thread creation without argv/env leakage', async () => {
+    const child = fakeChild()
+    const key = 'synthetic-test-credential'
+    const spawn = vi.fn(() => child.handle)
+    const starting = startCodexRun(request(), runSpec(child, { apiKey: key, spawn }))
+    const init = await child.peer.nextMethod('initialize')
+    child.peer.respond(init, { userAgent: 'fixture' })
+    await child.peer.nextMethod('initialized')
+    const login = await child.peer.nextMethod('account/login/start')
+    expect(login.params).toEqual({ type: 'apiKey', apiKey: key })
+    expect(spawn.mock.calls[0]).not.toBeUndefined()
+    const spawnSpec = (spawn.mock.calls as unknown as SubprocessSpawnSpec[][])[0]![0]!
+    expect(spawnSpec.argv).toContain('cli_auth_credentials_store="ephemeral"')
+    expect(JSON.stringify(spawnSpec)).not.toContain(key)
+    child.peer.respond(login, { type: 'apiKey' })
+    const thread = await child.peer.nextMethod('thread/start')
+    child.peer.respond(thread, { thread: { id: 'thread-1', ephemeral: true } })
+    const run = await starting
+    const turn = await child.peer.nextMethod('turn/start')
+    child.peer.send({ id: turn.id, result: { turn: { id: 'turn-1' } } }, agentMessage('API answer', 'final_answer'), turnCompleted('completed'))
+    await expect(run.result).resolves.toMatchObject({ stopReason: 'completed' })
+    await run.dispose()
+  })
+
+  it('does not fall back when private API-key login is rejected', async () => {
+    const child = fakeChild()
+    const starting = startCodexRun(request(), runSpec(child, { apiKey: 'synthetic-rejected' }))
+    const rejection = expect(starting).rejects.toThrow()
+    const init = await child.peer.nextMethod('initialize')
+    child.peer.respond(init, { userAgent: 'fixture' })
+    await child.peer.nextMethod('initialized')
+    const login = await child.peer.nextMethod('account/login/start')
+    child.peer.send({ id: login.id, error: { code: -32602, message: 'synthetic-rejected' } })
+    await rejection
+    expect(child.handle.terminate).toHaveBeenCalled()
+  })
+})
+
+
+describe('credential record ownership', () => {
+  it('fails closed on an unreadable or malformed record rather than using CLI login', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await mountWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SubagentRuntime)
+    await ctx.plugin(LocalSubprocessRuntime)
+    await ctx.plugin(MemoryCredentials)
+    await ctx.credentials.modifyRecord(parseCredentialKey('motif/openai'), async () => ({ kind: 'api-key' }))
+    await ctx.plugin(codex, { credentialRecord: 'motif/openai' })
+    const spawn = vi.spyOn(ctx.subprocess, 'spawn')
+    const provider = ctx.subagents.getProvider('codex')!
+    await expect(provider.start!({ ...request(), cwd: process.cwd() })).rejects.toThrow('no other authentication method was tried')
+    expect(spawn).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
+})
+
+
+it('resolves the OpenAI record inside the registered provider and never exports it to env', async () => {
+  const ctx = new Context()
+  await ctx.plugin(SessionProjectionRegistry)
+  await mountWorkingDirectoryFixture(ctx)
+  await ctx.plugin(SubagentRuntime)
+  await ctx.plugin(LocalSubprocessRuntime)
+  await ctx.plugin(MemoryCredentials)
+  await ctx.credentials.modifyRecord(parseCredentialKey('motif/openai'), async () => ({ kind: 'api-key', key: 'synthetic-store-key' }))
+  await ctx.plugin(codex, { credentialRecord: 'motif/openai' })
+  const child = fakeChild()
+  const spawn = vi.spyOn(ctx.subprocess, 'spawn').mockReturnValue(child.handle)
+  const starting = startExternalActivation(ctx, 'codex', request())
+  const init = await child.peer.nextMethod('initialize')
+  child.peer.respond(init, { userAgent: 'fixture' })
+  await child.peer.nextMethod('initialized')
+  const login = await child.peer.nextMethod('account/login/start')
+  expect(login.params).toEqual({ type: 'apiKey', apiKey: 'synthetic-store-key' })
+  expect(JSON.stringify(spawn.mock.calls)).not.toContain('synthetic-store-key')
+  child.peer.respond(login, { type: 'apiKey' })
+  const thread = await child.peer.nextMethod('thread/start')
+  child.peer.respond(thread, { thread: { id: 'thread-1', ephemeral: true } })
+  const run = await starting
+  const turn = await child.peer.nextMethod('turn/start')
+  child.peer.send({ id: turn.id, result: { turn: { id: 'turn-1' } } }, agentMessage('synthetic-store-key', 'final_answer'), turnCompleted('completed'))
+  await expect(run.result).resolves.toMatchObject({ output: [{ type: 'text', text: '[redacted]' }] })
+  await run.dispose()
+  await ctx.fiber.dispose()
 })

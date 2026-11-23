@@ -1,3 +1,6 @@
+import { spawn as spawnNode } from 'node:child_process'
+import { MemoryCredentials } from '../../../credentials/credentials/tests/memory.ts'
+import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import { mountWorkingDirectoryFixture } from '../../subagent/tests/working-directory-fixture.ts'
 import { randomUUID } from 'node:crypto'
 import { startExternalActivation, externalTestParent } from '../../subagent/tests/external-activation-helpers.ts'
@@ -43,6 +46,7 @@ import {
   sdkEnvironmentOverlay,
 } from '../src/process.ts'
 import {
+  API_KEY_BOOTSTRAP,
   CLAUDE_CODE_PERMISSION_MODES,
   DEFAULT_CLAUDE_CODE_PERMISSION_MODE,
   claudeQueryOptions,
@@ -1759,4 +1763,88 @@ describe('query and process disposal', () => {
     expect(errorCause(result)).toBe(waitFailure)
     expect(child.terminate).toHaveBeenCalledOnce()
   })
+})
+
+
+describe('Host key runtime boundary', () => {
+  it('passes the key only into the child environment and suppresses raw stderr', () => {
+    const child = fakeChild()
+    const spawn = vi.fn(() => child.handle)
+    const spec: ClaudeCodeRunSpec = {
+      cwd: process.cwd(), permissionMode: 'dontAsk',
+      env: { ANTHROPIC_API_KEY: 'synthetic-test-key', CLAUDE_CODE_OAUTH_TOKEN: '', ANTHROPIC_AUTH_TOKEN: '' },
+      apiKeyMode: true, disposeGraceMs: 3000, spawn,
+    }
+    const options = claudeQueryOptions(spec, new AbortController(), () => {}, () => {})
+    expect(options.env?.ANTHROPIC_API_KEY).toBe('synthetic-test-key')
+    expect(options.env?.CLAUDE_CODE_OAUTH_TOKEN).toBe('')
+    options.spawnClaudeCodeProcess!(sdkSpawnOptions({ cwd: spec.cwd, env: options.env! }))
+    const sent = (spawn.mock.calls as unknown as SubprocessSpawnSpec[][])[0]![0]!
+    expect(sent.stdio?.stderr).toBe('pipe')
+    expect(JSON.stringify(sent)).not.toContain('synthetic-test-key')
+  })
+})
+
+
+describe('credential record ownership', () => {
+  it('fails closed on an unreadable or malformed record rather than using CLI login', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await mountWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SubagentRuntime)
+    await ctx.plugin(LocalSubprocessRuntime)
+    await ctx.plugin(MemoryCredentials)
+    await ctx.credentials.modifyRecord(parseCredentialKey('motif/anthropic'), async () => ({ kind: 'api-key' }))
+    await ctx.plugin(claudeCode, { credentialRecord: 'motif/anthropic' })
+    const spawn = vi.spyOn(ctx.subprocess, 'spawn')
+    const provider = ctx.subagents.getProvider('claude-code')!
+    await expect(provider.start!({ ...request(), cwd: process.cwd() })).rejects.toThrow('no other authentication method was tried')
+    expect(spawn).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
+})
+
+
+it('resolves the saved Anthropic key at each real provider start and redacts returned text', async () => {
+  const ctx = new Context()
+  await ctx.plugin(SessionProjectionRegistry)
+  await mountWorkingDirectoryFixture(ctx)
+  await ctx.plugin(SubagentRuntime)
+  await ctx.plugin(LocalSubprocessRuntime)
+  await ctx.plugin(MemoryCredentials)
+  const recordKey = parseCredentialKey('motif/anthropic')
+  await ctx.credentials.modifyRecord(recordKey, async () => ({ kind: 'api-key', key: 'synthetic-host-key' }))
+  await ctx.plugin(claudeCode, { credentialRecord: 'motif/anthropic', env: { ANTHROPIC_API_KEY: 'old-config-key' } })
+  const child = fakeChild()
+  vi.spyOn(ctx.subprocess, 'spawn').mockReturnValue(child.handle)
+  const envs: unknown[] = []
+  queryMock.mockImplementation(({ options }) => {
+    envs.push(options.env)
+    options.spawnClaudeCodeProcess!(sdkSpawnOptions({ cwd: options.cwd!, env: options.env!, signal: options.abortController!.signal }))
+    return queryFrom([success('synthetic-host-key')])
+  })
+  const provider = ctx.subagents.getProvider('claude-code')!
+  const first = await provider.start!({ ...request(), cwd: process.cwd() })
+  await expect(first.result).resolves.toMatchObject({ output: [{ type: 'text', text: '[redacted]' }] })
+  await first.dispose()
+  expect(envs[0]).toMatchObject({ ANTHROPIC_API_KEY: 'synthetic-host-key', CLAUDE_CODE_OAUTH_TOKEN: '', ANTHROPIC_AUTH_TOKEN: '' })
+  await ctx.credentials.modifyRecord(recordKey, async () => ({ kind: 'api-key', key: 'rotated-host-key' }))
+  const second = await provider.start!({ ...request(), cwd: process.cwd() })
+  await second.result
+  await second.dispose()
+  expect(envs[1]).toMatchObject({ ANTHROPIC_API_KEY: 'rotated-host-key' })
+  await ctx.fiber.dispose()
+})
+
+
+it('boots a real child with an in-memory key prefix and preserves subsequent SDK stdin', async () => {
+  const child = spawnNode(process.execPath, ['-e', API_KEY_BOOTSTRAP, process.execPath, '-e',
+    "const fs=require('node:fs');const input=fs.readFileSync(0,'utf8');process.stdout.write(JSON.stringify({matched:process.env.ANTHROPIC_API_KEY==='synthetic-memory-key',input}))"],
+    { stdio: ['pipe', 'pipe', 'pipe'] })
+  const chunks: Buffer[] = []
+  child.stdout.on('data', chunk => chunks.push(chunk))
+  child.stdin.end(JSON.stringify({ key: 'synthetic-memory-key' }) + '\n' + 'protocol-payload\n')
+  const code = await new Promise<number | null>((resolve, reject) => { child.on('exit', resolve); child.on('error', reject) })
+  expect(code).toBe(0)
+  expect(JSON.parse(Buffer.concat(chunks).toString())).toEqual({ matched: true, input: 'protocol-payload\n' })
 })

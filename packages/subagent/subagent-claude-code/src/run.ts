@@ -37,6 +37,18 @@ import {
   ManagedClaudeCodeProcess,
 } from './process.ts'
 
+/** Memory-only key bootstrap. Reads exactly its prefix before inheriting stdin to the CLI. */
+export const API_KEY_BOOTSTRAP = `
+const fs = require('node:fs');
+const cp = require('node:child_process');
+let line = ''; const byte = Buffer.alloc(1);
+while (fs.readSync(0, byte, 0, 1, null) === 1) { if (byte[0] === 10) break; line += byte.toString(); if (line.length > 65536) process.exit(1); }
+const key = JSON.parse(line).key;
+const child = cp.spawn(process.argv[1], process.argv.slice(2), { env: { ...process.env, ANTHROPIC_API_KEY: key }, stdio: 'inherit' });
+child.on('error', () => process.exit(1));
+child.on('exit', code => process.exit(code ?? 1));
+`
+
 /** Default POSIX grace between subprocess termination tiers. */
 export const DEFAULT_DISPOSE_GRACE_MS = 3_000
 
@@ -156,6 +168,8 @@ export interface ClaudeCodeRunSpec {
   readonly permissionMode: ClaudeCodePermissionMode
   /** Explicit deployment/test environment layered after shared scrubbing. */
   readonly env: Record<string, string>
+  /** Suppress raw child diagnostics when a Host key is in use. */
+  readonly apiKeyMode?: boolean
   /** Subprocess termination grace passed to the shared managed-range owner. */
   readonly disposeGraceMs: number
   /** Shared subprocess service spawn operation. */
@@ -328,6 +342,7 @@ export function claudeQueryOptions(
     ...spec.model === undefined ? {} : { model: spec.model },
     env: { ...scrubbedParentEnv(), ...spec.env },
     persistSession: false,
+    ...spec.apiKeyMode === true ? { debug: false } : {},
     disallowedTools: spec.permissionMode === 'plan'
       ? ['AskUserQuestion', 'ExitPlanMode']
       : ['AskUserQuestion'],
@@ -368,10 +383,23 @@ export function claudeQueryOptions(
     },
     supportedDialogKinds: SUPPORTED_UNATTENDED_DIALOG_KINDS,
     spawnClaudeCodeProcess: (options: SpawnOptions) => {
-      const child = spec.spawn(claudeSpawnSpec(options, spec.disposeGraceMs))
-      const process = new ManagedClaudeCodeProcess(child)
-      capture(child, process)
-      return process
+      const privateKey = spec.apiKeyMode === true ? options.env.ANTHROPIC_API_KEY : undefined
+      // Never put the key in a spawn spec: some containment launchers serialize env.
+      const publicEnv = { ...options.env }
+      if (privateKey !== undefined) delete publicEnv.ANTHROPIC_API_KEY
+      const spawnSpec = claudeSpawnSpec({ ...options, env: publicEnv }, spec.disposeGraceMs)
+      const child = spec.spawn(privateKey === undefined ? spawnSpec : {
+        ...spawnSpec,
+        argv: [process.execPath, '-e', API_KEY_BOOTSTRAP, ...spawnSpec.argv],
+        stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
+      })
+      if (privateKey !== undefined) {
+        child.stdin?.write(`${JSON.stringify({ key: privateKey })}\n`)
+        child.stderr?.resume() // Drain without logging raw diagnostics.
+      }
+      const managed = new ManagedClaudeCodeProcess(child)
+      capture(child, managed)
+      return managed
     },
   }
 }

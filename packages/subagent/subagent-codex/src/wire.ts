@@ -281,6 +281,18 @@ export class CodexAppServerWire {
     await this.guarded(this.transport.flush(), signal)
   }
 
+  /** Authenticate only this child process; its credential store is ephemeral. */
+  async loginApiKey(apiKey: string, signal: AbortSignal): Promise<void> {
+    try {
+      const response = object(await this.guarded(this.transport.request('account/login/start', {
+        type: 'apiKey', apiKey,
+      }, signal), signal), 'API-key login response')
+      if (response.type !== 'apiKey') throw new Error()
+    } catch {
+      throw new Error('OpenAI API-key login failed. Check the key in Settings > AI; no OAuth fallback was attempted.')
+    }
+  }
+
   /**
    * Create the run's private ephemeral thread and retain its identity.
    * @param cwd - selected child working directory.

@@ -74,6 +74,8 @@ export interface RelayStartSpec {
 
 /** Host capabilities one relay send needs. */
 export interface RelayHost {
+  /** Host-only key presence check; no secret enters this adapter. */
+  hasApiKey?(backend: string): Promise<boolean>
   /**
    * Resolve the live Session this request belongs to.
    * @param sessionId - Session identity stamped on the model request.
@@ -216,10 +218,13 @@ export class RelayAdapter extends LlmAdapter {
         'INVALID_REQUEST',
       )
     }
+    const apiKeyMode = await this.options.host.hasApiKey?.(selected.backend) === true
     const context: RelayFailureContext = {
+      apiKeyMode,
       backend: selected.backend,
       timeoutMs: this.options.limits.timeoutMs,
-      signIn: detectSignInState(selected.backend, this.options.signIn),
+      signIn: apiKeyMode
+        ? 'present' : detectSignInState(selected.backend, this.options.signIn),
     }
     if (context.signIn === 'absent') {
       throw failureError(missingSignInFailure(context))

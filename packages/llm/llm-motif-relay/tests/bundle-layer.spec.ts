@@ -51,9 +51,11 @@ describe('motif relay bundle layer', () => {
     const rows = layerRows()
     expect(rows.find(row => row.id === 'motif-relay-claude-code')).toMatchObject({
       name: '@deepseek-ai/dsh-subagent-claude-code',
+      config: { credentialRecord: 'motif/anthropic' },
     })
     expect(rows.find(row => row.id === 'motif-relay-codex-provider')).toMatchObject({
       name: '@deepseek-ai/dsh-subagent-codex',
+      config: { credentialRecord: 'motif/openai' },
     })
     expect(rows.find(row => row.id === 'motif-relay')).toMatchObject({
       name: '@deepseek-ai/dsh-llm-motif-relay',
