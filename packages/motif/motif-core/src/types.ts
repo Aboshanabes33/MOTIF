@@ -56,7 +56,7 @@ export interface MotifBrand {
   readonly logo?: string
   /** ISO instant of the last local edit. */
   readonly updatedAt: string
-  /** Number of files currently in the Brand timeline. */
+  /** Number of video assets (`.mp4`, `.mov`, `.webm`, `.mkv`, `.m4v`) in the Brand folder. */
   readonly videoCount: number
 }
 
