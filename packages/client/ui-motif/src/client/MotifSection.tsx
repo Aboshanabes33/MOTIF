@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
 import type { MotifCopy } from './locales.ts'
@@ -60,7 +60,6 @@ function useSnapshot(load: (() => Promise<MotifSnapshot>) | undefined) {
     void refresh()
     // The section is mounted once per settings visit; the host is polled by
     // explicit actions, so one read is enough to paint it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { snapshot, error, loading, refresh }
@@ -235,7 +234,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
   if (creating) {
     return (
       <NewBrand t={t} onCancel={() => { setCreating(false) }} onCreated={async (request) => {
-        const result = await createBrand!(request)
+        const result = await createBrand(request)
         await refresh()
         setCreating(false)
         openBrand?.(result.workspaceId)
@@ -252,7 +251,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
         </div>
         <div className={styles.searchRow}>
           <input value={query} placeholder={t('brands.search')} aria-label={t('brands.search')}
-            onChange={event => { setQuery(event.target.value) }} />
+            onChange={(event) => { setQuery(event.target.value) }} />
           <button type="button" className={styles.primary} onClick={() => { setCreating(true) }}>+ {t('brands.new')}</button>
         </div>
       </div>
@@ -378,7 +377,7 @@ function NewBrand({ t, onCancel, onCreated }: {
           <div className={styles.panel}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.name')}>
-                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={event => { setName(event.target.value) }} autoFocus />
+                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={(event) => { setName(event.target.value) }} autoFocus />
               </Field>
               <Field label={t('brand.form.website')}>
                 <input placeholder={t('brand.form.websitePlaceholder')} />
@@ -408,7 +407,7 @@ function NewBrand({ t, onCancel, onCreated }: {
                 ['dark', 'brand.form.dark'],
               ] as const).map(([key, label]) => (
                 <Field key={key} label={t(label)}>
-                  <input type="color" value={identity[key]} onChange={event => { set(key, event.target.value.toUpperCase()) }
+                  <input type="color" value={identity[key]} onChange={(event) => { set(key, event.target.value.toUpperCase()) }
                   } />
                   <code>{identity[key]}</code>
                 </Field>
@@ -418,10 +417,10 @@ function NewBrand({ t, onCancel, onCreated }: {
             <h2 style={{ marginTop: 18 }}>{t('brand.form.fonts')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.latinFont')}>
-                <input value={identity.latinFont} onChange={event => { set('latinFont', event.target.value) }} />
+                <input value={identity.latinFont} onChange={(event) => { set('latinFont', event.target.value) }} />
               </Field>
               <Field label={t('brand.form.arabicFont')}>
-                <input value={identity.arabicFont} onChange={event => { set('arabicFont', event.target.value) }} />
+                <input value={identity.arabicFont} onChange={(event) => { set('arabicFont', event.target.value) }} />
               </Field>
             </div>
 
@@ -430,14 +429,14 @@ function NewBrand({ t, onCancel, onCreated }: {
                 { value: 'soft', label: t('brand.form.motionSoft') },
                 { value: 'snap', label: t('brand.form.motionSnap') },
                 { value: 'fade', label: t('brand.form.motionFade') },
-              ]} onChange={value => { set('motion', value) }} />
+              ]} onChange={(value) => { set('motion', value) }} />
             </Field>
             <Field label={t('brand.form.caption')}>
               <Segmented value={identity.caption as 'word' | 'plain' | 'boxed'} options={[
                 { value: 'word', label: t('brand.form.captionWord') },
                 { value: 'plain', label: t('brand.form.captionPlain') },
                 { value: 'boxed', label: t('brand.form.captionBoxed') },
-              ]} onChange={value => { set('caption', value) }} />
+              ]} onChange={(value) => { set('caption', value) }} />
             </Field>
           </div>
         </div>
@@ -537,6 +536,33 @@ export function BrandEditor({ brand, t = key => key, onClose }: {
   onClose: () => void
 }) {
   const { identity } = brand
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
+    dialogRef.current?.focus()
+    return () => { if (previous?.isConnected) previous.focus() }
+  }, [])
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); return }
+      if (event.key !== 'Tab') return
+      const dialog = dialogRef.current
+      if (!dialog) return
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex="0"]',
+      ))
+      const first = controls[0]
+      const last = controls.at(-1)
+      if (!first || !last) { event.preventDefault(); dialog.focus(); return }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+        event.preventDefault(); last.focus()
+      } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) {
+        event.preventDefault(); first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
   const lanes: readonly { key: MotifCopy; clips: readonly [number, number][] }[] = [
     { key: 'editor.video', clips: [[0, 62], [64, 88]] },
     { key: 'editor.captions', clips: [[4, 28], [32, 58], [62, 88]] },
@@ -545,7 +571,7 @@ export function BrandEditor({ brand, t = key => key, onClose }: {
     { key: 'editor.audio', clips: [[0, 100]] },
   ]
   return (
-    <div className={styles.editor} role="dialog" aria-modal="true" aria-label={brand.name}>
+    <div ref={dialogRef} tabIndex={-1} className={styles.editor} role="dialog" aria-modal="true" aria-label={brand.name}>
       <header className={styles.editorBar}>
         <button type="button" className={styles.ghost} onClick={onClose}>← {t('editor.back')}</button>
         <div className={styles.editorName}>{brand.name}</div>
