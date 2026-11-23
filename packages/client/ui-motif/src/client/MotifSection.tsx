@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
-import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
+import type { MotifActionResult, MotifApiKeySaveRequest, MotifApiKeySaveResult, MotifApiKeyStatus, MotifApiKeyTestRequest, MotifApiKeyTestResult, MotifApiProvider, MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot, MotifTimelineEntry, MotifWebsiteSuggestion } from '@deepseek-ai/dsh-motif-core/types'
 import type { MotifCopy } from './locales.ts'
 import styles from './MotifSection.module.css'
+import { MAX_LOGO_BYTES, validateLogoBytes } from './logo.ts'
 
 /** Values every Motif settings surface receives through its slot `inject`. */
 export interface MotifInjected {
@@ -20,6 +21,26 @@ export interface MotifInjected {
   createBrand: (request: MotifBrandCreateRequest) => Promise<{ workspaceId: string }>
   /** Open a Brand's workspace. */
   openBrand: (workspaceId: string) => void
+  /** Validate, store, and verify one provider API key. */
+  saveApiKey: (request: MotifApiKeySaveRequest) => Promise<MotifApiKeySaveResult>
+  /** Verify a draft key, or the stored key when the request carries none. */
+  testApiKey: (request: MotifApiKeyTestRequest) => Promise<MotifApiKeyTestResult>
+  /** Remove one provider's stored key. */
+  deleteApiKey: (provider: MotifApiProvider) => Promise<MotifActionResult>
+  /** UI-safe status of one provider's stored key. */
+  apiKeyStatus: (provider: MotifApiProvider) => Promise<MotifApiKeyStatus>
+  /** Read one Brand's real timeline files from its folder. */
+  loadTimeline: (brand: MotifBrand) => Promise<readonly MotifTimelineEntry[]>
+  /**
+   * Submit one Edit Request to the Brand's real workspace Session (the MOTIF
+   * session/relay flow). Aborting the signal cancels the in-flight turn.
+   */
+  sendEditRequest: (brand: MotifBrand, text: string, signal: AbortSignal) => Promise<{ ok: boolean; message: string }>
+  /**
+   * Analyze one public web page into a Brand identity suggestion. Aborting the
+   * signal stops the wait; the bounded host fetch may finish in the background.
+   */
+  analyzeWebsite: (url: string, signal: AbortSignal) => Promise<MotifWebsiteSuggestion>
 }
 
 type Props = { [K in keyof MotifInjected]?: MotifInjected[K] | undefined }
@@ -60,7 +81,6 @@ function useSnapshot(load: (() => Promise<MotifSnapshot>) | undefined) {
     void refresh()
     // The section is mounted once per settings visit; the host is polled by
     // explicit actions, so one read is enough to paint it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { snapshot, error, loading, refresh }
@@ -78,7 +98,7 @@ function ProviderMark({ backend }: { backend: 'claude-code' | 'codex' }) {
  * @param props - slot inject face.
  * @returns the AI section.
  */
-export function AiSection({ t = key => key, load, install, signIn, test }: Props) {
+export function AiSection({ t = key => key, load, install, signIn, test, saveApiKey, testApiKey, deleteApiKey, apiKeyStatus }: Props) {
   const { snapshot, error, loading, refresh } = useSnapshot(load)
   const [busy, setBusy] = useState<string | undefined>()
   const [messages, setMessages] = useState<Record<string, string>>({})
@@ -100,7 +120,11 @@ export function AiSection({ t = key => key, load, install, signIn, test }: Props
     }
   }
 
-  const connected = snapshot?.connections.find(connection => connection.signedIn === 'yes')
+  const activity = snapshot?.activity ?? []
+  const running = activity.find(entry => entry.state === 'running')
+  const latest = activity[0]
+  const labelOf = (backend: string): string =>
+    snapshot?.connections.find(connection => connection.backend === backend)?.label ?? backend
 
   return (
     <div className={styles.root}>
@@ -131,6 +155,7 @@ export function AiSection({ t = key => key, load, install, signIn, test }: Props
           <div className={styles.cards}>
             {(snapshot?.connections ?? []).map((connection: MotifConnection) => {
               const cardBusy = busy?.startsWith(connection.backend) === true
+              const cardActivity = activity.find(entry => entry.backend === connection.backend)
               const pill = connection.signedIn === 'yes'
                 ? { label: t('ai.connected'), className: styles.pillConnected }
                 : connection.signedIn === 'no'
@@ -150,6 +175,12 @@ export function AiSection({ t = key => key, load, install, signIn, test }: Props
                     )}
                   </div>
                   <span className={`${styles.pill} ${pill.className}`}>{pill.label}</span>
+                  {cardActivity?.state === 'running' && (
+                    <span className={`${styles.pill} ${styles.pillRunning}`}>{t('ai.pillRunning')}</span>
+                  )}
+                  {cardActivity !== undefined && cardActivity.state !== 'running' && (
+                    <span className={`${styles.pill} ${styles.pillNeutral}`}>{t('ai.pillSelected', { model: cardActivity.model })}</span>
+                  )}
                   <div className={styles.connectionFoot}>
                     {!connection.installed && (
                       <button type="button" className={styles.primary} disabled={cardBusy}
@@ -178,22 +209,150 @@ export function AiSection({ t = key => key, load, install, signIn, test }: Props
           <div className={styles.apiCard} style={{ marginTop: 14 }}>
             <strong>{t('ai.noSubscription')}</strong>
             <p style={{ color: '#94918c', fontSize: 13, margin: '6px 0 0' }}>{t('ai.apiKeyBody')}</p>
-            <div className={styles.apiRow}>
-              <input type="password" placeholder={t('ai.apiKeyPlaceholder')} aria-label={t('ai.apiKeyPlaceholder')} />
-              <button type="button" className={styles.secondary}>{t('ai.saveAndTest')}</button>
-            </div>
+            <ApiKeyCard t={t} saveApiKey={saveApiKey} testApiKey={testApiKey} deleteApiKey={deleteApiKey} apiKeyStatus={apiKeyStatus} />
           </div>
 
           <div className={styles.aiFooter} style={{ marginTop: 18 }}>
             <span className={styles.active}>
-              {connected === undefined
-                ? t('ai.noneActive')
-                : <>{t('ai.active')}: <strong>{connected.label}</strong> · {t('ai.connected')}</>}
+              {running !== undefined
+                ? <>{t('ai.running', { name: labelOf(running.backend) })}</>
+                : latest !== undefined
+                  ? <>{t('ai.active')}: <strong>{labelOf(latest.backend)}</strong> · {latest.model}</>
+                  : t('ai.noneActive')}
             </span>
             <button type="button" className={styles.secondary} onClick={() => { void refresh() }}>{t('ai.step1')}</button>
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+
+/** Display message from one thrown value. */
+function errorText(reason: unknown, fallback: string): string {
+  return reason instanceof Error ? reason.message : fallback
+}
+
+/**
+ * The no-subscription card: validate, store, and verify one provider API key,
+ * and manage the stored key. The key value never leaves this card except to
+ * the Host save/test Remotes.
+ */
+export function ApiKeyCard({ t, saveApiKey, testApiKey, deleteApiKey, apiKeyStatus }: {
+  t: (key: MotifCopy, vars?: Readonly<Record<string, string | number>>) => string
+  saveApiKey: MotifInjected['saveApiKey'] | undefined
+  testApiKey: MotifInjected['testApiKey'] | undefined
+  deleteApiKey: MotifInjected['deleteApiKey'] | undefined
+  apiKeyStatus: MotifInjected['apiKeyStatus'] | undefined
+}) {
+  const supported = saveApiKey !== undefined && testApiKey !== undefined && deleteApiKey !== undefined && apiKeyStatus !== undefined
+  const [provider, setProvider] = useState<MotifApiProvider>('anthropic')
+  const [draft, setDraft] = useState('')
+  const [status, setStatus] = useState<MotifApiKeyStatus | undefined>()
+  const [busy, setBusy] = useState<'save' | 'test' | 'remove' | undefined>()
+  const [result, setResult] = useState<{ ok: boolean; text: string } | undefined>()
+
+  useEffect(() => {
+    if (apiKeyStatus === undefined) return
+    let live = true
+    apiKeyStatus(provider).then(
+      (next) => { if (live) setStatus(next) },
+      () => { if (live) setStatus(undefined) },
+    )
+    return () => { live = false }
+  }, [apiKeyStatus, provider])
+
+  const choose = (next: MotifApiProvider): void => {
+    setProvider(next)
+    setDraft('')
+    setResult(undefined)
+  }
+
+  const save = async (): Promise<void> => {
+    if (saveApiKey === undefined) return
+    setBusy('save')
+    setResult(undefined)
+    try {
+      const outcome = await saveApiKey({ provider, apiKey: draft })
+      setDraft('')
+      setStatus(outcome.status)
+      setResult(outcome.test.ok
+        ? { ok: true, text: t('ai.apiKey.saved') }
+        : { ok: false, text: t('ai.apiKey.savedUnverified', { detail: outcome.test.detail }) })
+    } catch (reason: unknown) {
+      setResult({ ok: false, text: errorText(reason, t('ai.apiKey.failed')) })
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const retest = async (): Promise<void> => {
+    if (testApiKey === undefined) return
+    setBusy('test')
+    setResult(undefined)
+    try {
+      const outcome = await testApiKey({ provider })
+      setResult(outcome.ok
+        ? { ok: true, text: outcome.detail }
+        : { ok: false, text: t('ai.apiKey.testFailed', { detail: outcome.detail }) })
+    } catch (reason: unknown) {
+      setResult({ ok: false, text: errorText(reason, t('ai.apiKey.failed')) })
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const remove = async (): Promise<void> => {
+    if (deleteApiKey === undefined || apiKeyStatus === undefined) return
+    setBusy('remove')
+    setResult(undefined)
+    try {
+      await deleteApiKey(provider)
+      setStatus(await apiKeyStatus(provider))
+      setResult({ ok: true, text: t('ai.apiKey.removed') })
+    } catch (reason: unknown) {
+      setResult({ ok: false, text: errorText(reason, t('ai.apiKey.failed')) })
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  if (!supported) {
+    return <p className={styles.apiNote}>{t('ai.apiKey.unavailable')}</p>
+  }
+
+  return (
+    <div className={styles.apiKeyCard}>
+      <div className={styles.segmented} role="group" aria-label={t('ai.apiKey.provider')}>
+        <button type="button" aria-pressed={provider === 'anthropic'} disabled={busy !== undefined}
+          onClick={() => { choose('anthropic') }}>{t('ai.apiKey.provider.anthropic')}</button>
+        <button type="button" aria-pressed={provider === 'openai'} disabled={busy !== undefined}
+          onClick={() => { choose('openai') }}>{t('ai.apiKey.provider.openai')}</button>
+      </div>
+      {status?.configured === true && (
+        <div className={styles.apiStored}>
+          <span>{t('ai.apiKey.configured', { masked: status.masked ?? '' })}</span>
+          <button type="button" className={styles.ghost} disabled={busy !== undefined} onClick={() => { void retest() }}>
+            {busy === 'test' ? t('ai.apiKey.testing') : t('ai.apiKey.retest')}
+          </button>
+          <button type="button" className={styles.ghost} disabled={busy !== undefined} onClick={() => { void remove() }}>
+            {busy === 'remove' ? t('ai.working') : t('ai.apiKey.remove')}
+          </button>
+        </div>
+      )}
+      <div className={styles.apiRow}>
+        <input type="password" value={draft} placeholder={t('ai.apiKeyPlaceholder')} aria-label={t('ai.apiKeyPlaceholder')}
+          disabled={busy !== undefined}
+          onChange={(event) => { setDraft(event.target.value) }} />
+        <button type="button" className={styles.secondary} disabled={busy !== undefined || draft.trim() === ''}
+          onClick={() => { void save() }}>
+          {busy === 'save' ? t('ai.apiKey.saving') : t('ai.saveAndTest')}
+        </button>
+      </div>
+      {result !== undefined && (
+        <p className={result.ok ? styles.apiResultOk : styles.apiResultError} role={result.ok ? 'status' : 'alert'}>{result.text}</p>
+      )}
     </div>
   )
 }
@@ -224,20 +383,27 @@ function BrandArt({ brand }: { brand: MotifBrand }) {
  * @param props - slot inject face.
  * @returns the Brands section.
  */
-export function BrandsSection({ t = key => key, load, createBrand, openBrand }: Props) {
+export function BrandsSection({ t = key => key, load, createBrand, openBrand, analyzeWebsite, loadTimeline, sendEditRequest }: Props) {
   const { snapshot, error, loading, refresh } = useSnapshot(load)
   const [creating, setCreating] = useState(false)
+  const [prefill, setPrefill] = useState<{ name?: string; identity: MotifBrandIdentity; source: string } | undefined>()
+  const [websiteFlow, setWebsiteFlow] = useState(false)
   const [editing, setEditing] = useState<MotifBrand | undefined>()
   const [query, setQuery] = useState('')
   const brands = snapshot?.brands ?? []
+  const problems = snapshot?.brandProblems ?? []
   const visible = useMemo(() => brands.filter(brand => brand.name.toLowerCase().includes(query.trim().toLowerCase())), [brands, query])
 
   if (creating) {
+    // Creation cards are only clickable with a Host injection; a missing one is a wiring bug, not user input.
+    if (createBrand === undefined) throw new Error('MOTIF: Brand creation requested without a Host createBrand injection')
+    const create = createBrand
     return (
-      <NewBrand t={t} onCancel={() => { setCreating(false) }} onCreated={async (request) => {
-        const result = await createBrand!(request)
+      <NewBrand t={t} initial={prefill} onCancel={() => { setCreating(false); setPrefill(undefined) }} onCreated={async (request) => {
+        const result = await create(request)
         await refresh()
         setCreating(false)
+        setPrefill(undefined)
         openBrand?.(result.workspaceId)
       }} />
     )
@@ -252,13 +418,28 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
         </div>
         <div className={styles.searchRow}>
           <input value={query} placeholder={t('brands.search')} aria-label={t('brands.search')}
-            onChange={event => { setQuery(event.target.value) }} />
+            onChange={(event) => { setQuery(event.target.value) }} />
           <button type="button" className={styles.primary} onClick={() => { setCreating(true) }}>+ {t('brands.new')}</button>
         </div>
       </div>
 
       {loading && <div className={styles.empty}>{t('brands.loading')}</div>}
       {error && <div className={styles.empty}>{t('brands.failed')}</div>}
+      {!loading && !error && problems.length > 0 && (
+        <div className={styles.problems} role="alert">
+          <div className={styles.problemsTitle}>{t('brands.problems.title')}</div>
+          {problems.map(problem => (
+            <div className={styles.problemRow} key={problem.path}>
+              <span>{problem.kind === 'corrupt'
+                ? t('brands.problems.corrupt', { path: problem.path })
+                : t('brands.problems.unreadable', { path: problem.path })}</span>
+              <button type="button" className={styles.secondary} onClick={() => { void refresh() }}>
+                {t('brands.problems.reload')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {!loading && !error && visible.length > 0 && (
         <div className={styles.grid}>
           {visible.map(brand => (
@@ -288,18 +469,34 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
       <div>
         <h2 className={styles.sectionTitle} style={{ marginBottom: 12 }}>{t('brands.start')}</h2>
         <div className={styles.startGrid}>
-          <button type="button" className={styles.startCard} onClick={() => { setCreating(true) }}>
+          <button type="button" className={styles.startCard} onClick={() => { setPrefill(undefined); setCreating(true) }}>
             <strong>{t('brands.manually')}</strong><span>{t('brands.manually.body')}</span>
           </button>
-          <button type="button" className={styles.startCard} onClick={() => { setCreating(true) }}>
+          <button type="button" className={styles.startCard} disabled={analyzeWebsite === undefined}
+            title={analyzeWebsite === undefined ? t('brands.fromWebsite.unavailable') : undefined}
+            onClick={() => { setWebsiteFlow(open => !open) }}>
             <strong>{t('brands.fromWebsite')}</strong><span>{t('brands.fromWebsite.body')}</span>
           </button>
-          <button type="button" className={styles.startCard} onClick={() => { setCreating(true) }}>
-            <strong>{t('brands.fromVideo')}</strong><span>{t('brands.fromVideo.body')}</span>
+          <button type="button" className={styles.startCard} disabled>
+            <strong>{t('brands.fromVideo')}</strong><span>{t('brands.fromVideo.unavailable')}</span>
           </button>
         </div>
+        {websiteFlow && analyzeWebsite !== undefined && (
+          <WebsiteStart t={t} analyzeWebsite={analyzeWebsite}
+            onCancel={() => { setWebsiteFlow(false) }}
+            onAnalyzed={(suggestion) => {
+              setWebsiteFlow(false)
+              setPrefill({
+                ...suggestion.name === undefined ? {} : { name: suggestion.name },
+                identity: suggestion.identity,
+                source: suggestion.source,
+              })
+              setCreating(true)
+            }} />
+        )}
       </div>
-      {editing !== undefined && <BrandEditor brand={editing} t={t} onClose={() => { setEditing(undefined) }} />}
+      {editing !== undefined && <BrandEditor brand={editing} t={t} onClose={() => { setEditing(undefined) }}
+        loadTimeline={loadTimeline} sendEditRequest={sendEditRequest} />}
     </div>
   )
 }
@@ -323,13 +520,23 @@ function Segmented<T extends string>({ value, options, onChange }: {
   )
 }
 
-function NewBrand({ t, onCancel, onCreated }: {
+export interface MotifBrandCreateInitial {
+  /** Suggested Brand name, when known. */
+  name?: string
+  /** Suggested identity tokens. */
+  identity: MotifBrandIdentity
+  /** Human-readable origin of the suggestion (for example, the analyzed URL). */
+  source: string
+}
+
+function NewBrand({ t, initial, onCancel, onCreated }: {
   t: (key: MotifCopy, vars?: Readonly<Record<string, string | number>>) => string
+  initial?: MotifBrandCreateInitial | undefined
   onCancel: () => void
   onCreated: (request: MotifBrandCreateRequest) => Promise<void>
 }) {
-  const [name, setName] = useState('')
-  const [identity, setIdentity] = useState<MotifBrandIdentity>(FALLBACK_IDENTITY)
+  const [name, setName] = useState(initial?.name ?? '')
+  const [identity, setIdentity] = useState<MotifBrandIdentity>(initial?.identity ?? FALLBACK_IDENTITY)
   const [logo, setLogo] = useState<string | undefined>()
   const [logoName, setLogoName] = useState<string | undefined>()
   const [saving, setSaving] = useState(false)
@@ -339,15 +546,43 @@ function NewBrand({ t, onCancel, onCreated }: {
     setIdentity(previous => ({ ...previous, [key]: value }))
   }
 
+  const [uploading, setUploading] = useState(false)
+  const uploadSequence = useRef(0)
   const upload = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0]
-    if (file === undefined) return
+    const sequence = ++uploadSequence.current
+    setUploading(false)
+    event.target.value = ''
+    setError(undefined)
+    if (!file) return
+    // Reject before reading the file into memory.
+    if (file.size === 0 || file.size > MAX_LOGO_BYTES) {
+      setError('Logo must be between 1 byte and 2 MiB')
+      return
+    }
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setError('Choose a PNG, JPEG, or WebP logo. SVG is not supported')
+      return
+    }
+    setUploading(true)
     const reader = new FileReader()
     reader.onload = () => {
-      setLogo(typeof reader.result === 'string' ? reader.result : undefined)
-      setLogoName(file.name)
+      if (sequence !== uploadSequence.current) return
+      try {
+        const bytes = new Uint8Array(reader.result as ArrayBuffer)
+        validateLogoBytes(bytes, file.type)
+        let binary = ''
+        for (const byte of bytes) binary += String.fromCharCode(byte)
+        setLogo(`data:${file.type};base64,${btoa(binary)}`)
+        setLogoName(file.name)
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not read logo')
+      } finally { setUploading(false) }
     }
-    reader.readAsDataURL(file)
+    reader.onerror = () => {
+      if (sequence === uploadSequence.current) { setError('Could not read logo'); setUploading(false) }
+    }
+    reader.readAsArrayBuffer(file)
   }
 
   const save = async (): Promise<void> => {
@@ -374,14 +609,13 @@ function NewBrand({ t, onCancel, onCreated }: {
       </div>
       <div className={styles.form}>
         <div>
-          <div className={styles.review}>{t('brand.form.review')}</div>
+          {initial !== undefined
+            ? <div className={styles.review}>{t('brands.flow.website.prefilled', { source: initial.source })}</div>
+            : <div className={styles.review}>{t('brand.form.review')}</div>}
           <div className={styles.panel}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
               <Field label={t('brand.form.name')}>
-                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={event => { setName(event.target.value) }} autoFocus />
-              </Field>
-              <Field label={t('brand.form.website')}>
-                <input placeholder={t('brand.form.websitePlaceholder')} />
+                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={(event) => { setName(event.target.value) }} autoFocus />
               </Field>
             </div>
 
@@ -395,7 +629,7 @@ function NewBrand({ t, onCancel, onCreated }: {
               </div>
               <label className={styles.secondary} style={{ cursor: 'pointer' }}>
                 {logo === undefined ? t('brand.form.upload') : t('brand.form.replace')}
-                <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style={{ display: 'none' }} onChange={upload} />
+                <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={t('brand.form.logo')} disabled={uploading} style={{ display: 'none' }} onChange={upload} />
               </label>
             </div>
 
@@ -408,7 +642,7 @@ function NewBrand({ t, onCancel, onCreated }: {
                 ['dark', 'brand.form.dark'],
               ] as const).map(([key, label]) => (
                 <Field key={key} label={t(label)}>
-                  <input type="color" value={identity[key]} onChange={event => { set(key, event.target.value.toUpperCase()) }
+                  <input type="color" value={identity[key]} onChange={(event) => { set(key, event.target.value.toUpperCase()) }
                   } />
                   <code>{identity[key]}</code>
                 </Field>
@@ -418,10 +652,10 @@ function NewBrand({ t, onCancel, onCreated }: {
             <h2 style={{ marginTop: 18 }}>{t('brand.form.fonts')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.latinFont')}>
-                <input value={identity.latinFont} onChange={event => { set('latinFont', event.target.value) }} />
+                <input value={identity.latinFont} onChange={(event) => { set('latinFont', event.target.value) }} />
               </Field>
               <Field label={t('brand.form.arabicFont')}>
-                <input value={identity.arabicFont} onChange={event => { set('arabicFont', event.target.value) }} />
+                <input value={identity.arabicFont} onChange={(event) => { set('arabicFont', event.target.value) }} />
               </Field>
             </div>
 
@@ -430,14 +664,14 @@ function NewBrand({ t, onCancel, onCreated }: {
                 { value: 'soft', label: t('brand.form.motionSoft') },
                 { value: 'snap', label: t('brand.form.motionSnap') },
                 { value: 'fade', label: t('brand.form.motionFade') },
-              ]} onChange={value => { set('motion', value) }} />
+              ]} onChange={(value) => { set('motion', value) }} />
             </Field>
             <Field label={t('brand.form.caption')}>
               <Segmented value={identity.caption as 'word' | 'plain' | 'boxed'} options={[
                 { value: 'word', label: t('brand.form.captionWord') },
                 { value: 'plain', label: t('brand.form.captionPlain') },
                 { value: 'boxed', label: t('brand.form.captionBoxed') },
-              ]} onChange={value => { set('caption', value) }} />
+              ]} onChange={(value) => { set('caption', value) }} />
             </Field>
           </div>
         </div>
@@ -476,8 +710,8 @@ function NewBrand({ t, onCancel, onCreated }: {
 
         {error !== undefined && <div className={`${styles.error} ${styles.formFooter}`}>{error}</div>}
         <div className={styles.formFooter}>
-          <button type="button" className={styles.secondary} onClick={onCancel} disabled={saving}>{t('brand.form.cancel')}</button>
-          <button type="button" className={styles.primary} onClick={() => { void save() }} disabled={saving}>
+          <button type="button" className={styles.secondary} onClick={onCancel} disabled={saving || uploading}>{t('brand.form.cancel')}</button>
+          <button type="button" className={styles.primary} onClick={() => { void save() }} disabled={saving || uploading}>
             {saving ? t('brand.form.saving') : t('brand.form.save')}
           </button>
         </div>
@@ -531,57 +765,232 @@ export function MotifOnboarding({ t = key => key, load, complete, openSection }:
 }
 
 /** One Brand's editing surface: request history, preview, timeline, identity. */
-export function BrandEditor({ brand, t = key => key, onClose }: {
+/** One Edit Request submitted from this editor, with its delivery state. */
+interface EditorRequest {
+  readonly id: number
+  readonly text: string
+  readonly state: 'sending' | 'sent' | 'failed' | 'cancelled'
+  readonly detail: string
+}
+
+/** Format one byte count for the timeline list. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const REQUEST_STATE_COPY = {
+  sending: 'editor.state.sending',
+  sent: 'editor.state.sent',
+  failed: 'editor.state.failed',
+  cancelled: 'editor.state.cancelled',
+} as const
+
+/**
+ * Brand editor: the composer submits Edit Requests to the Brand's real
+ * workspace Session (the session/relay flow), and the timeline lists the
+ * Brand folder's real timeline files. Controls without a real flow behind
+ * them, such as Export, stay disabled with an explanation instead of
+ * pretending to work.
+ * @param props - the Brand, the injected services, and the close handler.
+ * @returns the editor dialog.
+ */
+export function WebsiteStart({ t, analyzeWebsite, onCancel, onAnalyzed }: {
+  t: (key: MotifCopy, vars?: Readonly<Record<string, string | number>>) => string
+  analyzeWebsite: MotifInjected['analyzeWebsite']
+  onCancel: () => void
+  onAnalyzed: (suggestion: MotifWebsiteSuggestion) => void
+}) {
+  const [url, setUrl] = useState('')
+  const [analyzing, setAnalyzing] = useState(false)
+  const [error, setError] = useState<string | undefined>()
+  const abortRef = useRef<AbortController | undefined>()
+
+  const analyze = async (): Promise<void> => {
+    const trimmed = url.trim()
+    setError(undefined)
+    if (!/^https?:\/\/.+/i.test(trimmed)) {
+      setError(t('brands.flow.website.invalid'))
+      return
+    }
+    const controller = new AbortController()
+    abortRef.current = controller
+    setAnalyzing(true)
+    try {
+      const suggestion = await analyzeWebsite(trimmed, controller.signal)
+      if (!controller.signal.aborted) {
+        onAnalyzed(suggestion)
+      }
+    } catch (reason: unknown) {
+      if (!controller.signal.aborted) {
+        setError(reason instanceof Error ? reason.message : t('brands.flow.website.failed'))
+      }
+    } finally {
+      setAnalyzing(false)
+      abortRef.current = undefined
+    }
+  }
+
+  const cancel = (): void => {
+    abortRef.current?.abort()
+    onCancel()
+  }
+
+  return (
+    <form className={styles.websiteFlow} onSubmit={(event) => { event.preventDefault(); void analyze() }}>
+      <label className={styles.websiteFlowLabel}>
+        {t('brands.flow.website.label')}
+        <input value={url} placeholder={t('brand.form.websitePlaceholder')} aria-label={t('brands.flow.website.label')}
+          disabled={analyzing} onChange={(event) => { setUrl(event.target.value) }} />
+      </label>
+      {analyzing
+        ? <button type="button" className={styles.secondary} onClick={cancel}>{t('brands.flow.website.cancel')}</button>
+        : <button type="submit" className={styles.primary}>{t('brands.flow.website.action')}</button>}
+      {analyzing && <span className={styles.websiteFlowStatus}>{t('brands.flow.website.analyzing')}</span>}
+      {error !== undefined && <p className={styles.websiteFlowError} role="alert">{error}</p>}
+    </form>
+  )
+}
+
+export function BrandEditor({ brand, t = key => key, onClose, loadTimeline, sendEditRequest }: {
   brand: MotifBrand
   t?: MotifInjected['t']
   onClose: () => void
+  loadTimeline?: MotifInjected['loadTimeline'] | undefined
+  sendEditRequest?: MotifInjected['sendEditRequest'] | undefined
 }) {
   const { identity } = brand
-  const lanes: readonly { key: MotifCopy; clips: readonly [number, number][] }[] = [
-    { key: 'editor.video', clips: [[0, 62], [64, 88]] },
-    { key: 'editor.captions', clips: [[4, 28], [32, 58], [62, 88]] },
-    { key: 'editor.titles', clips: [[0, 18], [40, 52]] },
-    { key: 'editor.motion', clips: [[8, 16], [56, 70]] },
-    { key: 'editor.audio', clips: [[0, 100]] },
-  ]
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
+    dialogRef.current?.focus()
+    return () => { if (previous?.isConnected) previous.focus() }
+  }, [])
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); return }
+      if (event.key !== 'Tab') return
+      const dialog = dialogRef.current
+      if (!dialog) return
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex="0"]',
+      ))
+      const first = controls[0]
+      const last = controls.at(-1)
+      if (!first || !last) { event.preventDefault(); dialog.focus(); return }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+        event.preventDefault(); last.focus()
+      } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) {
+        event.preventDefault(); first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+  const [draft, setDraft] = useState('')
+  const [requests, setRequests] = useState<readonly EditorRequest[]>([])
+  const nextRequestId = useRef(1)
+  const abortRef = useRef<AbortController | undefined>(undefined)
+  const [timeline, setTimeline] = useState<readonly MotifTimelineEntry[] | undefined>(undefined)
+  const [timelineState, setTimelineState] = useState<'loading' | 'ready' | 'failed'>(
+    loadTimeline === undefined ? 'failed' : 'loading',
+  )
+
+  const reloadTimeline = useCallback(async (): Promise<void> => {
+    if (loadTimeline === undefined) {
+      setTimelineState('failed')
+      return
+    }
+    setTimelineState('loading')
+    try {
+      setTimeline(await loadTimeline(brand))
+      setTimelineState('ready')
+    } catch {
+      setTimelineState('failed')
+    }
+  }, [brand, loadTimeline])
+
+  useEffect(() => {
+    void reloadTimeline()
+  }, [reloadTimeline])
+
+  const sending = requests.some(request => request.state === 'sending')
+  const canSend = sendEditRequest !== undefined && brand.workspaceId !== undefined
+
+  const submit = async (): Promise<void> => {
+    const text = draft.trim()
+    if (text === '' || sendEditRequest === undefined || !canSend || sending) return
+    const controller = new AbortController()
+    abortRef.current = controller
+    const id = nextRequestId.current++
+    setRequests(previous => [{ id, text, state: 'sending', detail: '' }, ...previous])
+    setDraft('')
+    try {
+      const result = await sendEditRequest(brand, text, controller.signal)
+      const state = result.ok ? 'sent' : controller.signal.aborted ? 'cancelled' : 'failed'
+      setRequests(previous => previous.map(request => request.id === id
+        ? { ...request, state, detail: result.message }
+        : request))
+      if (result.ok) await reloadTimeline()
+    } catch (reason: unknown) {
+      const detail = reason instanceof Error ? reason.message : String(reason)
+      setRequests(previous => previous.map(request => request.id === id
+        ? { ...request, state: controller.signal.aborted ? 'cancelled' : 'failed', detail }
+        : request))
+    } finally {
+      abortRef.current = undefined
+    }
+  }
+
   return (
-    <div className={styles.editor} role="dialog" aria-modal="true" aria-label={brand.name}>
+    <div ref={dialogRef} tabIndex={-1} className={styles.editor} role="dialog" aria-modal="true" aria-label={brand.name}>
       <header className={styles.editorBar}>
         <button type="button" className={styles.ghost} onClick={onClose}>← {t('editor.back')}</button>
         <div className={styles.editorName}>{brand.name}</div>
-        <button type="button" className={styles.primary}>{t('editor.export')}</button>
+        <span className={styles.exportGroup}>
+          <button type="button" className={styles.primary} disabled aria-describedby="motif-export-note">
+            {t('editor.export')}
+          </button>
+          <span className={styles.exportNote} id="motif-export-note">{t('editor.exportUnavailable')}</span>
+        </span>
       </header>
       <div className={styles.editorBody}>
         <aside className={styles.editorChat}>
           <div className={styles.chatHead}>
             <h3>{t('editor.editRequest')}</h3>
-            <span>{t('editor.ready')}</span>
+            <span data-available={canSend}>{canSend ? t('editor.ready') : t('editor.unavailable')}</span>
           </div>
           <div className={styles.requestList}>
-            <div className={styles.request} data-latest="true">
-              <div className={styles.requestMeta}>{t('editor.version')}</div>
-              <p>{t('editor.requestPlaceholder')}</p>
-            </div>
+            {requests.length === 0 && <p className={styles.emptyNote}>{t('editor.noRequests')}</p>}
+            {requests.map(request => (
+              <div className={styles.request} data-state={request.state} key={request.id}>
+                <div className={styles.requestMeta}>{t(REQUEST_STATE_COPY[request.state])}</div>
+                <p>{request.text}</p>
+                {request.detail !== '' && <p className={styles.requestDetail}>{request.detail}</p>}
+              </div>
+            ))}
           </div>
-          <div className={styles.composerRow}>
-            <input placeholder={t('editor.requestPlaceholder')} aria-label={t('editor.editRequest')} />
-            <button type="button" className={styles.primary}>{t('editor.send')}</button>
-          </div>
+          <form className={styles.composerRow} onSubmit={(event) => { event.preventDefault(); void submit() }}>
+            <input value={draft} placeholder={t('editor.requestPlaceholder')} aria-label={t('editor.editRequest')}
+              disabled={!canSend || sending}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => { setDraft(event.target.value) }} />
+            {sending
+              ? <button type="button" className={styles.secondary} onClick={() => { abortRef.current?.abort() }}>{t('editor.cancel')}</button>
+              : <button type="submit" className={styles.primary} disabled={!canSend || draft.trim() === ''}>{t('editor.send')}</button>}
+          </form>
+          {!canSend && <p className={styles.composerHint}>{t('editor.sendUnavailable')}</p>}
         </aside>
         <main className={styles.editorStage}>
           <div className={styles.previewFrame} style={{ background: identity.dark }}>
+            {brand.logo !== undefined && <img className={styles.previewLogo} src={brand.logo} alt={brand.name} />}
             <div className={styles.previewType} style={{ color: identity.light, fontFamily: `'${identity.latinFont}', sans-serif` }}>
               {brand.name}
             </div>
             <div className={styles.previewBar} style={{ background: identity.accent }} />
             <div className={styles.previewArabic} style={{ color: identity.light, fontFamily: `'${identity.arabicFont}', sans-serif` }}>
-              {t('brand.form.captionArabic')}
+              {brand.name}
             </div>
-          </div>
-          <div className={styles.transport}>
-            <span>0:13</span>
-            <input type="range" min={0} max={22} defaultValue={13} aria-label={t('editor.timeline')} />
-            <span>0:22</span>
           </div>
           <div className={styles.inUseCard}>
             <div>
@@ -593,20 +1002,27 @@ export function BrandEditor({ brand, t = key => key, onClose }: {
                 <span key={colour} style={{ background: colour }} />
               ))}
             </div>
-            <em>{t('editor.handEdits')}</em>
           </div>
-          <div className={styles.lanes}>
-            {lanes.map(lane => (
-              <div className={styles.lane} key={lane.key}>
-                <span className={styles.laneName}>{t(lane.key)}</span>
-                <div className={styles.laneTrack}>
-                  {lane.clips.map(([start, end]) => (
-                    <span key={`${start}-${end}`} style={{ left: `${start}%`, width: `${end - start}%`, background: identity.primary }} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <section className={styles.timeline} aria-label={t('editor.timeline')}>
+            <h3 className={styles.timelineTitle}>{t('editor.timeline')}</h3>
+            {timelineState === 'loading' && <p className={styles.emptyNote}>{t('editor.timelineLoading')}</p>}
+            {timelineState === 'failed' && <p className={styles.emptyNote}>{t('editor.timelineFailed')}</p>}
+            {timelineState === 'ready' && timeline !== undefined && timeline.length === 0 && (
+              <p className={styles.emptyNote}>{t('editor.timelineEmpty')}</p>
+            )}
+            {timelineState === 'ready' && timeline !== undefined && timeline.length > 0 && (
+              <ul className={styles.timelineList}>
+                {timeline.map(entry => (
+                  <li className={styles.timelineRow} key={entry.name}>
+                    <span className={styles.timelineName}>{entry.name}</span>
+                    <span className={styles.timelineMeta}>
+                      {formatBytes(entry.bytes)} · {new Date(entry.updatedAt).toLocaleString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </main>
       </div>
     </div>
@@ -615,12 +1031,20 @@ export function BrandEditor({ brand, t = key => key, onClose }: {
 
 /** Blank-session home: the Brands page replaces the generic chat hero. */
 export function MotifHome({ t = key => key, load, createBrand, openBrand }: Props) {
+  const { snapshot } = useSnapshot(load)
+  const activity = snapshot?.activity ?? []
+  const running = activity.find(entry => entry.state === 'running')
+  const latest = activity[0]
   return (
     <div className={styles.home}>
       <BrandsSection t={t} load={load} createBrand={createBrand} openBrand={openBrand} />
       <div className={styles.homeStatus}>
         <span />
-        {t('editor.aiActive', { name: 'Claude Code' })}
+        {running !== undefined
+          ? t('editor.aiRunning', { name: running.model })
+          : latest !== undefined
+            ? t('editor.aiActive', { name: latest.model })
+            : t('ai.noneActive')}
       </div>
     </div>
   )

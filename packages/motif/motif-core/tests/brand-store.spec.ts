@@ -35,7 +35,7 @@ afterEach(async () => {
 
 describe('Brand folders', () => {
   it('slugifies a display name without leaving an empty folder name', () => {
-    expect(slugify('Nakheel Café')).toBe('nakheel-cafe')
+    expect(slugify('Nakheel Café')).toBe('nakheel-café')
     expect(slugify('  ***  ')).toBe('brand')
   })
 
@@ -43,10 +43,10 @@ describe('Brand folders', () => {
     const dir = await root()
     const brand = await createBrand(dir, { name: 'Nakheel Café', identity: IDENTITY })
 
-    expect(brand.id).toBe('nakheel-cafe')
-    expect(await readFile(join(dir, 'nakheel-cafe', 'brand.md'), 'utf8'))
+    expect(brand.id).toBe('nakheel-café')
+    expect(await readFile(join(dir, 'nakheel-café', 'brand.md'), 'utf8'))
       .toContain('Primary colour: #0F5C4B')
-    const stored = JSON.parse(await readFile(join(dir, 'nakheel-cafe', 'brand.json'), 'utf8')) as { name: string }
+    const stored = JSON.parse(await readFile(join(dir, 'nakheel-café', 'brand.json'), 'utf8')) as { name: string }
     expect(stored.name).toBe('Nakheel Café')
     expect((await listBrands(dir, () => 'workspace-1')).at(0)).toMatchObject({
       name: 'Nakheel Café',
@@ -57,10 +57,13 @@ describe('Brand folders', () => {
 
   it('writes an uploaded logo beside the definition', async () => {
     const dir = await root()
-    const logo = `data:image/png;base64,${Buffer.from('logo-bytes').toString('base64')}`
+    // A real 1x1 PNG: #43 validates magic bytes, so fake payloads are rejected.
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC'
+    const logo = `data:image/png;base64,${pngBase64}`
     await createBrand(dir, { name: 'Logo Brand', identity: IDENTITY, logo })
 
-    expect(await readFile(join(dir, 'logo-brand', 'assets', 'logo.png'), 'utf8')).toBe('logo-bytes')
+    const stored = await readFile(join(dir, 'logo-brand', 'assets', 'logo.png'))
+    expect(stored.equals(Buffer.from(pngBase64, 'base64'))).toBe(true)
   })
 
   it('refuses a duplicate folder and a malformed colour', async () => {
@@ -77,6 +80,7 @@ describe('Brand folders', () => {
     const dir = await root()
     await createBrand(dir, { name: 'Timeline', identity: IDENTITY })
     await writeFile(join(dir, 'timeline', 'timeline', 'main.json'), '{}')
+    await writeFile(join(dir, 'timeline', 'timeline', 'edit.mp4'), '')
 
     expect((await listBrands(dir, () => undefined)).at(0)?.videoCount).toBe(1)
   })

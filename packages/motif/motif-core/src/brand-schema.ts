@@ -4,6 +4,7 @@ export interface StoredBrand {
   name: string
   identity: MotifBrandIdentity
   logo?: string
+  logoFile?: string
   updatedAt: string
 }
 /** Invalid metadata is reported with its file path. It is never rewritten or deleted. */
@@ -42,12 +43,14 @@ export function parseStoredBrand(value: unknown, file: string): StoredBrand {
   // Normalize a valid date so ordering is chronological even with mixed offsets.
   const updatedAt = new Date(row.updatedAt as string).toISOString()
   if (row.logo !== undefined && (typeof row.logo !== 'string' || row.logo.length > 3_000_000 || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(row.logo))) fail('Invalid logo')
+  if (row.logoFile !== undefined && (typeof row.logoFile !== 'string' || !/^assets\/logo\.(?:png|jpg|webp)$/.test(row.logoFile))) fail('Invalid logo asset path')
   if (row.videoCount !== undefined && (!Number.isInteger(row.videoCount) || (row.videoCount as number) < 0)) fail('Invalid video count')
   return {
     version: 1,
     name: row.name as string,
     identity: identity as unknown as MotifBrandIdentity,
     ...row.logo === undefined ? {} : { logo: row.logo as string },
+    ...row.logoFile === undefined ? {} : { logoFile: row.logoFile as string },
     updatedAt,
   }
 }
