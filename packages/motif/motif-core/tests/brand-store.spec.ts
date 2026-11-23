@@ -57,10 +57,13 @@ describe('Brand folders', () => {
 
   it('writes an uploaded logo beside the definition', async () => {
     const dir = await root()
-    const logo = `data:image/png;base64,${Buffer.from('logo-bytes').toString('base64')}`
+    // A real 1x1 PNG: #43 validates magic bytes, so fake payloads are rejected.
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC'
+    const logo = `data:image/png;base64,${pngBase64}`
     await createBrand(dir, { name: 'Logo Brand', identity: IDENTITY, logo })
 
-    expect(await readFile(join(dir, 'logo-brand', 'assets', 'logo.png'), 'utf8')).toBe('logo-bytes')
+    const stored = await readFile(join(dir, 'logo-brand', 'assets', 'logo.png'))
+    expect(stored.equals(Buffer.from(pngBase64, 'base64'))).toBe(true)
   })
 
   it('refuses a duplicate folder and a malformed colour', async () => {

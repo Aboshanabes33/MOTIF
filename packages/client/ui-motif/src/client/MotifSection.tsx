@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import type { MotifBrand, MotifBrandCreateRequest, MotifBrandIdentity, MotifConnection, MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
 import type { MotifCopy } from './locales.ts'
 import styles from './MotifSection.module.css'
+import { MAX_LOGO_BYTES, validateLogoBytes } from './logo.ts'
 
 /** Values every Motif settings surface receives through its slot `inject`. */
 export interface MotifInjected {
@@ -60,7 +61,6 @@ function useSnapshot(load: (() => Promise<MotifSnapshot>) | undefined) {
     void refresh()
     // The section is mounted once per settings visit; the host is polled by
     // explicit actions, so one read is enough to paint it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { snapshot, error, loading, refresh }
@@ -235,7 +235,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
   if (creating) {
     return (
       <NewBrand t={t} onCancel={() => { setCreating(false) }} onCreated={async (request) => {
-        const result = await createBrand!(request)
+        const result = await createBrand(request)
         await refresh()
         setCreating(false)
         openBrand?.(result.workspaceId)
@@ -252,7 +252,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand }: 
         </div>
         <div className={styles.searchRow}>
           <input value={query} placeholder={t('brands.search')} aria-label={t('brands.search')}
-            onChange={event => { setQuery(event.target.value) }} />
+            onChange={(event) => { setQuery(event.target.value) }} />
           <button type="button" className={styles.primary} onClick={() => { setCreating(true) }}>+ {t('brands.new')}</button>
         </div>
       </div>
@@ -339,15 +339,43 @@ function NewBrand({ t, onCancel, onCreated }: {
     setIdentity(previous => ({ ...previous, [key]: value }))
   }
 
+  const [uploading, setUploading] = useState(false)
+  const uploadSequence = useRef(0)
   const upload = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0]
-    if (file === undefined) return
+    const sequence = ++uploadSequence.current
+    setUploading(false)
+    event.target.value = ''
+    setError(undefined)
+    if (!file) return
+    // Reject before reading the file into memory.
+    if (file.size === 0 || file.size > MAX_LOGO_BYTES) {
+      setError('Logo must be between 1 byte and 2 MiB')
+      return
+    }
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setError('Choose a PNG, JPEG, or WebP logo. SVG is not supported')
+      return
+    }
+    setUploading(true)
     const reader = new FileReader()
     reader.onload = () => {
-      setLogo(typeof reader.result === 'string' ? reader.result : undefined)
-      setLogoName(file.name)
+      if (sequence !== uploadSequence.current) return
+      try {
+        const bytes = new Uint8Array(reader.result as ArrayBuffer)
+        validateLogoBytes(bytes, file.type)
+        let binary = ''
+        for (const byte of bytes) binary += String.fromCharCode(byte)
+        setLogo(`data:${file.type};base64,${btoa(binary)}`)
+        setLogoName(file.name)
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not read logo')
+      } finally { setUploading(false) }
     }
-    reader.readAsDataURL(file)
+    reader.onerror = () => {
+      if (sequence === uploadSequence.current) { setError('Could not read logo'); setUploading(false) }
+    }
+    reader.readAsArrayBuffer(file)
   }
 
   const save = async (): Promise<void> => {
@@ -378,7 +406,7 @@ function NewBrand({ t, onCancel, onCreated }: {
           <div className={styles.panel}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.name')}>
-                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={event => { setName(event.target.value) }} autoFocus />
+                <input value={name} placeholder={t('brand.form.namePlaceholder')} onChange={(event) => { setName(event.target.value) }} autoFocus />
               </Field>
               <Field label={t('brand.form.website')}>
                 <input placeholder={t('brand.form.websitePlaceholder')} />
@@ -395,7 +423,7 @@ function NewBrand({ t, onCancel, onCreated }: {
               </div>
               <label className={styles.secondary} style={{ cursor: 'pointer' }}>
                 {logo === undefined ? t('brand.form.upload') : t('brand.form.replace')}
-                <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style={{ display: 'none' }} onChange={upload} />
+                <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={t('brand.form.logo')} disabled={uploading} style={{ display: 'none' }} onChange={upload} />
               </label>
             </div>
 
@@ -408,7 +436,7 @@ function NewBrand({ t, onCancel, onCreated }: {
                 ['dark', 'brand.form.dark'],
               ] as const).map(([key, label]) => (
                 <Field key={key} label={t(label)}>
-                  <input type="color" value={identity[key]} onChange={event => { set(key, event.target.value.toUpperCase()) }
+                  <input type="color" value={identity[key]} onChange={(event) => { set(key, event.target.value.toUpperCase()) }
                   } />
                   <code>{identity[key]}</code>
                 </Field>
@@ -418,10 +446,10 @@ function NewBrand({ t, onCancel, onCreated }: {
             <h2 style={{ marginTop: 18 }}>{t('brand.form.fonts')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('brand.form.latinFont')}>
-                <input value={identity.latinFont} onChange={event => { set('latinFont', event.target.value) }} />
+                <input value={identity.latinFont} onChange={(event) => { set('latinFont', event.target.value) }} />
               </Field>
               <Field label={t('brand.form.arabicFont')}>
-                <input value={identity.arabicFont} onChange={event => { set('arabicFont', event.target.value) }} />
+                <input value={identity.arabicFont} onChange={(event) => { set('arabicFont', event.target.value) }} />
               </Field>
             </div>
 
@@ -430,14 +458,14 @@ function NewBrand({ t, onCancel, onCreated }: {
                 { value: 'soft', label: t('brand.form.motionSoft') },
                 { value: 'snap', label: t('brand.form.motionSnap') },
                 { value: 'fade', label: t('brand.form.motionFade') },
-              ]} onChange={value => { set('motion', value) }} />
+              ]} onChange={(value) => { set('motion', value) }} />
             </Field>
             <Field label={t('brand.form.caption')}>
               <Segmented value={identity.caption as 'word' | 'plain' | 'boxed'} options={[
                 { value: 'word', label: t('brand.form.captionWord') },
                 { value: 'plain', label: t('brand.form.captionPlain') },
                 { value: 'boxed', label: t('brand.form.captionBoxed') },
-              ]} onChange={value => { set('caption', value) }} />
+              ]} onChange={(value) => { set('caption', value) }} />
             </Field>
           </div>
         </div>
@@ -476,8 +504,8 @@ function NewBrand({ t, onCancel, onCreated }: {
 
         {error !== undefined && <div className={`${styles.error} ${styles.formFooter}`}>{error}</div>}
         <div className={styles.formFooter}>
-          <button type="button" className={styles.secondary} onClick={onCancel} disabled={saving}>{t('brand.form.cancel')}</button>
-          <button type="button" className={styles.primary} onClick={() => { void save() }} disabled={saving}>
+          <button type="button" className={styles.secondary} onClick={onCancel} disabled={saving || uploading}>{t('brand.form.cancel')}</button>
+          <button type="button" className={styles.primary} onClick={() => { void save() }} disabled={saving || uploading}>
             {saving ? t('brand.form.saving') : t('brand.form.save')}
           </button>
         </div>
