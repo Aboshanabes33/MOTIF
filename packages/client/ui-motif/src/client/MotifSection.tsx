@@ -32,6 +32,10 @@ export interface MotifInjected {
   deleteApiKey: (provider: MotifApiProvider) => Promise<MotifActionResult>
   /** UI-safe status of one provider's stored key. */
   apiKeyStatus: (provider: MotifApiProvider) => Promise<MotifApiKeyStatus>
+  /** Read the default model and every model the relay routes offer. */
+  loadModels: () => Promise<MotifModelCatalog>
+  /** Save the default model new Sessions start with. */
+  selectModel: (provider: string, model: string) => Promise<{ provider: string; model: string }>
   /** Read one Brand's real timeline files from its folder. */
   loadTimeline: (brand: MotifBrand) => Promise<readonly MotifTimelineEntry[]>
   /**
@@ -47,6 +51,28 @@ export interface MotifInjected {
 }
 
 type Props = { [K in keyof MotifInjected]?: MotifInjected[K] | undefined }
+
+/** One selectable model on a Motif relay route. */
+export interface MotifModelOption {
+  /** Provider route id (e.g. `motif-relay-claude`). */
+  readonly provider: string
+  /** Provider display label. */
+  readonly providerLabel: string
+  /** Model id the route offers. */
+  readonly id: string
+  /** Model display name. */
+  readonly name: string
+  /** Optional user-facing distinction. */
+  readonly description?: string
+}
+
+/** The model picker's data: the current default and every relay-route option. */
+export interface MotifModelCatalog {
+  /** Selection new Sessions start with. */
+  readonly current: { readonly provider: string; readonly model: string }
+  /** Models offered by Motif's relay routes. */
+  readonly options: readonly MotifModelOption[]
+}
 
 const FALLBACK_IDENTITY: MotifBrandIdentity = {
   primary: '#0F5C4B',
@@ -101,7 +127,7 @@ function ProviderMark({ backend }: { backend: 'claude-code' | 'codex' }) {
  * @param props - slot inject face.
  * @returns the AI section.
  */
-export function AiSection({ t = key => key, load, install, signIn, test, saveApiKey, testApiKey, deleteApiKey, apiKeyStatus }: Props) {
+export function AiSection({ t = key => key, load, install, signIn, test, saveApiKey, testApiKey, deleteApiKey, apiKeyStatus, loadModels, selectModel }: Props) {
   const { snapshot, error, loading, refresh } = useSnapshot(load)
   const [busy, setBusy] = useState<string | undefined>()
   const [messages, setMessages] = useState<Record<string, string>>({})
@@ -210,6 +236,12 @@ export function AiSection({ t = key => key, load, install, signIn, test, saveApi
           </div>
 
           <div className={styles.apiCard} style={{ marginTop: 14 }}>
+            <strong>{t('ai.model.title')}</strong>
+            <p style={{ color: '#94918c', fontSize: 13, margin: '6px 0 0' }}>{t('ai.model.body')}</p>
+            <ModelCard t={t} loadModels={loadModels} selectModel={selectModel} />
+          </div>
+
+          <div className={styles.apiCard} style={{ marginTop: 14 }}>
             <strong>{t('ai.noSubscription')}</strong>
             <p style={{ color: '#94918c', fontSize: 13, margin: '6px 0 0' }}>{t('ai.apiKeyBody')}</p>
             <ApiKeyCard t={t} saveApiKey={saveApiKey} testApiKey={testApiKey} deleteApiKey={deleteApiKey} apiKeyStatus={apiKeyStatus} />
@@ -231,6 +263,94 @@ export function AiSection({ t = key => key, load, install, signIn, test, saveApi
   )
 }
 
+
+/** Stable option value for one provider/model pair. */
+function modelKey(option: { readonly provider: string; readonly id: string }): string {
+  return `${option.provider}::${option.id}`
+}
+
+/**
+ * The model card: pick which relay model answers Edit Requests. The choice is
+ * the default new Sessions start with; a Session's own model menu can still
+ * override it for that Session.
+ */
+export function ModelCard({ t, loadModels, selectModel }: {
+  t: (key: MotifCopy, vars?: Readonly<Record<string, string | number>>) => string
+  loadModels: MotifInjected['loadModels'] | undefined
+  selectModel: MotifInjected['selectModel'] | undefined
+}) {
+  const supported = loadModels !== undefined && selectModel !== undefined
+  const [catalog, setCatalog] = useState<MotifModelCatalog | undefined>()
+  const [choice, setChoice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | undefined>()
+
+  useEffect(() => {
+    if (loadModels === undefined) return
+    let live = true
+    loadModels().then(
+      (next) => {
+        if (!live) return
+        setCatalog(next)
+        const selected = next.options.find(option => option.provider === next.current.provider && option.id === next.current.model)
+        setChoice(selected === undefined ? '' : modelKey(selected))
+      },
+      () => { if (live) setCatalog(undefined) },
+    )
+    return () => { live = false }
+  }, [loadModels])
+
+  if (!supported) {
+    return <p className={styles.apiNote}>{t('ai.model.unavailable')}</p>
+  }
+
+  const currentKey = catalog === undefined ? '' : `${catalog.current.provider}::${catalog.current.model}`
+  const dirty = catalog !== undefined && choice !== '' && choice !== currentKey
+
+  const apply = async (): Promise<void> => {
+    if (selectModel === undefined || catalog === undefined) return
+    const option = catalog.options.find(candidate => modelKey(candidate) === choice)
+    if (option === undefined) return
+    setBusy(true)
+    setResult(undefined)
+    try {
+      await selectModel(option.provider, option.id)
+      setCatalog({ current: { provider: option.provider, model: option.id }, options: catalog.options })
+      setResult({ ok: true, text: t('ai.model.saved', { name: `${option.providerLabel} · ${option.name}` }) })
+    } catch (reason: unknown) {
+      setResult({ ok: false, text: errorText(reason, t('ai.model.failed')) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className={styles.apiKeyCard}>
+      <div className={styles.field}>
+        <label htmlFor="motif-model-choice">{t('ai.model.label')}</label>
+        <select
+          id="motif-model-choice"
+          value={choice}
+          disabled={busy || catalog === undefined}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) => { setChoice(event.target.value); setResult(undefined) }}
+        >
+          {choice === '' && <option value="" disabled>{t('ai.model.placeholder')}</option>}
+          {(catalog?.options ?? []).map(option => (
+            <option key={modelKey(option)} value={modelKey(option)}>{option.providerLabel} · {option.name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <button type="button" className={styles.primary} disabled={busy || !dirty} onClick={() => { void apply() }}>
+          {busy ? t('ai.working') : t('ai.model.apply')}
+        </button>
+      </div>
+      {result !== undefined && (
+        <p className={styles.apiNote} role={result.ok ? 'status' : 'alert'}>{result.text}</p>
+      )}
+    </div>
+  )
+}
 
 /** Display message from one thrown value. */
 function errorText(reason: unknown, fallback: string): string {

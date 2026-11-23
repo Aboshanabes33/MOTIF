@@ -36,6 +36,7 @@ import {
   type ApiSessionCreated,
 } from './agent.ts'
 import type {
+  ModelSelection,
   SessionAttachmentRequest,
   SessionAttachmentValue,
   SessionCancelRequest,
@@ -192,6 +193,37 @@ export class SessionCommandController {
         )
       }
     })
+  }
+
+  /**
+   * Validate and save one deployment default model selection; no Session is
+   * required, so settings surfaces can change the model Sessions created later
+   * start with. The same availability and resolution checks as a Session-local
+   * selection apply.
+   * @param request - requested provider, model, and optional reasoning effort.
+   * @returns the normalized selection now stored as the default.
+   */
+  async selectDefaultModel(request: ModelSelection): Promise<SessionSelectModelValue> {
+    try {
+      await this.requireModel(request)
+      const selected: AgentModelSelection = {
+        provider: request.provider,
+        model: request.model,
+        ...(request.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: brandString<ReasoningEffortId>(request.reasoningEffort) }),
+      }
+      await this.ctx.llm.resolveCallConfig(selected)
+      await this.ctx.agentDefaultModel.saveSelection(selected)
+      return { selected: { ...selected } }
+    } catch (error) {
+      if (remoteErrorOf(error) !== undefined) throw error
+      throw new RemoteError(
+        'session/model-unavailable',
+        error instanceof Error ? error.message : String(error),
+        { provider: request.provider, model: request.model },
+      )
+    }
   }
 
   /**

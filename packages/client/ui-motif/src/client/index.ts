@@ -11,7 +11,8 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-motif-core/remote'
 import type { MotifBrand, MotifSnapshot, MotifTimelineEntry, MotifWebsiteSuggestion } from '@deepseek-ai/dsh-motif-core/types'
-import { AiSection, BrandsSection, MotifHomeFrame, MotifOnboarding, type MotifInjected } from './MotifSection.tsx'
+import { AiSection, BrandsSection, MotifHomeFrame, MotifOnboarding, type MotifInjected, type MotifModelCatalog, type MotifModelOption } from './MotifSection.tsx'
+import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types'
 import { ar, en, zh, type MotifCopy } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -61,6 +62,27 @@ export function apply(ctx: Context): void {
     testApiKey: request => valueOf(ctx.remote.motif.testApiKey(request)),
     deleteApiKey: provider => valueOf(ctx.remote.motif.deleteApiKey({ provider })),
     apiKeyStatus: provider => valueOf(ctx.remote.motif.apiKeyStatus({ provider })),
+    loadModels: async (): Promise<MotifModelCatalog> => {
+      const catalog = await valueOf<ModelCatalog>(ctx.remote.session.modelCatalog())
+      return {
+        current: { provider: catalog.default.provider, model: catalog.default.model },
+        options: catalog.groups.filter(group => group.id.startsWith('motif-relay-')).flatMap((group): MotifModelOption[] =>
+          group.models.map(model => ({
+            provider: group.id,
+            providerLabel: group.name,
+            id: model.id,
+            name: model.name,
+            ...model.description === undefined ? {} : { description: model.description },
+          })),
+        ),
+      }
+    },
+    selectModel: async (provider, model) => {
+      const value = await valueOf<{ selected: { provider: string; model: string } }>(
+        ctx.remote.session.selectDefaultModel({ provider, model }),
+      )
+      return { provider: value.selected.provider, model: value.selected.model }
+    },
     analyzeWebsite: async (url, signal) => {
       // Typert Remotes cannot be aborted mid-call: race the one bounded host
       // fetch against the AbortSignal so the UI can leave immediately. The
