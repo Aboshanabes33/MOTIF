@@ -63,7 +63,7 @@ function harness(options: {
       }))
     },
     readBrand,
-    status: (_sessionId, _backend, status) => { statuses.push(status) },
+    status: (_sessionId, _backend, _model, status) => { statuses.push(status) },
   }
   return {
     adapter: new RelayAdapter({
