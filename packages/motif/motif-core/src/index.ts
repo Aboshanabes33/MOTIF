@@ -16,7 +16,7 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { createBrandWithWorkspace } from './create-brand-workspace.ts'
 import type {} from '@deepseek-ai/dsh-credentials'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
-import { listBrands, listTimeline } from './brand-store.ts'
+import { listBrandsDetailed, listTimeline } from './brand-store.ts'
 import { analyzeWebsite } from './website-analysis.ts'
 import {
   apiKeyStatus,
@@ -56,7 +56,8 @@ import type {
 } from './types.ts'
 
 export type * from './types.ts'
-export { createBrand, listBrands, listTimeline, brandMarkdown, normalizeIdentity, slugify, MotifBrandError, removeCreatedBrand } from './brand-store.ts'
+export { createBrand, listBrands, listBrandsDetailed, listTimeline, brandMarkdown, normalizeIdentity, slugify, MotifBrandError, MotifBrandCorruptError, removeCreatedBrand } from './brand-store.ts'
+export type { MotifBrandList } from './brand-store.ts'
 export { createBrandWithWorkspace } from './create-brand-workspace.ts'
 export type { BrandWorkspaceRegistry } from './create-brand-workspace.ts'
 export { analyzeWebsite, parseWebsiteUrl } from './website-analysis.ts'
@@ -142,7 +143,7 @@ export class MotifController extends TypertRemoteService {
       workspace.path,
       workspace.id,
     ]))
-    const brands = await listBrands(this.config.root, (path) => {
+    const { brands, problems } = await listBrandsDetailed(this.config.root, (path) => {
       const absolute = resolve(path)
       const canonical = (() => {
         try {
@@ -153,7 +154,7 @@ export class MotifController extends TypertRemoteService {
       })()
       return workspaces.get(absolute) ?? workspaces.get(canonical)
     })
-    return { brands, connections: await inspectConnections(this.commands) }
+    return { brands, brandProblems: problems, connections: await inspectConnections(this.commands) }
   }
 
   /**

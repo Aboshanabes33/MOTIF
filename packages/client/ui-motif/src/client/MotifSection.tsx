@@ -377,6 +377,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand, an
   const [editing, setEditing] = useState<MotifBrand | undefined>()
   const [query, setQuery] = useState('')
   const brands = snapshot?.brands ?? []
+  const problems = snapshot?.brandProblems ?? []
   const visible = useMemo(() => brands.filter(brand => brand.name.toLowerCase().includes(query.trim().toLowerCase())), [brands, query])
 
   if (creating) {
@@ -386,6 +387,7 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand, an
     return (
       <NewBrand t={t} initial={prefill} onCancel={() => { setCreating(false); setPrefill(undefined) }} onCreated={async (request) => {
         const result = await create(request)
+
 
         await refresh()
         setCreating(false)
@@ -411,6 +413,21 @@ export function BrandsSection({ t = key => key, load, createBrand, openBrand, an
 
       {loading && <div className={styles.empty}>{t('brands.loading')}</div>}
       {error && <div className={styles.empty}>{t('brands.failed')}</div>}
+      {!loading && !error && problems.length > 0 && (
+        <div className={styles.problems} role="alert">
+          <div className={styles.problemsTitle}>{t('brands.problems.title')}</div>
+          {problems.map(problem => (
+            <div className={styles.problemRow} key={problem.path}>
+              <span>{problem.kind === 'corrupt'
+                ? t('brands.problems.corrupt', { path: problem.path })
+                : t('brands.problems.unreadable', { path: problem.path })}</span>
+              <button type="button" className={styles.secondary} onClick={() => { void refresh() }}>
+                {t('brands.problems.reload')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {!loading && !error && visible.length > 0 && (
         <div className={styles.grid}>
           {visible.map(brand => (
