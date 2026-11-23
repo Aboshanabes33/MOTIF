@@ -55,6 +55,10 @@ export function apply(ctx: Context): void {
     signIn: backend => valueOf(ctx.remote.motif.signIn({ backend })),
     test: backend => valueOf(ctx.remote.motif.test({ backend })),
     createBrand: request => valueOf(ctx.remote.motif.createBrand(request)),
+    saveApiKey: request => valueOf(ctx.remote.motif.saveApiKey(request)),
+    testApiKey: request => valueOf(ctx.remote.motif.testApiKey(request)),
+    deleteApiKey: provider => valueOf(ctx.remote.motif.deleteApiKey({ provider })),
+    apiKeyStatus: provider => valueOf(ctx.remote.motif.apiKeyStatus({ provider })),
     analyzeWebsite: async (url, signal) => {
       // Typert Remotes cannot be aborted mid-call: race the one bounded host
       // fetch against the AbortSignal so the UI can leave immediately. The
