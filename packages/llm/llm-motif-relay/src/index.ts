@@ -11,6 +11,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
+import type {} from '@deepseek-ai/dsh-credentials'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-working-directory'
@@ -83,6 +85,8 @@ export interface Config {
    * Native sign-in preflight (default `auto`). `skip` assumes a sign-in the Host
    * cannot see — for example credentials supplied through the provider row's `env`.
    */
+  /** Enable Motif stored-key preflight only for routes wired to credential records. */
+  storedCredentials?: boolean
   signInCheck?: 'auto' | 'skip'
 }
 
@@ -107,6 +111,7 @@ export const Config: z<Config> = z.object({
   conversationMessages: z.number().default(6),
   conversationChars: z.number().default(4_000),
   timeoutMs: z.number().default(900_000),
+  storedCredentials: z.boolean().default(false),
   signInCheck: z.union([z.const('auto'), z.const('skip')]).default('auto'),
 })
 
@@ -176,6 +181,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     conversationMessages: config.conversationMessages ?? 6,
     conversationChars: config.conversationChars ?? 4_000,
     timeoutMs: config.timeoutMs ?? 900_000,
+    storedCredentials: config.storedCredentials ?? false,
     signInCheck: config.signInCheck ?? 'auto',
   }
   assertPositiveInteger('maxTimelineFiles', resolved.maxTimelineFiles)
@@ -206,6 +212,19 @@ declare module '@deepseek-ai/cordis' {
 export function apply(ctx: Context, config: Config): void {
   const resolved = resolveConfig(config)
   const host: RelayHost = {
+    hasApiKey: async (backend) => {
+      if (!resolved.storedCredentials) return false
+      const provider = backend === 'claude-code' ? 'anthropic' : backend === 'codex' ? 'openai' : undefined
+      if (provider === undefined) return false
+      try {
+        const credentials = ctx.get('credentials')
+        if (credentials === undefined) return false
+        const record = await credentials.readRecord(parseCredentialKey(`motif/${provider}`))
+        return record?.kind === 'api-key' && !!record.key?.trim()
+      } catch {
+        throw new Error('Could not inspect the stored API key. Check Settings > AI; no fallback was attempted.')
+      }
+    },
     resolve: (sessionId) => {
       const agent = ctx.agents.get(sessionId)
       if (agent === undefined) return undefined

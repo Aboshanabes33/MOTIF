@@ -146,6 +146,8 @@ export interface CodexRunSpec {
   readonly permissionMode: CodexPermissionMode
   /** Explicit deployment/test environment layered after the shared scrub. */
   readonly env: Record<string, string>
+  /** Host-only key sent over private stdin with ephemeral storage, never argv. */
+  readonly apiKey?: string
   /** Subprocess termination grace passed to the shared managed-range owner. */
   readonly disposeGraceMs: number
   /** Shared subprocess service spawn operation. */
@@ -234,7 +236,7 @@ export async function startCodexRun(
   let child: SubprocessHandle
   try {
     child = spec.spawn({
-      argv: codexAppServerArgv(),
+      argv: [...codexAppServerArgv(), ...spec.apiKey === undefined ? [] : ['-c', 'cli_auth_credentials_store="ephemeral"']],
       cwd: spec.cwd,
       stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
       graceMs: spec.disposeGraceMs,
@@ -254,6 +256,7 @@ export async function startCodexRun(
     spec.model,
   )
   const onStderr = (chunk: Buffer | string): void => {
+    if (spec.apiKey !== undefined) return // Raw runtime stderr can contain credentials.
     const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
     try {
       // Synchronous fd forwarding preserves byte order without owning a
@@ -316,6 +319,9 @@ export async function startCodexRun(
   try {
     wire.start()
     await Promise.race([wire.initialize(request.signal), processFailure])
+    if (spec.apiKey !== undefined) {
+      await Promise.race([wire.loginApiKey(spec.apiKey, request.signal), processFailure])
+    }
     startupStage = 'thread-start'
     await Promise.race([wire.startThread(spec.cwd, request.signal), processFailure])
   } catch (error: unknown) {

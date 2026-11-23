@@ -161,25 +161,30 @@
       name: '@deepseek-ai/dsh-subagent-claude-code'
       config:
         providerName: motif-claude-sonnet-provider
+        credentialRecord: motif/anthropic
         model: sonnet
     - id: motif-claude-opus-provider
       name: '@deepseek-ai/dsh-subagent-claude-code'
       config:
         providerName: motif-claude-opus-provider
+        credentialRecord: motif/anthropic
         model: opus
     - id: motif-claude-haiku-provider
       name: '@deepseek-ai/dsh-subagent-claude-code'
       config:
         providerName: motif-claude-haiku-provider
+        credentialRecord: motif/anthropic
         model: haiku
     - id: motif-codex-provider
       name: '@deepseek-ai/dsh-subagent-codex'
       config:
         providerName: motif-codex-provider
+        credentialRecord: motif/openai
     - id: motif-relay-claude
       name: '@deepseek-ai/dsh-llm-motif-relay'
       config:
         providerName: motif-relay-claude
+        storedCredentials: true
         backend: claude-code
         displayName: Claude Code
         model: sonnet
@@ -203,6 +208,7 @@
       name: '@deepseek-ai/dsh-llm-motif-relay'
       config:
         providerName: motif-relay-codex
+        storedCredentials: true
         backend: codex
         displayName: Codex
         model: codex

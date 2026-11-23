@@ -45,6 +45,8 @@ function harness(options: {
   readonly startError?: Error
   readonly brand?: BrandSnapshot
   readonly timeoutMs?: number
+  readonly storedKey?: boolean
+  readonly loginPresent?: boolean
 } = {}): Harness {
   const starts: RelayStartSpec[] = []
   const statuses: RelayStatus[] = []
@@ -53,6 +55,7 @@ function harness(options: {
     timelineFiles: [{ path: 'timeline/main.json', text: '{"clips":[]}' }],
   })
   const host: RelayHost = {
+    hasApiKey: async () => options.storedKey ?? false,
     resolve: () => ({ agent, brandRoot: '/brands/acme' }),
     start: async (spec) => {
       starts.push(spec)
@@ -85,7 +88,7 @@ function harness(options: {
         conversation: { maxMessages: 4, maxChars: 2_000 },
         timeoutMs: options.timeoutMs ?? 900_000,
       },
-      signIn: { platform: 'linux', home: '/home/user', env: {}, exists: () => true },
+      signIn: { platform: 'linux', home: '/home/user', env: {}, exists: () => options.loginPresent ?? true },
     }),
     starts,
     statuses,
@@ -256,4 +259,18 @@ describe('RelayAdapter', () => {
 
     expect((error as LlmError).code).toBe('INVALID_REQUEST')
   })
+})
+
+
+it('allows the selected relay with a stored Host key even when CLI login is absent', async () => {
+  const fixture = harness({ storedKey: true, loginPresent: false })
+  await collect(fixture.adapter, request([user('Edit the intro')]))
+  expect(fixture.starts).toHaveLength(1)
+  expect(fixture.starts[0]?.provider).toBe('motif-relay-claude-sonnet')
+})
+
+it('does not launch another backend when both key and CLI login are absent', async () => {
+  const fixture = harness({ storedKey: false, loginPresent: false })
+  await expect(collect(fixture.adapter, request([user('Edit the intro')]))).rejects.toThrow()
+  expect(fixture.starts).toHaveLength(0)
 })

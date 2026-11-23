@@ -129,3 +129,12 @@ describe('failure classification', () => {
     expect(failure.message).toContain('15 minutes')
   })
 })
+
+
+it('shows key-specific guidance instead of a native login instruction for API-key runs', () => {
+  const failure = failureFromError(new Error('private provider error'), context({ apiKeyMode: true }))
+  expect(failure.kind).toBe('api-key-failed')
+  expect(failure.message).toContain('Settings > AI')
+  expect(failure.message).not.toContain('private provider error')
+  expect(failureFromResult(result({ stopReason: 'error' }), context({ apiKeyMode: true }))?.kind).toBe('api-key-failed')
+})

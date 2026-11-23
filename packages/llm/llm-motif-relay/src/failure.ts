@@ -14,6 +14,7 @@ import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
 
 /** Stable reasons a relay send can fail. */
 export type RelayFailureKind =
+  | 'api-key-failed'
   | 'not-signed-in'
   | 'limit-reached'
   | 'runtime-unavailable'
@@ -33,6 +34,8 @@ export interface RelayFailure {
 
 /** Fixed deployment facts one classification needs. */
 export interface RelayFailureContext {
+  /** This send selected a stored Host key rather than native login. */
+  readonly apiKeyMode?: boolean
   /** Registered command-line backend name (`claude-code`, `codex`, or a deployment name). */
   readonly backend: string
   /** Deadline applied to one send. */
@@ -148,6 +151,14 @@ export function missingSignInFailure(context: RelayFailureContext): RelayFailure
   }
 }
 
+function apiKeyFailure(backend: string): RelayFailure {
+  return {
+    kind: 'api-key-failed',
+    message: `${displayName(backend)} API-key request failed. Check the key, API access and billing in Settings > AI, and confirm the runtime is installed. No subscription login or other backend was tried.`,
+    code: 'AUTH',
+  }
+}
+
 function limitReached(backend: string): RelayFailure {
   return {
     kind: 'limit-reached',
@@ -189,6 +200,7 @@ export function classifyDiagnostic(
   context: RelayFailureContext,
 ): RelayFailure {
   const category = diagnostic === undefined ? undefined : /category: ([a-z-]+)/u.exec(diagnostic)?.[1]
+  if (context.apiKeyMode === true) return apiKeyFailure(context.backend)
   if (category === 'limit') return limitReached(context.backend)
   if (context.signIn === 'absent') return missingSignInFailure(context)
   if (diagnostic === undefined) return runtimeUnavailable(context.backend)
@@ -240,6 +252,7 @@ export function failureFromError(
   if (code === 'ACTIVATION_LIMIT_REACHED' || code === 'DRAINING') {
     return limitReached(context.backend)
   }
+  if (context.apiKeyMode === true) return apiKeyFailure(context.backend)
   const message = error instanceof Error ? error.message : ''
   if (message.includes('category: limit')) return limitReached(context.backend)
   if (message.includes('Product subagent failure')) {

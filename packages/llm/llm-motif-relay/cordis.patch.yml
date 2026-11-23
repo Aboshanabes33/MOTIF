@@ -25,28 +25,36 @@
     # carries one native model alias; the route never changes it at send time.
     - id: motif-relay-claude-code
       name: '@deepseek-ai/dsh-subagent-claude-code'
+      config:
+        credentialRecord: motif/anthropic
     - id: motif-relay-claude-sonnet
       name: '@deepseek-ai/dsh-subagent-claude-code'
       config:
         model: sonnet
+        credentialRecord: motif/anthropic
     - id: motif-relay-claude-opus
       name: '@deepseek-ai/dsh-subagent-claude-code'
       config:
         model: opus
+        credentialRecord: motif/anthropic
     - id: motif-relay-claude-haiku
       name: '@deepseek-ai/dsh-subagent-claude-code'
       config:
         model: haiku
+        credentialRecord: motif/anthropic
 
     # The one-shot Codex provider the second route delegates to.
     - id: motif-relay-codex-provider
       name: '@deepseek-ai/dsh-subagent-codex'
+      config:
+        credentialRecord: motif/openai
 
     # Route one: every send is one fresh Claude Code run in the Brand folder.
     - id: motif-relay
       name: '@deepseek-ai/dsh-llm-motif-relay'
       config:
         providerName: motif-relay-claude-code
+        storedCredentials: true
         backend: claude-code
         displayName: Claude Code
         model: sonnet
@@ -72,6 +80,7 @@
       name: '@deepseek-ai/dsh-llm-motif-relay'
       config:
         providerName: motif-relay-codex
+        storedCredentials: true
         backend: codex
         displayName: Codex
         model: codex

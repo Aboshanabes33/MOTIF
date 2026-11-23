@@ -18,6 +18,7 @@ describe('resolveConfig', () => {
       conversationChars: 4_000,
       timeoutMs: 900_000,
       signInCheck: 'auto',
+      storedCredentials: false,
     })
   })
 
