@@ -118,8 +118,14 @@ export function buildGates(
     }
   }
   if (serial) {
-    return gates.map((gate, index) => {
-      const previous = gates[index - 1]
+    const bounded = gates.map((gate) => {
+      if (gate.id !== 'host-bundle' && gate.id !== 'client-bundle') return gate
+      const face = gate.id === 'host-bundle' ? 'host' : 'client'
+      return { ...gate, command: process.execPath, args: [resolve(root, 'scripts/bundle-workspaces.ts'), face],
+        displayCommand: `node scripts/bundle-workspaces.ts ${face}` }
+    })
+    return bounded.map((gate, index) => {
+      const previous = bounded[index - 1]
       return previous === undefined ? gate : { ...gate, needs: [...new Set([...(gate.needs ?? []), previous.id])] }
     })
   }
