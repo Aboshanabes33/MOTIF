@@ -1,15 +1,13 @@
 # Sentry integration status
 
-This is a tested privacy/ownership boundary only, not a complete Sentry integration. No SDK is initialized or events sent. Do not close #52 from this patch.
+Partial Host SDK stage for #82. Not a completed production monitoring rollout.
 
-Architecture checked: Electron main owns fatal recovery and local crash reports; a separate Node Host owns Relay/filesystem/process services; the renderer is a Cordis/React client shared with the web application. A single Electron SDK main initialization with its supported renderer bridge is the likely desktop route, but the separate Host needs an explicit owner rather than duplicate SDK initializations or uploading the local crash report verbatim. Web renderer and standalone Host need separate supported browser/Node SDKs. Preserve existing local crash reporting.
+motif-core now creates an isolated @sentry/node 11.16.0 NodeClient, not a global Sentry.init. No default or optional integrations, global exception hooks, request instrumentation, session collection, tracing, browser replay or renderer capture is installed. Existing local crash reporting is unchanged. SDK v11 dataCollection explicitly disables user, cookie, header/body, query, GraphQL, AI/MCP, DB/queue content and local-variable collection. beforeSend rebuilds the final event from safeErrorEvent's fixed schema after scope enrichment. Transactions are dropped. No raw exceptions, stack paths, prompts, transcripts, filenames, media, user data or credentials are passed to the SDK.
 
-Official guidance checked:
-- https://docs.sentry.io/platforms/javascript/guides/electron/
-- https://docs.sentry.io/platforms/javascript/guides/electron/configuration/options/
-- https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/
-- https://docs.sentry.io/platforms/javascript/guides/electron/data-management/sensitive-data/
+Requires NODE_ENV=production, MOTIF_SENTRY_ENABLED=true and an HTTPS MOTIF_SENTRY_DSN. Missing or invalid configuration and SDK construction failure leave monitoring disabled. Brand-create failures are captured only by their Host owner and the same Error object is deduplicated. The original error is rethrown for normal local handling, never replaced. Client close has a bounded flush timeout.
 
-The utility emits a fixed message and closed-enum operation/code/runtime/environment tags, plus a validated version string. It intentionally drops raw error text, stack context, filenames, prompts, transcripts, keys, credentials, media and user/request fields. This is safer than a denylist but less diagnostic. Cancellation is not an error event. Owners capture once; renderer presentation of a Host-owned failure must not recapture it.
+No remote events were sent during implementation. Focused initialization/privacy/ownership tests use a fake client. Real controlled event verification needs a non-production project and explicit permission to transmit the safe event to it.
 
-Remaining: select exact supported SDK versions, integrate at actual boot boundaries, disable all automatic sensitive collection/replay/tracing, apply safeErrorEvent in every SDK egress hook, preserve SDK event envelope fields safely, environment/DSN setup, release metadata, source-map upload without public source disclosure, job/Relay capture wiring, cross-process correlation/ownership, shutdown behavior and real smoke tests. Missing DSN must remain a no-op and initialization exceptions must never prevent startup. DSN/release configuration must not enable capture of user content by default.
+Remaining: Electron-main uncaught failures, separate Host startup/Relay/media owners, renderer-safe fallback ownership, correlation/release metadata, source-map release pipeline and real non-production dashboard smoke test. This stage does not claim meaningful stack traces: only the safe operation/code survives. Do not close #82 or claim production error monitoring is complete.
+
+Official contracts checked: https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/ and https://docs.sentry.io/platforms/javascript/guides/node/configuration/integrations/ . Installed v11 types are authoritative for option names. No source maps uploaded and no secrets configured. Affected motif-core compile and nine focused tests pass; full-build caveat remains tracked in #86.
