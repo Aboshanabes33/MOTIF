@@ -41,3 +41,49 @@ it('final SDK filter drops automatic events and strips SDK-added and arbitrary p
   expect(filter({ distinctId: 'account_12345678', event: 'motif_brand_created', properties: { method: 'manual', path: '/private', $set: { email: 'private' } } }))
     .toEqual({ distinctId: 'account_12345678', event: 'motif_brand_created', properties: { method: 'manual', $geoip_disable: true } })
 })
+
+it('drops queued transport after sign-out and cannot replay after re-consent', async () => {
+  let options: PostHogOptions | undefined
+  const capture = vi.fn(), identify = vi.fn()
+  const host = createHostAnalytics(env, (_key, value) => { options = value; return { capture, identify } })
+  const transport = options?.fetch
+  if (!transport) throw new Error('Missing transport gate')
+  const network = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('must not contact network'))
+  try {
+    await transport('https://eu.i.posthog.com/batch/', { method: 'POST', headers: {}, body: 'queued' })
+    expect(network).not.toHaveBeenCalled()
+    host.analytics.signIn('account_12345678')
+    host.analytics.track('job_started')
+    host.analytics.setPolicy({ environment: 'production', consent: false, configured: true })
+    host.analytics.setPolicy({ environment: 'production', consent: true, configured: true })
+    host.analytics.signIn('account_12345678')
+    host.analytics.track('job_started')
+    await transport('https://eu.i.posthog.com/batch/', { method: 'POST', headers: {}, body: 'queued' })
+    expect(network).not.toHaveBeenCalled()
+    expect(capture).toHaveBeenCalledTimes(1)
+    expect(host.analytics.authenticated).toBe(false)
+  } finally { network.mockRestore(); await host.close() }
+})
+
+it('aborts active network requests and makes close idempotent', async () => {
+  let options: PostHogOptions | undefined
+  let signal: AbortSignal | null | undefined
+  const shutdown = vi.fn(async () => {})
+  const host = createHostAnalytics(env, (_key, value) => {
+    options = value
+    return { capture: vi.fn(), identify: vi.fn(), shutdown }
+  })
+  const network = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+    signal = init?.signal
+    return new Response('{}', { status: 200 })
+  })
+  try {
+    host.analytics.signIn('account_12345678')
+    await options?.fetch?.('https://eu.i.posthog.com/batch/', { method: 'POST', headers: {} })
+    expect(signal?.aborted).toBe(false)
+    host.analytics.signOut()
+    expect(signal?.aborted).toBe(true)
+    await Promise.all([host.close(), host.close()])
+    expect(shutdown).toHaveBeenCalledOnce()
+  } finally { network.mockRestore() }
+})
