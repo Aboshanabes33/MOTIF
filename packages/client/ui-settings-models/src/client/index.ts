@@ -81,7 +81,7 @@ export const inject = [
  * @param ctx - client root context.
  * @param config - Host-synced credential-onboarding choice, followed live until the official-DeepSeek step mounts.
  */
-export function apply(ctx: ClientContext, config: SyncedConfig<ModelsConfig>): void {
+export function applyDeveloper(ctx: ClientContext, config: SyncedConfig<ModelsConfig>): void {
   const nativeShell = 'dshDesktop' in globalThis
   // Whether the official-DeepSeek step opens on its own; the native shell owns its own onboarding.
   const automatic: ObservableSnapshot<boolean> = {
@@ -151,17 +151,25 @@ export function apply(ctx: ClientContext, config: SyncedConfig<ModelsConfig>): v
       'settings.models.footer': { kind: 'list', scope: 'root' },
     },
   }, ModelsSection))
-  if (!nativeShell) ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+  if (!nativeShell && config.hideAccountOnboarding?.get() !== true) ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'welcome-notice',
     order: -100,
     inject: welcomeInjected,
   }, WelcomeNotice))
-  ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+  if (config.hideAccountOnboarding?.get() !== true) ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'deepseek-official',
     children: { 'settings.models.sign-in': { kind: 'single', scope: 'root' } },
     order: 0,
     inject: deepSeekOnboardingInjected,
   }, DeepSeekOnboardingDialog))
+}
+
+/** Compose the real Harness surface only after accepted Developer Mode. */
+export function apply(ctx: ClientContext, config: SyncedConfig<ModelsConfig>): void {
+  ctx.effect(() => ctx.configForms.developerTools.compose(() => {
+    const fiber = ctx.plugin({ inject, apply: applyDeveloper }, config)
+    return async () => { await fiber.dispose() }
+  }, (error: unknown) => { ctx.logger.error(error) }), 'Harness developer composition')
 }

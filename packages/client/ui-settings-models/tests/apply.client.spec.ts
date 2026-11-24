@@ -10,7 +10,7 @@ import { syncedConfig, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { remoteDefaultResponses } from '@deepseek-ai/dsh-client-test-runtime/src/assembly/remote-default-responses.ts'
 import { ok, RemoteMock } from '@deepseek-ai/dsh-remote-mock'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { apply, inject, refreshIfLoaded } from '@deepseek-ai/dsh-client-ui-settings-models/client'
+import { applyDeveloper as apply, inject, refreshIfLoaded } from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import {
   WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE, WELCOME_NOTICE_VERSION,
 } from '../src/onboarding-copy.ts'
@@ -78,6 +78,15 @@ describe('ui-settings-models apply', () => {
     expect(hostPlugin.Config({ credentialOnboarding: false }).credentialOnboarding.get()).toBe(false)
     expect(hostPlugin.Config['~standard'].validate({ credentialOnboarding: 'false' })).toHaveProperty('issues')
     hostPlugin.apply(new Context(), hostPlugin.Config({}))
+  })
+
+  it('omits account onboarding in product builds without removing Models', async () => {
+    const { ctx, slots } = await bench()
+    declare(slots)
+    await ctx.plugin({ inject: [...inject], apply }, syncedConfig({ credentialOnboarding: false, hideAccountOnboarding: true })).await()
+    expect(slots.entries('settings.onboarding')).toEqual([])
+    expect(slots.entries('settings.section').map(entry => entry.options.id)).toEqual(['models'])
+    await ctx.fiber.dispose()
   })
 
   it('keeps manual credential onboarding available when automatic onboarding is off', async () => {

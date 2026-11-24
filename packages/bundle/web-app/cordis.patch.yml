@@ -136,7 +136,6 @@
     # disabled together so no scheduled task can be created or shown.
     - id: schedule
       name: '@deepseek-ai/dsh-schedule'
-      disabled: true
 
     # Configuration-surface reads and writes over Typert Remote. Each method
     # reports an actionable error when its settings-domain provider is absent.
@@ -410,7 +409,6 @@
     # product surface (and its PDF/spreadsheet payload is not needed to boot).
     - id: ui-sidebar-documentpreview
       name: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview'
-      disabled: true
 
     # Web profiles opt in; Desktop retains sandboxed HTTP(S) Browser tabs.
     - id: ui-sidebar-browser
@@ -438,7 +436,9 @@
     # Replaced by the Motif AI-connection page.
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'
-      disabled: true
+      config:
+        credentialOnboarding: false
+        hideAccountOnboarding: true
 
     # Plugin management: the sidebar Plugins page installs, enables, disables,
     # and removes the profile's bundles through the `pluginManager` Remote.
@@ -446,7 +446,6 @@
     # Motif ships a fixed bundle set; there is no plugin store in the product.
     - id: ui-plugin-manager
       name: '@deepseek-ai/dsh-client-ui-plugin-manager'
-      disabled: true
 
     # Connector account sections on the Plugins page; CLI app plugins and MCP
     # connectors register their accounts with `ctx.connectorAccounts`.
@@ -540,7 +539,6 @@
     # service mounted above.
     - id: ui-schedule
       name: '@deepseek-ai/dsh-client-ui-schedule'
-      disabled: true
 
     # Session panel: the header toggle and the floating panel over the main
     # Conversation body, with the Environment section other plugins extend.
@@ -569,13 +567,11 @@
     # No agent-mode picker in Motif; sessions keep the shipped default preset.
     - id: ui-agent-preset
       name: '@deepseek-ai/dsh-client-ui-agent-preset'
-      disabled: true
 
     # Region-local More menus: pin or unpin plugin launchers and start a
     # plugin draft.
     - id: entry-customization
       name: '@deepseek-ai/dsh-client-ui-entry-customization'
-      disabled: true
 
     - id: ui-settings-session-log
       name: '@deepseek-ai/dsh-client-ui-settings-session-log'
@@ -585,19 +581,15 @@
     # Host serves the namespace.
     - id: ui-settings-shell
       name: '@deepseek-ai/dsh-client-ui-settings-shell'
-      disabled: true
 
     - id: ui-settings-agent-loop
       name: '@deepseek-ai/dsh-client-ui-settings-agent-loop'
-      disabled: true
 
     - id: ui-settings-subagent
       name: '@deepseek-ai/dsh-client-ui-settings-subagent'
-      disabled: true
 
     - id: ui-settings-web-search
       name: '@deepseek-ai/dsh-client-ui-settings-web-search'
-      disabled: true
 
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
@@ -608,7 +600,6 @@
 
     - id: ui-trajectory
       name: '@deepseek-ai/dsh-client-ui-trajectory'
-      disabled: true
 
 # ── the agent plane moves behind agent presets ─────────────────────────────
 #

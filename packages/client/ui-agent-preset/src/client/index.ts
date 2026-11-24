@@ -70,7 +70,7 @@ export const inject = [
  * Mount the roster surfaces: hero chip, session-header label, settings section.
  * @param ctx - the browser plugin context.
  */
-export function apply(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   const toolsSettings = ctx.configForms.get<{ enabled: boolean }>('ui-settings')
   const presetSettings = ctx.configForms.get(AGENT_PRESET_SETTINGS_NS)
   let active = true
@@ -288,4 +288,12 @@ export function apply(ctx: ClientContext): void {
     locale: 'settings.agentPreset',
     inject: sectionInjected,
   }, AgentPresetSection))
+}
+
+/** Mount the existing Harness plugin only in accepted Developer Mode. */
+export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.configForms.developerTools.compose(() => {
+    const fiber = ctx.plugin({ inject, apply: applyDeveloper })
+    return async () => { await fiber.dispose() }
+  }, (error: unknown) => { ctx.logger.error(error) }), 'Harness developer composition')
 }

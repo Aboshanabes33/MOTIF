@@ -46,7 +46,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'remot
  * Mount the web search and fetch settings page while the Host serves the `web` namespace.
  * @param ctx - the browser plugin context.
  */
-export function apply(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-web-search: dictionaries')
   const card = new WebSearchCardController({
@@ -72,4 +72,12 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.configForms.whileServed([WEB_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: 'web-search', order: 20, label: () => t('title'), locale: NS, inject: () => card.inject(),
   }, WebSearchCard))), 'ui-settings-web-search: page')
+}
+
+/** Mount the existing Harness plugin only in accepted Developer Mode. */
+export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.configForms.developerTools.compose(() => {
+    const fiber = ctx.plugin({ inject, apply: applyDeveloper })
+    return async () => { await fiber.dispose() }
+  }, (error: unknown) => { ctx.logger.error(error) }), 'Harness developer composition')
 }

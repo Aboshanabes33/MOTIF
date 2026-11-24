@@ -94,7 +94,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.pluginManager', 'rem
  * Peer may list the installed bundles.
  * @param ctx - the browser plugin context.
  */
-export function apply(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-plugin-manager: dictionaries')
   const t = ctx.locale.bind(NS)
   const controller = new PluginManagerController(ctx)
@@ -189,4 +189,12 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
     }, PluginsPanelIcon))
   })
+}
+
+/** Mount the existing Harness plugin only in accepted Developer Mode. */
+export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.configForms.developerTools.compose(() => {
+    const fiber = ctx.plugin({ inject, apply: applyDeveloper })
+    return async () => { await fiber.dispose() }
+  }, (error: unknown) => { ctx.logger.error(error) }), 'Harness developer composition')
 }

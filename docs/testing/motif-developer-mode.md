@@ -16,3 +16,9 @@ Required supported-machine follow-up:
 5. Repeat web composition with desktop-only capabilities absent. Capture actual screenshots and record version/platform.
 
 These tests do not prove disk persistence across real process restart, Host scoping in a packaged build or Electron UI layout. Account scoping remains #79. Keep #87 open.
+
+## November 24 supported-runtime recheck
+
+The actual Desktop development launcher was rerun under Node 24 with `--skip-build`. It still exits before Electron startup with `desktop build paths: unsupported target linux-x64`. `apps/desktop/scripts/desktop-build-paths.mjs` supports only mac-arm64, mac-x64 and win-x64. No target environment variable was used to impersonate a supported runtime, and no browser screenshot is counted as Electron.
+
+Required unblock: this branch and built artifacts on macOS arm64/x64 or Windows x64 with the normal Desktop launcher and native dependencies. Verify real Harness surfaces on enable, normal Brands on disable, two live Sessions retaining separate state through round trips, reconnect and full application restart. The accepted-preference/component tests below are not proof of those runtime behaviors. Nothing in Electron was verified in the Linux environment. PR remains partial and related Issues stay open.

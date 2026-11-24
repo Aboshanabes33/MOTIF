@@ -2,6 +2,7 @@
  * Browser trajectory plugin contributing one entry to the conversation view
  * slot without defining a service.
  */
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -39,14 +40,14 @@ export type {
 } from './trajectory-contract.ts'
 
 /** Required services: the conversation slot, registries, ordinary Session paging, and the locale service. */
-export const inject = ['slots', 'sessions', 'uiSession', 'uiConversation', 'locale', 'remote', 'remote.toolResults']
+export const inject = ['slots', 'sessions', 'uiSession', 'uiConversation', 'locale', 'remote', 'remote.toolResults', 'configForms']
 
 /**
  * Client plugin body: register the trajectory view tab. The registration
  * rides the slot service's effect wrapper, so plugin unload removes the tab.
  * @param ctx - client root context.
  */
-export function apply(ctx: Context): void {
+export function applyDeveloper(ctx: Context): void {
   const trajectorySources = new WeakMap<SessionBinding, ObservableSnapshot<TrajectorySnapshot>>()
   const trajectorySource = (binding: SessionBinding): ObservableSnapshot<TrajectorySnapshot> => {
     let source = trajectorySources.get(binding)
@@ -112,4 +113,12 @@ export function apply(ctx: Context): void {
       }
     },
   }, TrajectoryView))
+}
+
+/** Mount the existing Harness plugin only in accepted Developer Mode. */
+export function apply(ctx: Context): void {
+  ctx.effect(() => ctx.configForms.developerTools.compose(() => {
+    const fiber = ctx.plugin({ inject, apply: applyDeveloper })
+    return async () => { await fiber.dispose() }
+  }, (error: unknown) => { ctx.logger.error(error) }), 'Harness developer composition')
 }

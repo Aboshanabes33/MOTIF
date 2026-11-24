@@ -1,3 +1,4 @@
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 /**
  * Browser catalogs for retained Host tasks and the selected Session's active
  * reminders, plus the right-Sidebar page that shows one task's detail.
@@ -78,7 +79,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Required services for catalogs, ambient Session marks, the right Sidebar, Remote queries, linked-Session navigation, and access. */
 export const inject = [
   'slots', 'locale', 'remote', 'remote.schedule', 'conversation', 'uiConversation', 'uiWorkspace', 'sessions',
-  'workspaces', 'sidebarRightTabs', 'sidebarRight', 'remoteAccess',
+  'configForms', 'workspaces', 'sidebarRightTabs', 'sidebarRight', 'remoteAccess',
 ]
 
 async function settle<T>(call: () => Promise<RemoteResult<T>>): Promise<RemoteResult<T> | undefined> {
@@ -103,7 +104,7 @@ function inputCorrection(error: RemoteFailure): 'host.notFuture' | 'host.invalid
  * one created task while the current Peer may read the task catalog.
  * @param ctx - browser services used by these contributions.
  */
-export function apply(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-schedule: dictionaries')
   const managerDictionaries = {
     zh: managerZh,
@@ -297,4 +298,12 @@ export function apply(ctx: ClientContext): void {
       inject: () => ({ hooks: { catalog: manager.hooks.catalog } }),
     }, SessionScheduleHover))
   })
+}
+
+/** Compose the real Harness surface only after accepted Developer Mode. */
+export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.configForms.developerTools.compose(() => {
+    const fiber = ctx.plugin({ inject, apply: applyDeveloper })
+    return async () => { await fiber.dispose() }
+  }, (error: unknown) => { ctx.logger.error(error) }), 'Harness developer composition')
 }

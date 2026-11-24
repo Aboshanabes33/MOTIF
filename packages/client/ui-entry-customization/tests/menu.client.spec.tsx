@@ -12,7 +12,7 @@ import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TrackProductEvent } from '@deepseek-ai/dsh-client-product-analytics/client'
 import { EntryMenuContent } from '../src/client/EntryMenuContent.tsx'
 import { en } from '../src/client/locales.ts'
-import { apply, inject } from '../src/client/index.ts'
+import { applyDeveloper as apply, inject } from '../src/client/index.ts'
 
 type Seats = 'sidebar.panellist.actions' | 'conversation.session.header.views.actions' | 'sidebar.right.tab.guide.actions'
 const SEATS = ['sidebar.panellist.actions', 'conversation.session.header.views.actions', 'sidebar.right.tab.guide.actions'] as const
@@ -159,6 +159,7 @@ async function bench(
   await runtime.mount({
     inject: ['slots'],
     apply(ctx: Context) {
+      ctx.provide('configForms', {} as never)
       const locale = new LocaleRuntime(ctx)
       locale.setLocale(language)
       ctx.provide('locale', locale)
