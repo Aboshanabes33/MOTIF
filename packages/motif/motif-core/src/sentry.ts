@@ -37,5 +37,11 @@ export function createHostMonitoring(
   }
   const monitoring = new MotifErrorMonitoring(client, { dsn: enabled ? 'configured' : '', enabled,
     runtime: 'host', environment: 'production' })
-  return { monitoring, close: async () => { try { await client?.close(2000) } catch { /* Best effort only. */ } } }
+  let closing: Promise<void> | undefined
+  return { monitoring, close: () => {
+    monitoring.dispose()
+    return closing ??= (async () => {
+      try { await client?.close(2000) } catch { /* Best effort only. */ }
+    })()
+  } }
 }

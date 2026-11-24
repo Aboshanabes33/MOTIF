@@ -21,8 +21,11 @@ export function safeErrorEvent(input:unknown):SafeErrorEvent|null{
 }
 export class MotifErrorMonitoring {
   private readonly seen=new WeakSet<object>()
+  private closed=false
   constructor(private readonly sink:MonitoringSink|undefined,private readonly config:{ dsn?:string;enabled:boolean;release?:string;runtime:'host'|'renderer';environment:'production'|'development' }){}
-  get enabled():boolean{return !!this.sink&&!!this.config.dsn&&this.config.enabled&&this.config.environment==='production'}
+  get enabled():boolean{return !this.closed&&!!this.sink&&!!this.config.dsn&&this.config.enabled&&this.config.environment==='production'}
+  /** Stop accepting captures before SDK shutdown begins. */
+  dispose():void{this.closed=true}
   /** Owner captures once. Forwarded errors must retain the same object locally or pass an explicit ownership flag. */
   capture(error:unknown,operation:ErrorOperation,code:ErrorCode='failed',owner=true):void{
     if(!this.enabled||!owner||code==='cancelled')return

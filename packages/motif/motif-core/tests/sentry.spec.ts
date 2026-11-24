@@ -36,3 +36,16 @@ it('has no automatic integrations and rebuilds final event after scope enrichmen
 it('constructor failure cannot block startup', () => {
   expect(() => createHostMonitoring(env, () => { throw new Error('SDK failure') })).not.toThrow()
 })
+
+it('fences capture before shutdown settles and closes the SDK only once', async () => {
+  let finish!: (value: boolean) => void
+  const client = { captureEvent: vi.fn(), close: vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve })) }
+  const host = createHostMonitoring(env, () => client)
+  const first = host.close(), second = host.close()
+  host.monitoring.capture(new Error('late private failure'), 'brand-create')
+  expect(host.monitoring.enabled).toBe(false)
+  expect(client.captureEvent).not.toHaveBeenCalled()
+  expect(client.close).toHaveBeenCalledOnce()
+  finish(true)
+  await Promise.all([first, second])
+})
