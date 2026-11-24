@@ -4,7 +4,13 @@
   gap: 24px;
   width: 100%;
   max-width: 1040px;
-  color: var(--dsh-text, #f4f1ec);
+  min-width: 0;
+  container-type: inline-size;
+  color: #f4f1ec;
+  background: #141416;
+  border-radius: 14px;
+  padding: 24px;
+  box-sizing: border-box;
 }
 
 .header {
@@ -956,3 +962,9 @@
   color: #94918c;
 }
 .timelineMeta { font-size: 11px; color: #8d8a84; white-space: nowrap; }
+
+@container (max-width: 740px) {
+  .aiLayout, .form { grid-template-columns: minmax(0, 1fr); }
+  .header { flex-direction: column; }
+}
+.aiLayout > *, .field, .apiKeyCard { min-width: 0; }

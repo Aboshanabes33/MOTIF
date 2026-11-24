@@ -54,7 +54,7 @@ export function apply(ctx: Context): void {
     developerMode: ctx.configForms.developerTools,
     t,
     load: () => valueOf<MotifSnapshot>(ctx.remote.motif.snapshot()),
-    install: backend => valueOf(ctx.remote.motif.install({ backend })),
+    install: backend => valueOf(ctx.remote.motif.installBackend({ backend })),
     signIn: backend => valueOf(ctx.remote.motif.signIn({ backend })),
     test: backend => valueOf(ctx.remote.motif.test({ backend })),
     createBrand: request => valueOf(ctx.remote.motif.createBrand(request)),
