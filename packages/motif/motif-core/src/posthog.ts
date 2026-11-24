@@ -8,6 +8,9 @@ export function createHostAnalytics(
   create: (key: string, options: PostHogOptions) => AnalyticsSink = (key, options) => new PostHog(key, options),
 ): { analytics: MotifAnalytics; close(): Promise<void> } {
   let sink: AnalyticsSink | undefined
+  let revoked = false
+  const current: { analytics?: MotifAnalytics } = {}
+  const requests = new AbortController()
   const configured = env.MOTIF_ANALYTICS_CONSENT === 'true' && env.NODE_ENV === 'production'
     && env.MOTIF_POSTHOG_ENVIRONMENT === 'production' && !!env.MOTIF_POSTHOG_KEY
   if (configured && env.MOTIF_POSTHOG_KEY) {
@@ -17,6 +20,14 @@ export function createHostAnalytics(
       if (!['https://us.i.posthog.com/', 'https://eu.i.posthog.com/'].includes(host.href)) throw new Error('Invalid ingestion host')
       sink = create(env.MOTIF_POSTHOG_KEY, {
         host: host.origin, enableExceptionAutocapture: false, enableLocalEvaluation: false,
+        // Last gate runs when the SDK dequeues, not just when capture was called.
+        fetch: async (url, options) => {
+          if (revoked || !current.analytics?.authenticated) return { status: 200, text: async () => '', json: async () => ({}) }
+          const destination = new URL(url)
+          if (destination.origin !== host.origin) throw new Error('Analytics destination refused')
+          return await fetch(url, { ...options, redirect: 'error',
+            signal: options.signal ? AbortSignal.any([options.signal, requests.signal]) : requests.signal })
+        },
         featureFlagsPollingInterval: null, disableGeoip: true, privacyMode: true,
         flushAt: 20, flushInterval: 30000, maxQueueSize: 100, requestTimeout: 3000, fetchRetryCount: 0,
         beforeSend: (event) => {
@@ -29,6 +40,15 @@ export function createHostAnalytics(
       })
     } catch { sink = undefined }
   }
+  const sdk = sink
+  const revoke = (): void => { revoked = true; requests.abort() }
+  sink = sdk && { identify: value => sdk.identify(value), capture: value => sdk.capture(value), revoke }
   const analytics = new MotifAnalytics(sink, { environment: 'production', consent: configured, configured: !!sink })
-  return { analytics, close: async () => { analytics.signOut(); try { await sink?.shutdown?.() } catch { /* Best effort only. */ } } }
+  current.analytics = analytics
+  const boundary = analytics
+  let closing: Promise<void> | undefined
+  return { analytics: boundary, close: () => closing ??= (async () => {
+    boundary.signOut()
+    try { await sdk?.shutdown?.() } catch { /* Best effort only. */ }
+  })() }
 }

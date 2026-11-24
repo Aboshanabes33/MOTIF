@@ -25,3 +25,13 @@ describe('analytics privacy boundary',()=>{
     analytics.setPolicy({ ...policy,environment:'development' });analytics.signIn('account_12345678');expect(sink.identify).not.toHaveBeenCalled()
   })
 })
+
+it('revokes on account switch instead of flushing the previous identity queue',()=>{
+  const { sink,analytics }=setup()
+  analytics.signIn('account_12345678')
+  analytics.track('job_started')
+  analytics.signIn('account_87654321')
+  analytics.track('job_started')
+  expect(analytics.authenticated).toBe(false)
+  expect(sink.capture).toHaveBeenCalledTimes(1)
+})

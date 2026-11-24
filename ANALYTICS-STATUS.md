@@ -10,6 +10,10 @@ Crucially, no verified account lifecycle is wired: this controller NEVER calls s
 
 Boundary event names remain motif_onboarding_completed, motif_mode_changed, motif_brand_created, motif_workspace_opened, motif_edit_requested, motif_provider_selected, motif_job_started/completed/failed. Only predefined enum properties are accepted. No free text, prompts, transcripts, media, paths, names, emails, credentials or raw errors. The final SDK beforeSend drops non-taxonomy/automatic/identity profile events and rebuilds properties. Identity is an opaque backend-verified account id; signOut clears it and pre-auth events are not buffered.
 
-Remaining: verified identity/sign-out wiring, explicit consent UX, all action mappings besides Brand success, development project separation, consent-revocation queue policy, real non-production PostHog dashboard verification, and policy review. Do not close #81. No remote test events or private user data sent during this work.
+Remaining: verified identity/sign-out wiring, explicit consent UX, all action mappings besides Brand success, development project separation, real non-production PostHog dashboard verification, and policy review. Do not close #81. No remote test events or private user data sent during this work.
 
 SDK contract: https://posthog.com/docs/libraries/node . Local package types were checked against the installed version. Focused tests: posthog.spec.ts and product-analytics.spec.ts. Affected motif-core compile passes; full repository baseline remains caveated by #86.
+
+## Revocation hardening (review follow-up)
+
+The Host adapter now checks current verified-identity/consent state again at the SDK transport, not only at capture. Sign-out, policy disable, account switching or close irreversibly revokes this instance, aborts active fetch signals and drops queued transport without contacting the ingestion service. Re-consent must create a fresh adapter and perform verified sign-in again; it cannot replay an old queue. Close is idempotent. Requests already received by a server before revocation cannot be recalled. No remote smoke test was run. The real application still has no verified auth wiring and emits no product events.

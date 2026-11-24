@@ -9,6 +9,7 @@ export interface AnalyticsSink {
   capture(input:{ distinctId:string;event:string;properties:Record<string,string> }):void
   identify(input:{ distinctId:string }):void
   shutdown?():Promise<void>
+  revoke?():void
 }
 export interface AnalyticsPolicy { environment:'development'|'production'; consent:boolean; configured:boolean }
 const allowed:Record<string,readonly string[]>={
@@ -26,17 +27,28 @@ export function productProperties(event:ProductEventName,input:Record<string,unk
 }
 export class MotifAnalytics {
   private identity:string|undefined
+  private revoked=false
   constructor(private readonly sink:AnalyticsSink|undefined,private policy:AnalyticsPolicy){}
-  setPolicy(policy:AnalyticsPolicy):void{this.policy=policy;if(!this.enabled)this.identity=undefined}
-  get enabled():boolean{return !!this.sink&&this.policy.configured&&this.policy.consent&&this.policy.environment==='production'}
+  setPolicy(policy:AnalyticsPolicy):void{
+    this.policy=policy
+    if(!this.enabled)this.signOut()
+  }
+  get enabled():boolean{return !this.revoked&&!!this.sink&&this.policy.configured&&this.policy.consent&&this.policy.environment==='production'}
+  /** Transport must also gate queued work on current authentication. */
+  get authenticated():boolean{return this.enabled&&this.identity!==undefined}
   /** Only a backend-verified opaque account ID may enter this method; never email/name/token. */
   signIn(verifiedAccountId:string):void{
+    if(this.identity!==undefined&&this.identity!==verifiedAccountId){this.signOut();return}
     this.identity=undefined
     if(!this.enabled||!/^account_[a-zA-Z0-9_-]{8,80}$/.test(verifiedAccountId))return
     try{this.sink?.identify({ distinctId:verifiedAccountId });this.identity=verifiedAccountId}catch{this.identity=undefined}
   }
   /** No queued pre-auth events and no identity survives sign-out. */
-  signOut():void{this.identity=undefined}
+  signOut():void{
+    this.identity=undefined
+    this.revoked=true
+    try{this.sink?.revoke?.()}catch{ /* Local revocation must never fail. */ }
+  }
   track(event:ProductEventName,properties:Record<string,unknown>={}):void{
     if(!this.enabled||!this.identity||!Object.hasOwn(PRODUCT_EVENTS,event))return
     try{this.sink?.capture({ distinctId:this.identity,event:`motif_${event}`,properties:productProperties(event,properties) })}catch{ /* Analytics never blocks an action. */ }
