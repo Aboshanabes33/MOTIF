@@ -1,14 +1,16 @@
 # Media pipeline implementation status
 
-## Current draft #103, November 24 follow-up
+## Current merged implementation, November 24
 
-The historical sections below describe earlier commits, not current tool availability. Current code includes local review UI, owner-only HTTP import/revision/job/output routes, byte-range streaming, real Host cookie admission tests, durable interrupted/completed job recovery, retained-media admission checks and a gated selected-Session JSON proposal bridge. Production readiness is still hardcoded false. Nothing in this draft closes #78.
+PR #103 and follow-up work are merged with owner's approval, not full acceptance. Code includes local review UI, owner-only HTTP import/revision/job/output routes, byte-range streaming, real Host cookie admission tests, durable interrupted/completed job recovery, retained-media admission checks and a separately gated selected-Session JSON proposal bridge. Production renderer verification remains false. Issue #78 remains incomplete.
 
-Real local developer smoke now passed with FFmpeg/ffprobe, OpenAI Whisper 20250625 base and HyperFrames 0.9.88 on a one-second generated video/tone/title fixture. Whisper returned an empty transcript for the tone, so this does not verify speech accuracy or transcript-driven selection. HyperFrames cache is disabled to avoid external cache symlinks; render lock remains enabled with fail-fast no-wait. These tools were temporary development installs, not product provisioning.
+Real developer smoke passed with FFmpeg/ffprobe, OpenAI Whisper 20250625 base and HyperFrames 0.9.88. First, a generated video/tone/title fixture passed. Later, real speech detected English, two segments and 22 word timestamps. A four-second managed Host HTTP render produced a 132,334-byte captioned MP4, with authenticated download/range checks. The actual rendered frame was visually inspected, with readable separate title and caption. The isolated built React component also completed a real browser-to-Host render earlier; this is not full-shell, Session or Electron acceptance.
 
-The selected-Session proposal bridge does not make free-form native-agent execution safe merely through prompting. Its UI and render submission stay disabled. The bridge validates returned JSON and requires explicit review but has not passed a real provider/Session/media workflow. Supported desktop, full browser-to-Host render, speech transcript selection, animated composition, retention maintenance and OS provisioning/licensing remain unfinished.
+Captions retime and trim with reviewed clip order, burn into finite escaped HTML, and remain as WebVTT with normalized transcript JSON. Completed-job cleanup removes generated snapshots/audio/cuts, not imported originals or output. Audio-presence verification rejects renders that lose an input audio stream. HyperFrames cache is disabled to avoid external cache symlinks; render lock remains enabled with fail-fast no-wait. Tools were temporary development installs, not Windows product provisioning.
 
-Current checks: 68 focused backend/UI tests, scoped core/client compilers and precommit pass. See docs/testing/motif-media-workbench.md for stage-specific evidence and caveats.
+The selected-Session proposal bridge does not make native-agent execution plan-only through prompting. Its separate gate stays false. JSON validation and explicit review exist, but no real provider/Session/media workflow is claimed. Supported Electron, full-shell acceptance, editable caption/Brand styling, transcript-based clip selection UI, music/mixing, user retention controls and OS provisioning/licensing remain unfinished. Provider contracts are unchanged.
+
+Checks: 74 focused backend/UI tests passed before captions; latest six focused carrier/pipeline/storage suites pass 37 tests, with core compiler and real speech managed Host smoke passing. After all four main merges, a combined build/mode/media/account selection passed 103 tests across 13 files. The account follow-up separately passes 14 tests and scoped TypeScript. Wider-suite 19 failures reproduce on baseline, documented in docs/testing/motif-media-workbench.md. None of these replace the memory-blocked full aggregate build or supported Windows/Electron validation.
 
 ## Historical foundation status
 
