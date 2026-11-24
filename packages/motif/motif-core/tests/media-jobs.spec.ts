@@ -21,7 +21,7 @@ it('uses managed process argv, bounded output and whole-range teardown', async (
   const specs: SubprocessSpawnSpec[] = []
   const terminate = vi.fn()
   const waitForExit = vi.fn(async () => {})
-  const runner = managedMediaRunner(spec => {
+  const runner = managedMediaRunner((spec) => {
     specs.push(spec)
     return { done: Promise.resolve({ exitCode: 0, signal: null }), terminate, waitForExit,
       collected: { stdout: { readFrom: () => ({ text: '{"ok":true}', nextOffset: 11, lossy: false }) } },
@@ -42,7 +42,7 @@ it('bounds concurrency and cancels only the active Brand', async () => {
   const jobs = new MediaJobs(1)
   const plan = { version: 1 as const, source: 'source.mp4', clips: [{ start: 0, end: 1 }] }
   let entered!: () => void
-  const running = new Promise<void>(resolve => { entered = resolve })
+  const running = new Promise<void>((resolve) => { entered = resolve })
   const options = {
     tools: { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe', whisper: 'whisper', hyperframes: 'hyperframes' },
     signal: new AbortController().signal,
@@ -66,4 +66,38 @@ it('bounds concurrency and cancels only the active Brand', async () => {
     await stopped
     expect(jobs.status('first')).toBeUndefined()
   } finally { jobs.dispose(); await rm(root, { recursive: true, force: true }) }
+})
+
+it('drain waits for cancelled tool teardown before resolving', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'motif-drain-'))
+  const jobs = new MediaJobs()
+  let entered!: () => void, finish!: () => void
+  const running = new Promise<void>((resolve) => { entered = resolve })
+  const cleanup = new Promise<void>((resolve) => { finish = resolve })
+  try {
+    await writeFile(join(root, 'source.mp4'), 'fixture')
+    const job = jobs.start('brand', root, { version: 1, source: 'source.mp4', clips: [{ start: 0, end: 1 }] }, {
+      tools: { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe', whisper: 'whisper', hyperframes: 'hyperframes' },
+      signal: new AbortController().signal,
+      run: async ({ signal }) => {
+        entered()
+        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }))
+        await cleanup
+        throw new Error('cancelled after cleanup')
+      },
+    })
+    const failed = expect(job).rejects.toThrow('cancelled after cleanup')
+    await running
+    let drained = false
+    const drain = jobs.drain().then(() => { drained = true })
+    await Promise.resolve()
+    expect(drained).toBe(false)
+    expect(jobs.status('brand')).toBeDefined()
+    finish()
+    await failed
+    await drain
+    expect(drained).toBe(true)
+    expect(jobs.status('brand')).toBeUndefined()
+    await jobs.drain()
+  } finally { finish?.(); jobs.dispose(); await rm(root, { recursive: true, force: true }) }
 })

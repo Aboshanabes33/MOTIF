@@ -11,6 +11,7 @@ export interface MediaJobStatus {
 export class MediaJobs {
   private readonly active = new Map<string, { controller: AbortController; state: MediaStage | 'queued' }>()
   private disposed = false
+  private readonly pending = new Set<Promise<void>>()
 
   constructor(private readonly concurrency = 1) {
     if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error('Invalid media concurrency')
@@ -27,7 +28,11 @@ export class MediaJobs {
 
   /** Reject excess work instead of silently starting or queuing unbounded renders. */
   async start(brand: string, root: string, plan: EditPlan, options: {
-    tools: MediaTools; run: ProcessRunner; signal: AbortSignal; timeoutMs?: number; maxBytes?: number
+    tools: MediaTools
+    run: ProcessRunner
+    signal: AbortSignal
+    timeoutMs?: number
+    maxBytes?: number
   }) {
     if (this.disposed) throw new Error('Media runtime is closed')
     if (this.active.has(brand)) throw new Error('This Brand already has a media job')
@@ -36,19 +41,31 @@ export class MediaJobs {
     const controller = new AbortController()
     const job: { controller: AbortController; state: MediaStage | 'queued' } = { controller, state: 'queued' }
     this.active.set(brand, job)
+    let settled: (() => void) | undefined
+    const done = new Promise<void>((resolve) => { settled = resolve })
+    this.pending.add(done)
     try {
       return await renderEdit(root, plan, {
         ...options,
         signal: AbortSignal.any([options.signal, controller.signal]),
-        onStage: state => { job.state = state },
+        onStage: (state) => { job.state = state },
       })
-    } finally { this.active.delete(brand) }
+    } finally {
+      this.active.delete(brand)
+      this.pending.delete(done)
+      settled?.()
+    }
   }
 
-  /** Abort active work on Host shutdown. Run owners must still await their promises. */
+  /** Abort active work on Host shutdown. Use drain to await actual process teardown. */
   dispose(): void {
     this.disposed = true
     for (const job of this.active.values()) job.controller.abort()
+  }
+  /** Abort and wait for every in-flight render and runner cleanup before shutdown completes. */
+  async drain(): Promise<void> {
+    this.dispose()
+    await Promise.all([...this.pending])
   }
 }
 
