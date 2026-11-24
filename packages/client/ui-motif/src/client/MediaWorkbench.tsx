@@ -1,3 +1,4 @@
+import { MediaRenderControls } from './MediaRenderControls.tsx'
 import { useEffect, useRef, useState } from 'react'
 import styles from './MotifSection.module.css'
 export interface ReviewedMediaPlan { version: 1; source: string; clips: { start: number; end: number; title?: string }[] }
@@ -16,7 +17,8 @@ export function reviewMediaPlan(source: string, duration: number, clips: Reviewe
   return { version: 1, source, clips: clips.map(clip => ({ ...clip })) }
 }
 /** Local-only review surface. Does not upload footage or execute a renderer. */
-export function MediaWorkbench() {
+export function MediaWorkbench({ brand }: { brand?: string }) {
+  const [file, setFile] = useState<File>()
   const [url, setUrl] = useState<string>()
   const [source, setSource] = useState('')
   const [duration, setDuration] = useState(0)
@@ -40,10 +42,10 @@ export function MediaWorkbench() {
     <p>Preview a local video, choose cuts and titles, then review the exact plan.
       Footage stays in this browser. This is not an MP4 renderer.</p>
     <label>Choose local video<input type="file" accept=".mp4,.mov,.webm,.mkv,.m4v" onChange={(event) => {
-      const file = event.target.files?.[0]; setReviewed(undefined); setError(''); setDuration(0); setClips([]); setSource(''); setUrl(undefined)
+      const file = event.target.files?.[0]; setFile(undefined); setReviewed(undefined); setError(''); setDuration(0); setClips([]); setSource(''); setUrl(undefined)
       if (!file) return
       if (file.size > 1024 * 1024 * 1024 || !/\.(mp4|mov|webm|mkv|m4v)$/i.test(file.name) || /[/\\\x00-\x1f]/.test(file.name)) { setError('Choose a supported video no larger than 1 GiB.'); return }
-      setSource(`assets/${file.name}`); setUrl(URL.createObjectURL(file))
+      setFile(file); setSource(`assets/${file.name}`); setUrl(URL.createObjectURL(file))
     }}/></label>
     {url && <><video ref={video} src={url} controls preload="metadata" style={{ width: '100%', maxHeight: 320 }} onLoadedMetadata={(event) => {
       const seconds = event.currentTarget.duration
@@ -61,6 +63,7 @@ export function MediaWorkbench() {
       <button type="button" className={styles.primary} disabled={!duration} onClick={() => { try { setReviewed(reviewMediaPlan(source, duration, clips)); setError('') } catch (reason) { setReviewed(undefined); setError(reason instanceof Error ? reason.message : 'Invalid edit plan') } }}>Review plan</button>
       <button type="button" className={styles.secondary} disabled={!reviewed} onClick={download}>Download reviewed plan JSON</button></div>
     {reviewed && <><p role="status">Reviewed {reviewed.clips.length} clips, {reviewed.clips.reduce((sum, clip) => sum + clip.end - clip.start, 0).toFixed(2)} output seconds. Any edit requires another review.</p><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(reviewed, null, 2)}</pre></>}
+    {brand && <MediaRenderControls brand={brand} file={file} plan={reviewed} />}
     {error && <p role="alert">{error}</p>}
     <p>Rendering and MP4 export are unavailable. No file is uploaded or copied to the Brand by this picker.
       The reviewed plan references the future Brand asset path; authenticated import/output routes, job controls

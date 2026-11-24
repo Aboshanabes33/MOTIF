@@ -1,3 +1,7 @@
+import { MediaHttpCarrier } from './media-http.ts'
+import { managedMediaRunner } from './media-process.ts'
+import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-subprocess'
 /**
  * Motif host services: Brand folders and the native AI-account connection the
  * shell drives. One Remote namespace (`motif`) keeps the browser surface free
@@ -345,4 +349,12 @@ export class MotifController extends TypertRemoteService {
  */
 export function apply(ctx: Context, config: Config): void {
   ctx.plugin(MotifController, config)
+  ctx.inject(['webServer', 'subprocess'], (webCtx) => {
+    const carrier = new MediaHttpCarrier({ root: config.root ?? dshPath('data', 'motif-brands'),
+      tools: { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe', whisper: 'whisper', hyperframes: 'hyperframes' },
+      run: managedMediaRunner(spec => webCtx.subprocess.spawn(spec)), verified: false })
+    webCtx.effect(() => () => carrier.close(), 'MOTIF media job shutdown')
+    webCtx.effect(() => webCtx.webServer.register({ kind: 'prefix', path: '/motif-media', auth: 'required',
+      handler: (req, res, peer) => carrier.handle(req, res, peer) }), 'MOTIF owner-only media transport')
+  })
 }
