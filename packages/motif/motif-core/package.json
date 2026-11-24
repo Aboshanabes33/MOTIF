@@ -67,6 +67,7 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:~",
+    "@sentry/node": "^11.16.0",
     "posthog-node": "^6.0.5"
   }
 }
