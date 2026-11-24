@@ -30,7 +30,7 @@ declare module '@deepseek-ai/dsh-api-session-controller/client' {
 }
 
 /** Services the surfaces use. */
-export const inject = ['slots', 'locale', 'remote', 'remote.motif', 'uiWorkspace', 'workspaces', 'sessions', 'configForms']
+export const inject = ['slots', 'locale', 'remote', 'remote.motif', 'remote.session', 'uiWorkspace', 'workspaces', 'sessions', 'configForms']
 
 /** Locale namespace owned by this package. */
 const NS = 'settings.motif'

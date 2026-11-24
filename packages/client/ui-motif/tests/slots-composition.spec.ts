@@ -7,7 +7,7 @@
  * up here instead of in the browser.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { apply } from '../src/client/index.ts'
+import { apply, inject } from '../src/client/index.ts'
 
 interface SlotRegistration {
   name: string
@@ -44,6 +44,10 @@ function fakeContext() {
 }
 
 describe('ui-motif apply()', () => {
+  it('declares both namespace dependencies before mapping model actions', () => {
+    expect(inject).toContain('remote.motif')
+    expect(inject).toContain('remote.session')
+  })
   it('registers the three locale dictionaries under the Motif namespace', () => {
     const { ctx, localeRegister } = fakeContext()
     apply(ctx as never)
