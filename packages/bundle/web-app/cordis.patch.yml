@@ -240,6 +240,8 @@
     # Workspace commands and reconnect-safe projection over Typert Remote.
     - id: workspace-controller
       name: '@deepseek-ai/dsh-api-workspace-controller'
+      config:
+        documentsDirectory: !!js "process.env.CODESPACES === 'true' ? dshHomePath('data', 'workspaces') : undefined"
 
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'
