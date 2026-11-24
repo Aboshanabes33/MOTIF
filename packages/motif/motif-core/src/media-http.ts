@@ -5,6 +5,7 @@ import { constants } from 'node:fs'
 import { relative, sep } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
+import { MediaProposals } from './media-proposal.ts'
 import { MediaWorkspace } from './media-workspace.ts'
 import { loadMediaRecords, saveMediaRecord, type MediaRecord } from './media-journal.ts'
 import { MediaJobs } from './media-jobs.ts'
@@ -30,6 +31,7 @@ async function body(req: IncomingMessage): Promise<unknown> {
 }
 /** Peer-aware handler and owned job lifetime, mounted only by trusted Host composition. */
 export class MediaHttpCarrier {
+  private readonly proposals = new MediaProposals()
   private readonly workspace = new MediaWorkspace()
   private readonly jobs = new MediaJobs(1)
   private readonly records = new Map<string, JobRecord>()
@@ -83,6 +85,16 @@ export class MediaHttpCarrier {
           const filename = url.searchParams.get('name') ?? ''
           json(res, 201, await this.workspace.import(root, filename, req, signal)); return
         } finally { this.uploading = false }
+      }
+      if (url.pathname === '/motif-media/proposal' && req.method === 'POST') {
+        const input = await body(req) as { sourceId?: unknown; instruction?: unknown }
+        if (!input || typeof input.sourceId !== 'string' || typeof input.instruction !== 'string') throw new Error('Invalid proposal request')
+        const source = this.workspace.source(root, input.sourceId)
+        json(res, 201, await this.proposals.create(root, source.source, input.instruction)); return
+      }
+      if (url.pathname === '/motif-media/proposal' && req.method === 'GET') {
+        const plan = await this.proposals.read(root, url.searchParams.get('proposal') ?? '')
+        json(res, plan ? 200 : 202, plan ? { state: 'ready', plan } : { state: 'pending' }); return
       }
       if (url.pathname === '/motif-media/review' && req.method === 'POST') {
         const input = await body(req) as { sourceId?: unknown; clips?: unknown }

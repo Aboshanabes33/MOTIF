@@ -1112,7 +1112,8 @@ export function BrandEditor({ brand, t = key => key, onClose, loadTimeline, send
           {!canSend && <p className={styles.composerHint}>{t('editor.sendUnavailable')}</p>}
         </aside>
         <main className={styles.editorStage}>
-          <MediaWorkbench brand={brand.id} />
+          <MediaWorkbench key={brand.id} brand={brand.id}
+            sendProposal={sendEditRequest ? (prompt, signal) => sendEditRequest(brand, prompt, signal) : undefined} />
           <div className={styles.previewFrame} style={{ background: identity.dark }}>
             {brand.logo !== undefined && <img className={styles.previewLogo} src={brand.logo} alt={brand.name} />}
             <div className={styles.previewType} style={{ color: identity.light, fontFamily: `'${identity.latinFont}', sans-serif` }}>

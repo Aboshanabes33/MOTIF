@@ -45,3 +45,9 @@ The reviewed source hash is also checked against the private execution snapshot,
 
 - Renderer controls now abort an import/review chain when the selected file or reviewed cuts change. Late responses cannot start an obsolete plan. Changing Brand remounts its controls so a prior Brand job does not leak into the new view.
 - UI tests exercise matching review -> start -> completed download, server-review mismatch refusal and edits during import. These controlled responses do not establish live browser-to-Host acceptance.
+
+## Selected Session proposal bridge
+
+A gated natural-language proposal path now imports a source and asks the existing Brand `sendEditRequest` Session route to write a bounded JSON proposal. It neither creates an alternate provider nor changes the selected model. The server binds the one-use proposal handle to its Brand/source, opens the result without following a final symlink, validates its size/schema and rejects changed sources or operations. No model text is executed as a command.
+
+The UI checks the proposal separately, shows exact JSON, applies cuts only on explicit action, then invalidates prior review. The user must still preview and Review plan before submitting a render. The prompt asks the existing Session to inspect media and use local Whisper for speech-based timestamps, but this instruction is not a native execution sandbox. Full provider/media Session behavior, progress and speech accuracy remain unverified, and all proposal/render execution remains disabled in production. No paid provider call was made during development.

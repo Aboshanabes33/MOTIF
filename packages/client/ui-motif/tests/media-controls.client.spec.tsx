@@ -49,3 +49,23 @@ it('an edit during import invalidates execution even when a response arrives lat
   await waitFor(() => { expect(request).toHaveBeenCalledTimes(2) })
   expect(request.mock.calls[1]?.[1]?.signal?.aborted).toBe(true)
 })
+
+import { MediaProposalControls } from '../src/client/MediaProposalControls.tsx'
+it('uses injected existing Session and requires explicit apply before any render', async () => {
+  const request = vi.fn<typeof fetch>().mockResolvedValueOnce(response({ available: true }))
+    .mockResolvedValueOnce(response({ id: 'source' })).mockResolvedValueOnce(response({ id: 'proposal', prompt: 'controlled Session prompt' }))
+    .mockResolvedValueOnce(response({ state: 'ready', plan }))
+  vi.stubGlobal('fetch', request)
+  const send = vi.fn().mockResolvedValue({ ok: true, message: '' }), apply = vi.fn()
+  render(<MediaProposalControls brand="brand" file={file} send={send} apply={apply}/>)
+  fireEvent.change(screen.getByLabelText('Editing instructions'), { target: { value: 'Keep the opening second' } })
+  const button = screen.getByRole('button', { name: 'Request proposal in existing Session' }) as HTMLButtonElement
+  await waitFor(() => { expect(button.disabled).toBe(false) }); fireEvent.click(button)
+  await screen.findByText(/Request admitted/)
+  expect(send).toHaveBeenCalledWith('controlled Session prompt', expect.any(AbortSignal))
+  fireEvent.click(screen.getByRole('button', { name: 'Check Session proposal' }))
+  const accept = await screen.findByRole('button', { name: 'Apply proposed cuts for review' })
+  expect(apply).not.toHaveBeenCalled(); fireEvent.click(accept)
+  expect(apply).toHaveBeenCalledWith(plan.clips)
+  expect(request.mock.calls.some(([url]) => String(url).includes('/start'))).toBe(false)
+})

@@ -1,3 +1,4 @@
+import { MediaProposalControls } from './MediaProposalControls.tsx'
 import { MediaRenderControls } from './MediaRenderControls.tsx'
 import { useEffect, useRef, useState } from 'react'
 import styles from './MotifSection.module.css'
@@ -17,7 +18,10 @@ export function reviewMediaPlan(source: string, duration: number, clips: Reviewe
   return { version: 1, source, clips: clips.map(clip => ({ ...clip })) }
 }
 /** Local-only review surface. Does not upload footage or execute a renderer. */
-export function MediaWorkbench({ brand }: { brand?: string }) {
+export function MediaWorkbench({ brand, sendProposal }: {
+  brand?: string
+  sendProposal?: ((prompt: string, signal: AbortSignal) => Promise<{ ok: boolean; message: string }>) | undefined
+}) {
   const [file, setFile] = useState<File>()
   const [url, setUrl] = useState<string>()
   const [source, setSource] = useState('')
@@ -52,6 +56,10 @@ export function MediaWorkbench({ brand }: { brand?: string }) {
       if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 7200) { setError('Source duration is unsupported.'); return }
       setDuration(seconds); setClips([{ start: 0, end: Math.min(seconds, 30) }])
     }} onError={() => { setDuration(0); setReviewed(undefined); setError('This browser cannot preview the selected video. Choose another supported file.') }}/><p>Source: {source}. Duration: {duration.toFixed(2)} seconds.</p></>}
+    {brand && <MediaProposalControls key={brand} brand={brand} file={file} send={sendProposal} apply={(proposed) => {
+      try { const plan = reviewMediaPlan(source, duration, proposed); setClips(plan.clips); setReviewed(undefined); setError('') }
+      catch (error) { setError(error instanceof Error ? error.message : 'Invalid proposed cuts') }
+    }}/>}
     {clips.map((clip, index) => <fieldset key={index} style={{ margin: '12px 0', display: 'grid', gap: 8 }}><legend>Clip {index + 1}</legend>
       <label>Start seconds<input type="number" min="0" max={duration} step="0.01" value={clip.start} onChange={(event) => { update(index, { start: event.target.valueAsNumber }) }}/></label>
       <label>End seconds<input type="number" min="0" max={duration} step="0.01" value={clip.end} onChange={(event) => { update(index, { end: event.target.valueAsNumber }) }}/></label>

@@ -18,6 +18,12 @@ export function mediaClient(brand: string, request: typeof fetch = fetch) {
       if (!response.ok) throw new Error('Media import failed or unavailable.')
       return await response.json() as ImportedMedia
     },
+    proposal: (sourceId: string, instruction: string, signal: AbortSignal) => json<{ id: string; prompt: string }>('proposal', 'POST', { sourceId, instruction }, signal),
+    async readProposal(proposal: string, signal: AbortSignal): Promise<{ state: 'pending' | 'ready'; plan?: ReviewedMediaPlan }> {
+      const response = await request(url('proposal', { proposal }), { credentials: 'same-origin', signal })
+      if (!response.ok) throw new Error('Proposal unavailable or invalid. Check the Brand Session.')
+      return await response.json() as { state: 'pending' | 'ready'; plan?: ReviewedMediaPlan }
+    },
     review: (sourceId: string, clips: ReviewedMediaPlan['clips'], signal: AbortSignal) => json<ServerMediaRevision>('review', 'POST', { sourceId, clips }, signal),
     start: (revision: string, signal: AbortSignal) => json<MediaStatus>('start', 'POST', { revision }, signal),
     async status(job: string, signal: AbortSignal): Promise<MediaStatus> {
