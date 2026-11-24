@@ -135,7 +135,7 @@ export class MediaHttpCarrier {
       const record = this.records.get(url.searchParams.get('job') ?? '')
       if (!record || record.root !== root) { json(res, 404, { error: 'job_not_found' }); return }
       if (url.pathname === '/motif-media/status' && req.method === 'GET') {
-        json(res, 200, { id: record.id, state: record.state, stage: this.jobs.status(brandId)?.state }); return
+        json(res, 200, { id: record.id, state: record.state, stage: record.state === 'running' || record.state === 'cancelling' ? this.jobs.status(brandId)?.state : undefined }); return
       }
       if (url.pathname === '/motif-media/cancel' && req.method === 'POST') {
         if (record.state === 'running') { record.state = 'cancelling'; record.controller.abort(); this.jobs.cancel(brandId) }
