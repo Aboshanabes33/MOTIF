@@ -8,6 +8,7 @@
 
 import { realpathSync } from 'node:fs'
 import { createHostMonitoring } from './sentry.ts'
+import { createHostAnalytics } from './posthog.ts'
 import { resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -127,6 +128,7 @@ export class MotifController extends TypertRemoteService {
   private readonly commands: MotifCommands
   private activity: readonly MotifActivity[] = []
   private readonly diagnostics = createHostMonitoring(process.env)
+  private readonly telemetry = createHostAnalytics(process.env)
 
   /**
    * @param ctx - Host context carrying Workspace registration and Remote access.
@@ -140,6 +142,7 @@ export class MotifController extends TypertRemoteService {
       codexCommand: config.codexCommand ?? DEFAULT_COMMANDS.codex,
     }
     ctx.effect(() => () => this.diagnostics.close())
+    ctx.effect(() => () => this.telemetry.close())
     this.commands = { claudeCode: this.config.claudeCommand, codex: this.config.codexCommand }
     // Observed relay sends drive the Active-AI indicators; nothing is assumed
     // from install or sign-in state alone.
@@ -182,7 +185,9 @@ export class MotifController extends TypertRemoteService {
   async createBrand(request: MotifBrandCreateRequest): Promise<MotifBrandCreateResult> {
     this.ctx.logger.info('motif: creating Brand %s', request.name)
     try {
-      return await createBrandWithWorkspace(this.config.root, request, this.ctx.workspaceRegistry)
+      const result = await createBrandWithWorkspace(this.config.root, request, this.ctx.workspaceRegistry)
+      this.telemetry.analytics.track('brand_created', { method: 'manual' })
+      return result
     } catch (error) {
       this.diagnostics.monitoring.capture(error, 'brand-create')
       throw error
