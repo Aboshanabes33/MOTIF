@@ -236,6 +236,7 @@
     # OAuth server with `ctx.mcpAccounts`.
     - id: mcp-account
       name: '@deepseek-ai/dsh-mcp-account'
+      disabled: true
 
     # Workspace commands and reconnect-safe projection over Typert Remote.
     - id: workspace-controller
