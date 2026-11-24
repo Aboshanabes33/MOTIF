@@ -17,6 +17,9 @@ export function MediaRenderControls({ brand, file, plan }: { brand: string; file
     }).catch(() => { if (!controller.signal.aborted) setMessage('Local renderer unavailable. No upload or render has started.') })
     return () => { controller.abort(); operation.current?.abort() }
   }, [client])
+  useEffect(() => {
+    return () => { operation.current?.abort() }
+  }, [file, plan])
   async function start() {
     if (!available || !file || !plan || busy) return
     const controller = new AbortController(); operation.current = controller
@@ -24,12 +27,15 @@ export function MediaRenderControls({ brand, file, plan }: { brand: string; file
     try {
       setMessage('Importing local video...')
       const imported = await client.import(file, controller.signal)
+      controller.signal.throwIfAborted()
       const revision = await client.review(imported.id, plan.clips, controller.signal)
       // The source path is the server's imported handle, never the local filename in the plan JSON.
       if (revision.sourceId !== imported.id || revision.plan.clips.length !== plan.clips.length
         || JSON.stringify(revision.plan.clips) !== JSON.stringify(plan.clips)) throw new Error('Server plan differs. Review again before rendering.')
+      controller.signal.throwIfAborted()
       setMessage('Starting reviewed render...')
       const status = await client.start(revision.id, controller.signal)
+      controller.signal.throwIfAborted()
       setJob(status); setMessage('Render accepted. Refresh status to follow progress.')
     } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Render failed.') }
     finally { setBusy(false) }
@@ -38,16 +44,16 @@ export function MediaRenderControls({ brand, file, plan }: { brand: string; file
     if (!job) return
     const controller = new AbortController(); operation.current = controller
     setBusy(true)
-    try { const status = await client.status(job.id, controller.signal); setJob(status); setMessage(`Render ${status.state}${status.stage ? ': ' + status.stage : ''}.`) }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Status unavailable.') }
+    try { const status = await client.status(job.id, controller.signal); controller.signal.throwIfAborted(); setJob(status); setMessage(`Render ${status.state}${status.stage ? ': ' + status.stage : ''}.`) }
+    catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Status unavailable.') }
     finally { setBusy(false) }
   }
   async function cancel() {
     if (!job) return
     const controller = new AbortController(); operation.current = controller
     setBusy(true)
-    try { await client.cancel(job.id, controller.signal); setMessage('Cancellation requested. Refresh until cancellation is confirmed.') }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Cancellation not confirmed.') }
+    try { await client.cancel(job.id, controller.signal); controller.signal.throwIfAborted(); setMessage('Cancellation requested. Refresh until cancellation is confirmed.') }
+    catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Cancellation not confirmed.') }
     finally { setBusy(false) }
   }
   const active = job !== undefined && ['running', 'cancelling'].includes(job.state)

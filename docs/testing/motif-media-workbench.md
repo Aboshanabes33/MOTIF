@@ -40,3 +40,8 @@ The reviewed source hash is also checked against the private execution snapshot,
 - Completed HTTP status/output survive a new carrier instance. Import handles and reviewed revisions deliberately do not, so resubmission requires a fresh import and review.
 - Runtime import/render admission recounts retained media bytes across Brands and Host lifetimes. Imports reserve 1 GiB, jobs reserve 3 GiB, against a 6 GiB retained-media ceiling; rendering and upload cannot overlap. The active job's separate 3 GiB monitor remains in force. These are conservative admission checks, not a filesystem quota against unrelated native programs.
 - No automatic retention deletion: full history/storage fails closed and requires maintenance. Orphan cleanup UI and Session proposal acceptance remain unfinished. Readiness stays false.
+
+## UI protocol regression follow-up
+
+- Renderer controls now abort an import/review chain when the selected file or reviewed cuts change. Late responses cannot start an obsolete plan. Changing Brand remounts its controls so a prior Brand job does not leak into the new view.
+- UI tests exercise matching review -> start -> completed download, server-review mismatch refusal and edits during import. These controlled responses do not establish live browser-to-Host acceptance.

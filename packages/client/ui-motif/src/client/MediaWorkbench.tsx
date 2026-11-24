@@ -40,7 +40,7 @@ export function MediaWorkbench({ brand }: { brand?: string }) {
   return <section className={styles.timeline} aria-label="Video edit plan">
     <h3>Video edit plan</h3>
     <p>Preview a local video, choose cuts and titles, then review the exact plan.
-      Footage stays in this browser. This is not an MP4 renderer.</p>
+      Choosing a file and reviewing cuts stays local. Upload only starts from the separate renderer control.</p>
     <label>Choose local video<input type="file" accept=".mp4,.mov,.webm,.mkv,.m4v" onChange={(event) => {
       const file = event.target.files?.[0]; setFile(undefined); setReviewed(undefined); setError(''); setDuration(0); setClips([]); setSource(''); setUrl(undefined)
       if (!file) return
@@ -63,10 +63,9 @@ export function MediaWorkbench({ brand }: { brand?: string }) {
       <button type="button" className={styles.primary} disabled={!duration} onClick={() => { try { setReviewed(reviewMediaPlan(source, duration, clips)); setError('') } catch (reason) { setReviewed(undefined); setError(reason instanceof Error ? reason.message : 'Invalid edit plan') } }}>Review plan</button>
       <button type="button" className={styles.secondary} disabled={!reviewed} onClick={download}>Download reviewed plan JSON</button></div>
     {reviewed && <><p role="status">Reviewed {reviewed.clips.length} clips, {reviewed.clips.reduce((sum, clip) => sum + clip.end - clip.start, 0).toFixed(2)} output seconds. Any edit requires another review.</p><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(reviewed, null, 2)}</pre></>}
-    {brand && <MediaRenderControls brand={brand} file={file} plan={reviewed} />}
+    {brand && <MediaRenderControls key={brand} brand={brand} file={file} plan={reviewed} />}
     {error && <p role="alert">{error}</p>}
     <p>Rendering and MP4 export are unavailable. No file is uploaded or copied to the Brand by this picker.
-      The reviewed plan references the future Brand asset path; authenticated import/output routes, job controls
-      and real Whisper/HyperFrames verification must be connected before execution.</p>
+      The separate renderer remains gated until Session review and full browser/desktop acceptance are verified.</p>
   </section>
 }
