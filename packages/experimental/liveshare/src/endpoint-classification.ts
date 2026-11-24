@@ -37,6 +37,19 @@ export type ReaderEndpointClass = Extract<ViewerEndpointClass, `reader-${string}
  * `reader-*` entries, so the policy whitelist has no second handwritten copy.
  */
 export const VIEWER_ENDPOINT_CLASSES = {
+  // Brand, credentials and native tool operations are never available to shared viewers.
+  'motif/analyzeWebsite': 'owner-only',
+  'motif/apiKeyStatus': 'owner-only',
+  'motif/createBrand': 'owner-only',
+  'motif/deleteApiKey': 'owner-only',
+  'motif/installBackend': 'owner-only',
+  'motif/saveApiKey': 'owner-only',
+  'motif/signIn': 'owner-only',
+  'motif/snapshot': 'owner-only',
+  'motif/test': 'owner-only',
+  'motif/testApiKey': 'owner-only',
+  'motif/timeline': 'owner-only',
+
   // ── reader-global-read ─────────────────────────────────────────────────────────────
   'llm/listConfigurableProviders': 'reader-global-read', // the page reads the configurable provider catalog
   'llm/listProviders': 'reader-global-read', // the page lists providers
