@@ -63,4 +63,33 @@ describe('MOTIF/full Harness mode',()=>{
     expect(screen.getByText('Turn 1')).toBeTruthy()
   })
 
+  it('reads accepted Host state after renderer remount instead of resetting mode', async () => {
+    const p=preference()
+    const first=render(<DeveloperModeSection preference={p.value}/>)
+    fireEvent.click(screen.getByRole('switch'))
+    await waitFor(()=>expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true'))
+    first.unmount()
+    render(<DeveloperModeSection preference={p.value}/>)
+    expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true')
+    expect(p.setEnabled).toHaveBeenCalledTimes(1)
+  })
+  it('cannot change mode without a Host preference owner', () => {
+    render(<DeveloperModeSection/>)
+    const button=screen.getByRole('switch') as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(button.getAttribute('aria-checked')).toBe('false')
+  })
+  it('serializes user toggles while Host acknowledgement is pending', async () => {
+    const p=preference()
+    let finish!: () => void
+    p.setEnabled.mockImplementation(()=>new Promise<void>((resolve)=>{finish=resolve}))
+    render(<DeveloperModeSection preference={p.value}/>)
+    fireEvent.click(screen.getByRole('switch'))
+    fireEvent.click(screen.getByRole('switch'))
+    expect(p.setEnabled).toHaveBeenCalledTimes(1)
+    expect((screen.getByRole('switch') as HTMLButtonElement).disabled).toBe(true)
+    finish()
+    await waitFor(()=>expect((screen.getByRole('switch') as HTMLButtonElement).disabled).toBe(false))
+  })
+
 })
