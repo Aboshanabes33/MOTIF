@@ -100,16 +100,16 @@ describe('signInBackend', () => {
     const { internals } = harness({ platform: 'linux', execResults: {}, spawnPlan: 'error' })
     const result = await signInBackend('claude-code', COMMANDS, internals)
     expect(result.ok).toBe(false)
-    expect(result.message).toContain('Could not start Claude Code sign-in')
-    expect(result.message).toContain('ENOENT')
-    expect(result.message).toContain('Run `claude login` in a terminal yourself')
+    expect(result.message).toContain('Could not open Claude Code sign-in')
+    expect(result.message).toContain('was not found')
+    expect(result.message).toContain('in a terminal.')
   })
 
   it('reports a synchronous spawn throw instead of claiming success', async () => {
     const { internals } = harness({ platform: 'linux', execResults: {}, spawnPlan: 'throw' })
     const result = await signInBackend('claude-code', COMMANDS, internals)
     expect(result.ok).toBe(false)
-    expect(result.message).toContain('Could not start Claude Code sign-in')
+    expect(result.message).toContain('Could not open Claude Code sign-in')
   })
 
   it('skips terminal launchers on platforms without one and uses the confirmed fallback', async () => {
@@ -135,7 +135,7 @@ describe('signInBackend', () => {
     const hostile = { claudeCode: 'claude & calc', codex: 'codex' }
     const result = await signInBackend('claude-code', hostile, internals)
     expect(execCalls).toEqual([])
-    expect(spawn).toHaveBeenCalledWith(hostile.claudeCode, ['login'])
+    expect(spawn).toHaveBeenCalledWith(hostile.claudeCode + '.cmd', ['login'])
     expect(result.ok).toBe(true)
   })
 })

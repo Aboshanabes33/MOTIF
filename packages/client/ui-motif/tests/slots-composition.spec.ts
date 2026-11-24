@@ -7,7 +7,7 @@
  * up here instead of in the browser.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { apply } from '../src/client/index.ts'
+import { apply, inject } from '../src/client/index.ts'
 
 interface SlotRegistration {
   name: string
@@ -19,7 +19,7 @@ function fakeContext() {
   const localeRegister = vi.fn()
   const remote = {
     snapshot: vi.fn(async () => ({ ok: true, value: { brands: [], connections: [] } })),
-    install: vi.fn(async (request: unknown) => ({ ok: true, value: request })),
+    installBackend: vi.fn(async (request: unknown) => ({ ok: true, value: request })),
     signIn: vi.fn(async (request: unknown) => ({ ok: true, value: request })),
     test: vi.fn(async (request: unknown) => ({ ok: true, value: request })),
     createBrand: vi.fn(async (request: unknown) => ({ ok: true, value: { workspaceId: 'ws-1', request } })),
@@ -37,12 +37,17 @@ function fakeContext() {
       register: (registration: SlotRegistration) => registration,
     },
     remote: { motif: remote },
+    configForms: { developerTools: undefined },
     uiWorkspace: { openWorkspace },
   }
   return { ctx, injected, localeRegister, remote, openWorkspace }
 }
 
 describe('ui-motif apply()', () => {
+  it('declares both namespace dependencies before mapping model actions', () => {
+    expect(inject).toContain('remote.motif')
+    expect(inject).toContain('remote.session')
+  })
   it('registers the three locale dictionaries under the Motif namespace', () => {
     const { ctx, localeRegister } = fakeContext()
     apply(ctx as never)
@@ -57,7 +62,7 @@ describe('ui-motif apply()', () => {
     apply(ctx as never)
     // The blank-session home is the Brands page: the hero frame is registered.
     expect(injected.filter(slot => slot === 'conversation.hero.frame')).toHaveLength(1)
-    expect(injected.filter(slot => slot === 'settings.section')).toHaveLength(2)
+    expect(injected.filter(slot => slot === 'settings.section')).toHaveLength(3)
     expect(injected.filter(slot => slot === 'settings.onboarding')).toHaveLength(1)
   })
 
@@ -84,7 +89,7 @@ describe('ui-motif apply()', () => {
     await injectedFace.load()
     expect(remote.snapshot).toHaveBeenCalledTimes(1)
     await injectedFace.install('claude-code')
-    expect(remote.install).toHaveBeenCalledWith({ backend: 'claude-code' })
+    expect(remote.installBackend).toHaveBeenCalledWith({ backend: 'claude-code' })
     await injectedFace.signIn('codex')
     expect(remote.signIn).toHaveBeenCalledWith({ backend: 'codex' })
     await injectedFace.test('claude-code')

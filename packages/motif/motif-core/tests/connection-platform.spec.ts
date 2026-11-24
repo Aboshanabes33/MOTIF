@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_COMMANDS,
@@ -121,7 +122,11 @@ describe('installBackend', () => {
 describe('signInBackend', () => {
   it('spawns the platform-correct executable', async () => {
     const { exec } = makeExec([VERSION_OK])
-    const spawn = vi.fn(() => ({ unref: () => {} }))
+    const spawn = vi.fn(() => {
+      const child = new EventEmitter()
+      queueMicrotask(() => child.emit('spawn'))
+      return { on: child.on.bind(child), unref: () => {} }
+    })
     const result = await signInBackend('codex', DEFAULT_COMMANDS, { exec, spawn, platform: 'win32' })
     expect(result.ok).toBe(true)
     expect(spawn).toHaveBeenCalledWith('codex.cmd', ['login'])

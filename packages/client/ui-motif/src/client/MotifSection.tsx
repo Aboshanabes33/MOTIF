@@ -127,7 +127,9 @@ function ProviderMark({ backend }: { backend: 'claude-code' | 'codex' }) {
  * @param props - slot inject face.
  * @returns the AI section.
  */
-export function AiSection({ t = key => key, load, install, signIn, test, saveApiKey, testApiKey, deleteApiKey, apiKeyStatus, loadModels, selectModel }: Props) {
+export function AiSection({
+  t = key => key, load, install, signIn, test, saveApiKey, testApiKey, deleteApiKey, apiKeyStatus, loadModels, selectModel,
+}: Props) {
   const { snapshot, error, loading, refresh } = useSnapshot(load)
   const [busy, setBusy] = useState<string | undefined>()
   const [messages, setMessages] = useState<Record<string, string>>({})
@@ -295,7 +297,11 @@ export function ModelCard({ t, loadModels, selectModel }: {
         const selected = next.options.find(option => option.provider === next.current.provider && option.id === next.current.model)
         setChoice(selected === undefined ? '' : modelKey(selected))
       },
-      () => { if (live) setCatalog(undefined) },
+      (reason: unknown) => {
+        if (!live) return
+        setCatalog(undefined)
+        setResult({ ok: false, text: errorText(reason, t('ai.model.failed')) })
+      },
     )
     return () => { live = false }
   }, [loadModels])

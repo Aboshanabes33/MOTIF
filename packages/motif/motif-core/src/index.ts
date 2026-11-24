@@ -221,8 +221,8 @@ export class MotifController extends TypertRemoteService {
    * @param request - backend to install.
    * @returns the outcome and one display sentence.
    */
-  @Remote('install')
-  install(request: MotifBackendRequest): Promise<MotifActionResult> {
+  @Remote('installBackend')
+  installBackend(request: MotifBackendRequest): Promise<MotifActionResult> {
     return installBackend(request.backend, this.commands)
   }
 

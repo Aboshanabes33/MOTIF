@@ -30,7 +30,7 @@ declare module '@deepseek-ai/dsh-api-session-controller/client' {
 }
 
 /** Services the surfaces use. */
-export const inject = ['slots', 'locale', 'remote', 'remote.motif', 'uiWorkspace', 'workspaces', 'sessions', 'configForms']
+export const inject = ['slots', 'locale', 'remote', 'remote.motif', 'remote.session', 'uiWorkspace', 'workspaces', 'sessions', 'configForms']
 
 /** Locale namespace owned by this package. */
 const NS = 'settings.motif'
@@ -54,7 +54,7 @@ export function apply(ctx: Context): void {
     developerMode: ctx.configForms.developerTools,
     t,
     load: () => valueOf<MotifSnapshot>(ctx.remote.motif.snapshot()),
-    install: backend => valueOf(ctx.remote.motif.install({ backend })),
+    install: backend => valueOf(ctx.remote.motif.installBackend({ backend })),
     signIn: backend => valueOf(ctx.remote.motif.signIn({ backend })),
     test: backend => valueOf(ctx.remote.motif.test({ backend })),
     createBrand: request => valueOf(ctx.remote.motif.createBrand(request)),
