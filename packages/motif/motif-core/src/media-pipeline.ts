@@ -82,8 +82,11 @@ export async function renderEdit(root: string, plan: EditPlan, options: {
   plan = { version: 1, source: plan.source, clips: plan.clips.map(clip => ({ ...clip })) }
   options.signal.throwIfAborted()
   const original=await mediaSource(root,plan.source)
-  const jobId=randomUUID(), directory=join(root,'timeline',`media-${jobId}`)
-  await mkdir(directory,{ recursive:true })
+  const base = await realpath(root), timeline = join(base, 'timeline')
+  await mkdir(timeline, { recursive: true })
+  if (await realpath(timeline) !== timeline) throw new Error('Timeline must not be symlinked')
+  const jobId=randomUUID(), directory=join(timeline,`media-${jobId}`)
+  await mkdir(directory, { mode: 0o700 })
   const run=options.run
   const timeoutMs = options.timeoutMs ?? 30 * 60 * 1000
   const maxBytes = options.maxBytes ?? 3 * 1024 * 1024 * 1024

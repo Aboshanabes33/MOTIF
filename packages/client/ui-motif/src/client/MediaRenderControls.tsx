@@ -8,6 +8,7 @@ export function MediaRenderControls({ brand, file, plan }: { brand: string; file
   const [available, setAvailable] = useState(false)
   const [message, setMessage] = useState('Checking local renderer readiness...')
   const [job, setJob] = useState<MediaStatus>()
+  const [history, setHistory] = useState<MediaStatus[]>([])
   const [busy, setBusy] = useState(false)
   const operation = useRef<AbortController>()
   useEffect(() => {
@@ -48,6 +49,14 @@ export function MediaRenderControls({ brand, file, plan }: { brand: string; file
     catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Status unavailable.') }
     finally { setBusy(false) }
   }
+  async function recover() {
+    const controller = new AbortController(); operation.current = controller; setBusy(true)
+    try {
+      const result = await client.history(controller.signal); controller.signal.throwIfAborted()
+      setHistory(result.jobs); setMessage(result.jobs.length ? 'Choose a saved job to inspect its status.' : 'No saved jobs for this Brand.')
+    } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'History unavailable.') }
+    finally { setBusy(false) }
+  }
   async function cancel() {
     if (!job) return
     const controller = new AbortController(); operation.current = controller
@@ -60,11 +69,16 @@ export function MediaRenderControls({ brand, file, plan }: { brand: string; file
   return <section aria-label="Local video renderer"><h4>Local video renderer</h4><p role="status">{message}</p>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
       <button type="button" className={styles.primary} disabled={!available || !file || !plan || busy || active} onClick={() => { void start() }}>Import and render reviewed plan</button>
+      <button type="button" className={styles.secondary} disabled={!available || busy} onClick={() => { void recover() }}>Load saved Brand jobs</button>
       {job && <button type="button" className={styles.secondary} disabled={busy} onClick={() => { void refresh() }}>Refresh render status</button>}
       {active && <button type="button" className={styles.secondary} disabled={busy} onClick={() => { void cancel() }}>Cancel render</button>}
       {job?.state === 'completed' && <a href={client.output(job.id)} download="motif-output.mp4">Download verified MP4</a>}
     </div>
+    {history.length > 0 && <ul>{history.map(record => <li key={record.id}>
+      <button type="button" disabled={busy} onClick={() => { setJob(record); setMessage(`Saved job ${record.state}. Refresh for current status.`) }}>{record.id}: {record.state}</button>
+    </li>)}</ul>}
     <p>Rendering only becomes available after real local-tool and transport verification.
-      Refreshing this page loses local job tracking; restarting the Host invalidates imported handles and reviewed revisions.</p>
+      Load saved Brand jobs after refreshing. Restarting the Host interrupts running jobs
+      and invalidates imported handles and reviewed revisions.</p>
   </section>
 }

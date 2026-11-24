@@ -64,6 +64,8 @@ it('streams only completed owned output and honors a bounded range', async () =>
   expect(await (await fetch(url + '/motif-media/status?brand=brand&job=' + id)).json()).toMatchObject({ state: 'completed' })
   await restart()
   expect(await (await fetch(url + '/motif-media/status?brand=brand&job=' + id)).json()).toMatchObject({ state: 'completed' })
+  expect(await (await fetch(url + '/motif-media/history?brand=brand')).json()).toMatchObject({ jobs: [{ id, state: 'completed' }] })
+  expect(await (await fetch(url + '/motif-media/history?brand=other')).json()).toEqual({ jobs: [] })
   const head = await fetch(url + '/motif-media/output?brand=brand&job=' + id, { method: 'HEAD' })
   expect(head.status).toBe(200); expect(head.headers.get('content-length')).toBe('22'); expect(await head.text()).toBe('')
   expect((await fetch(url + '/motif-media/output?brand=other&job=' + id)).status).toBe(404)

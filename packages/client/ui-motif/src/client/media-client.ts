@@ -35,6 +35,7 @@ export function mediaClient(brand: string, request: typeof fetch = fetch) {
       const response = await request(url('cancel', { job }), { method: 'POST', credentials: 'same-origin', signal })
       if (!response.ok) throw new Error('Cancellation not confirmed. Check status before leaving.')
     },
+    history: (signal: AbortSignal) => json<{ jobs: MediaStatus[] }>('history', 'GET', undefined, signal),
     output: (job: string) => url('output', { job }),
   }
 }

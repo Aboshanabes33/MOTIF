@@ -72,6 +72,10 @@ export class MediaHttpCarrier {
     }
     if (!this.options.verified) { json(res, 503, { error: 'media_not_verified' }); return }
     const disconnected = new AbortController()
+    // Bound both idle body reads and the complete upload/control lifetime.
+    const mutating = req.method !== 'GET' && req.method !== 'HEAD'
+    const timeout = mutating ? setTimeout(() => { disconnected.abort(); req.destroy() }, 5 * 60 * 1000) : undefined
+    if (mutating) req.setTimeout(30000, () => { disconnected.abort(); req.destroy() })
     req.once('aborted', () => { disconnected.abort() })
     const signal = AbortSignal.any([peer.signal, this.stop.signal, disconnected.signal])
     try {
@@ -132,6 +136,10 @@ export class MediaHttpCarrier {
           json(res, 202, { id: record.id, state: record.state }); return
         } finally { this.starting = false }
       }
+      if (url.pathname === '/motif-media/history' && req.method === 'GET') {
+        json(res, 200, { jobs: [...this.records.values()].filter(record => record.root === root)
+          .map(record => ({ id: record.id, state: record.state })) }); return
+      }
       const record = this.records.get(url.searchParams.get('job') ?? '')
       if (!record || record.root !== root) { json(res, 404, { error: 'job_not_found' }); return }
       if (url.pathname === '/motif-media/status' && req.method === 'GET') {
@@ -162,6 +170,7 @@ export class MediaHttpCarrier {
       }
       json(res, 405, { error: 'unsupported_media_operation' })
     } catch { if (!res.headersSent) json(res, signal.aborted ? 409 : 400, { error: 'media_request_failed' }); else res.destroy() }
+    finally { if (timeout) clearTimeout(timeout) }
   }
 }
 

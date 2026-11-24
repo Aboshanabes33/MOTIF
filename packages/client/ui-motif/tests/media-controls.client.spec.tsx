@@ -69,3 +69,14 @@ it('uses injected existing Session and requires explicit apply before any render
   expect(apply).toHaveBeenCalledWith(plan.clips)
   expect(request.mock.calls.some(([url]) => String(url).includes('/start'))).toBe(false)
 })
+it('recovers completed Brand jobs after the controls remount without rerendering', async () => {
+  const request = vi.fn<typeof fetch>().mockResolvedValueOnce(response({ available: true }))
+    .mockResolvedValueOnce(response({ jobs: [{ id: 'saved', state: 'completed' }] }))
+  vi.stubGlobal('fetch', request)
+  render(<MediaRenderControls brand="brand" file={undefined} plan={undefined}/>)
+  const history = screen.getByRole('button', { name: 'Load saved Brand jobs' }) as HTMLButtonElement
+  await waitFor(() => { expect(history.disabled).toBe(false) }); fireEvent.click(history)
+  fireEvent.click(await screen.findByRole('button', { name: 'saved: completed' }))
+  expect(screen.getByRole('link', { name: 'Download verified MP4' }).getAttribute('href')).toBe('/motif-media/output?brand=brand&job=saved')
+  expect(request.mock.calls.some(([url]) => String(url).includes('/start'))).toBe(false)
+})

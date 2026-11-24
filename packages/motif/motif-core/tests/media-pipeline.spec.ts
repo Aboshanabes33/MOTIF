@@ -134,3 +134,15 @@ it('binds execution snapshot to the reviewed source hash before spawning any too
     expect(calls).toBe(0)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+it('refuses a symlinked timeline before creating private job files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'motif-media-timeline-'))
+  try {
+    await writeFile(join(root, 'source.mp4'), 'fixture')
+    const { symlink } = await import('node:fs/promises')
+    await symlink(tmpdir(), join(root, 'timeline'))
+    let calls = 0
+    await expect(renderEdit(root, plan(), { tools, signal: new AbortController().signal, run: async () => { calls++; return { stdout: '', stderr: '' } } })).rejects.toThrow('symlinked')
+    expect(calls).toBe(0)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
