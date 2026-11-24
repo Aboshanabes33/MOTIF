@@ -24,11 +24,12 @@ function Reset({ code }: { code: string }) {
   const state = useCompletePasswordRecovery(resetApi, { emailCode: code })
   const [error, setError] = useState('')
   if (state.status !== 'ready') return <p role="status">{state.status === 'loading' ? 'Checking recovery link...' : state.status === 'complete' ? 'Password changed. You are signed in.' : 'This recovery link cannot be used. Request a new one in this browser.'}</p>
+  const completeRecovery = state.completePasswordRecovery
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError('')
     const form = e.currentTarget
     try {
-      const result = await state.completePasswordRecovery({ newPassword: String(new FormData(form).get('password')) })
+      const result = await completeRecovery({ newPassword: String(new FormData(form).get('password')) })
       if (result.status === 'error') setError('Password could not be changed. Check password requirements and try again.')
     } catch { setError('Cannot reach account service. Check your connection and try again.') }
     finally { const input = form.elements.namedItem('password'); if (input instanceof HTMLInputElement) input.value = '' }
