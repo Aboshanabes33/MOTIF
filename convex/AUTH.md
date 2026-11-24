@@ -31,14 +31,13 @@ Email delivery goes through Resend. Until a real key is set, sign-up and recover
 3. For development, `SENDER_EMAIL=onboarding@resend.dev` delivers only to the Resend account owner's own
    email address. For production, verify a sending domain in Resend and update `SENDER_EMAIL`.
 4. Set `SITE_URL` on the deployment to the frontend origin so emailed links point at the app
-   (default is `http://localhost:5173`).
+   (default is `http://localhost:3080`).
 
 The agent sets the env vars with `npx convex env set` once the key arrives via the vault.
 
 ## What remains (not in this PR)
 
-- Client wiring in `apps/web` (ConvexAuthProvider + the sign-up/sign-in/validation/reset pages; the Convex
-  Auth docs have copy-ready components). `VITE_CONVEX_URL` comes from `.env.local`, which stays untracked.
+- Live acceptance of the separate `apps/web/account.html` client described below. `VITE_CONVEX_URL` comes from `.env.local`, which stays untracked.
 - Binding the legacy Host services (Brand folders, workspace registry, sessions, settings, native CLI
   connections) to verified identity, per the decision plan: owner namespace from verified issuer+subject,
   never a caller-supplied user id; fenced reconnect/session expiry and in-flight jobs; no developer-mode
@@ -53,3 +52,18 @@ The agent sets the env vars with `npx convex env set` once the key arrives via t
 Docs verified 2026-11-23: https://docs.convex.dev/auth/convex-auth,
 https://docs.convex.dev/auth/convex-auth/getting-started,
 https://docs.convex.dev/auth/convex-auth/methods/email-password
+
+## Account client (PR-only implementation, November 24)
+
+The Web build emits `account.html`, a separate React/Convex Auth v2 client. It includes sign-up, email validation, sign-in, password recovery/reset, restored sessions and sign-out, with owner-bound account Brand listing/creation. It never imports `AppWebEntry`, Host bootstrap, local RPC, native CLI, model credentials or filesystem data. A signed-in user does not gain a shared Host connection. Local single-user `index.html` remains separate. This is not finished multi-user runtime isolation.
+
+Build with an explicit HTTPS `VITE_CONVEX_URL`. With no valid deployment URL the page shows an unavailable explanation and does not request credentials. Do not add private keys to VITE variables. The default SITE_URL is now port 3080; production must set its exact account-client origin. Email links target `account.html?flow=validate` and `account.html?flow=reset`. The installed library holds browser secrets and handles refresh coordination; links must open in the browser that started them. Email-change UI is not included.
+
+Code-only tests cover restoration, sign-in failure/password clearing, recovery navigation and the no-shared-Host boundary. The standalone production entry builds. Live sign-up/mail delivery and two-user end-to-end data boundaries have NOT been validated in this PR. Earlier claims above about deployment are historical, not reverified here.
+
+To finish live account acceptance requires:
+
+- Owner-authorized Convex deployment access and the generated backend files/codegen, then deploy the existing functions/components with the final URL.
+- Resend API key via secure secret entry, a verified sender/domain (or owner-only development sender), SENDER_EMAIL and exact SITE_URL.
+- Two controlled test email accounts and permission for test sign-up/recovery mail, session revocation and cross-user Brand checks.
+- A separately approved isolated runtime provisioner, JWT verifier and authenticated gateway. Each owner needs a private process/container/VM or OS user with private home, credentials, jobs and generation fencing. No connection to the current shared local Host is permitted as a substitute. Provisioning/deployment/spend are outside this PR.
