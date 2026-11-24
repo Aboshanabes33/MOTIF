@@ -6,10 +6,11 @@ import { relative, sep } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { MediaWorkspace } from './media-workspace.ts'
+import { loadMediaRecords, saveMediaRecord, type MediaRecord } from './media-journal.ts'
 import { MediaJobs } from './media-jobs.ts'
 import type { EditPlan, MediaTools, ProcessRunner } from './media-pipeline.ts'
 
-interface JobRecord { id: string; brand: string; root: string; state: string; controller: AbortController; output?: string }
+interface JobRecord extends MediaRecord { brand: string; root: string; controller: AbortController }
 export interface MediaCarrierOptions {
   root: string
   tools: MediaTools
@@ -32,10 +33,28 @@ export class MediaHttpCarrier {
   private readonly workspace = new MediaWorkspace()
   private readonly jobs = new MediaJobs(1)
   private readonly records = new Map<string, JobRecord>()
+  private readonly recovered = new Map<string, Promise<void>>()
+  private readonly settling = new Set<Promise<void>>()
+  private uploading = false
   private starting = false
   private readonly stop = new AbortController()
   constructor(private readonly options: MediaCarrierOptions) {}
-  async close(): Promise<void> { this.stop.abort(); await this.jobs.drain() }
+  async close(): Promise<void> { this.stop.abort(); await this.jobs.drain(); await Promise.all([...this.settling]) }
+
+  private async recover(root: string, brand: string): Promise<void> {
+    let pending = this.recovered.get(root)
+    if (!pending) {
+      pending = loadMediaRecords(root).then((records) => {
+        if (records.length + this.records.size > 100) throw new Error('Media history full')
+        for (const record of records) {
+          if (this.records.has(record.id)) throw new Error('Conflicting media job id')
+          this.records.set(record.id, { ...record, root, brand, controller: new AbortController() })
+        }
+      })
+      this.recovered.set(root, pending)
+    }
+    await pending
+  }
 
   /** All paths are owner-only, no anonymous/output capability URLs or caller-selected filesystem paths. */
   async handle(req: IncomingMessage, res: ServerResponse, peer?: PeerScope): Promise<void> {
@@ -56,9 +75,14 @@ export class MediaHttpCarrier {
     try {
       const brandId = url.searchParams.get('brand') ?? ''
       const root = await this.workspace.brandRoot(this.options.root, brandId)
+      await this.recover(root, brandId)
       if (url.pathname === '/motif-media/import' && req.method === 'POST') {
-        const filename = url.searchParams.get('name') ?? ''
-        json(res, 201, await this.workspace.import(root, filename, req, signal)); return
+        if (this.uploading || this.starting || [...this.records.values()].some(r => ['running', 'cancelling'].includes(r.state))) throw new Error('Media runtime busy')
+        this.uploading = true
+        try {
+          const filename = url.searchParams.get('name') ?? ''
+          json(res, 201, await this.workspace.import(root, filename, req, signal)); return
+        } finally { this.uploading = false }
       }
       if (url.pathname === '/motif-media/review' && req.method === 'POST') {
         const input = await body(req) as { sourceId?: unknown; clips?: unknown }
@@ -66,9 +90,10 @@ export class MediaHttpCarrier {
         json(res, 201, this.workspace.review(root, input.sourceId, input.clips as EditPlan['clips'])); return
       }
       if (url.pathname === '/motif-media/start' && req.method === 'POST') {
-        if (this.starting || this.records.size >= 100 || [...this.records.values()].some(record => ['running', 'cancelling'].includes(record.state))) throw new Error('Media runtime busy or history full')
+        if (this.uploading || this.starting || this.records.size >= 100 || [...this.records.values()].some(record => ['running', 'cancelling'].includes(record.state))) throw new Error('Media runtime busy or history full')
         this.starting = true
         try {
+          await this.workspace.ensureBudget(this.options.root, 3 * 1024 ** 3)
           const input = await body(req) as { revision?: unknown }
           if (!input || typeof input.revision !== 'string') throw new Error('Review required')
           const record: JobRecord = { id: input.revision, brand: brandId, root, state: 'running', controller: new AbortController() }
@@ -76,12 +101,21 @@ export class MediaHttpCarrier {
           let reviewed: { plan: EditPlan; sourceHash: string }
           try { reviewed = await this.workspace.consume(root, input.revision, AbortSignal.any([signal, record.controller.signal])) }
           catch (error) { this.records.delete(record.id); throw error }
-          void this.jobs.start(brandId, root, reviewed.plan, {
+          try { await saveMediaRecord(root, record) }
+          catch (error) { this.records.delete(record.id); throw error }
+          const settled = this.jobs.start(brandId, root, reviewed.plan, {
             sourceHash: reviewed.sourceHash, tools: this.options.tools, run: this.options.run,
             signal: AbortSignal.any([signal, record.controller.signal]),
-          }).then((result) => {
+          }).then(async (result) => {
+            await saveMediaRecord(root, { id: record.id, state: 'completed', output: result.output })
             record.state = 'completed'; record.output = result.output
-          }).catch(() => { record.state = signal.aborted || record.state === 'cancelling' ? 'cancelled' : 'failed' })
+          }).catch(async () => {
+            record.state = signal.aborted || record.state === 'cancelling' ? 'cancelled' : 'failed'
+            record.output = undefined
+            await saveMediaRecord(root, record)
+          }).catch(() => { record.state = 'failed'; record.output = undefined })
+          this.settling.add(settled)
+          void settled.finally(() => { this.settling.delete(settled) })
           json(res, 202, { id: record.id, state: record.state }); return
         } finally { this.starting = false }
       }

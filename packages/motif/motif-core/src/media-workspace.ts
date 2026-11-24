@@ -1,7 +1,7 @@
 /** Owner-runtime media imports and reviewed revisions. No account tenancy claim. */
 import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { mkdir, open, realpath, rename, rm } from 'node:fs/promises'
+import { mkdir, open, realpath, rename, rm, readdir, lstat } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { validateEditPlan, type EditPlan } from './media-pipeline.ts'
 
@@ -11,9 +11,38 @@ export interface ReviewedRevision { id: string; sourceId: string; hash: string; 
 export class MediaWorkspace {
   private readonly sources = new Map<string, ImportedSource>()
   private readonly revisions = new Map<string, ReviewedRevision>()
-  private reservedBytes = 0
   private importing = false
-  constructor(private readonly maxSourceBytes = 1024 ** 3, private readonly maxRuntimeBytes = 3 * 1024 ** 3) {}
+  constructor(private readonly maxSourceBytes = 1024 ** 3, private readonly maxRuntimeBytes = 6 * 1024 ** 3) {}
+
+  /** Recount retained imports/jobs from disk, including previous Host lifetimes. Fail closed on unsafe entries. */
+  async ensureBudget(runtimeRoot: string, reservation: number): Promise<void> {
+    let total = 0, entries = 0
+    const visit = async (path: string): Promise<void> => {
+      if (++entries > 10000) throw new Error('Media storage requires maintenance')
+      const info = await lstat(path)
+      if (info.isSymbolicLink()) throw new Error('Media storage must not contain symlinks')
+      if (info.isDirectory()) {
+        for (const item of await readdir(path)) await visit(join(path, item))
+      } else if (info.isFile()) total += info.size
+      else throw new Error('Unsupported media storage entry')
+      if (total + reservation > this.maxRuntimeBytes) throw new Error('Media runtime quota reached')
+    }
+    const base = await realpath(runtimeRoot)
+    for (const brand of await readdir(base, { withFileTypes: true })) {
+      if (!brand.isDirectory()) continue
+      for (const folder of ['assets', 'timeline']) {
+        const path = join(base, brand.name, folder)
+        let children
+        try { children = await readdir(path, { withFileTypes: true }) }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error }
+        if ((await lstat(path)).isSymbolicLink()) throw new Error('Media storage must not be symlinked')
+        for (const child of children) {
+          if (child.name.startsWith('media-')) await visit(join(path, child.name))
+        }
+      }
+    }
+    if (total + reservation > this.maxRuntimeBytes) throw new Error('Media runtime quota reached')
+  }
 
   /** Resolve the actual Brand directory and reject sibling/escaping links. */
   async brandRoot(root: string, brandId: string): Promise<string> {
@@ -32,14 +61,13 @@ export class MediaWorkspace {
     if (this.importing) throw new Error('A media import is already running')
     const extension = /\.(mp4|mov|webm|mkv|m4v)$/i.exec(filename)?.[1]?.toLowerCase()
     if (!extension || filename.length > 255 || /[/\\\x00-\x1f]/.test(filename)) throw new Error('Unsupported source name')
-    if (this.reservedBytes + this.maxSourceBytes > this.maxRuntimeBytes) throw new Error('Media import quota reached')
     signal.throwIfAborted()
     this.importing = true
-    this.reservedBytes += this.maxSourceBytes
     const id = randomUUID(), source = `assets/media-${id}.${extension}`
     let bytes = 0, complete = false
     const path = join(root, source), partial = path + '.partial'
     try {
+      await this.ensureBudget(join(root, '..'), this.maxSourceBytes)
       await mkdir(join(root, 'assets'), { recursive: true })
       if (await realpath(join(root, 'assets')) !== join(await realpath(root), 'assets')) throw new Error('Assets must not be symlinked')
       const file = await open(partial, 'wx', 0o600)
@@ -62,9 +90,7 @@ export class MediaWorkspace {
       return { id, source, bytes }
     } finally {
       this.importing = false
-      this.reservedBytes -= this.maxSourceBytes
-      if (complete) this.reservedBytes += bytes
-      else await rm(partial, { force: true }).catch(() => {})
+      if (!complete) await rm(partial, { force: true }).catch(() => {})
     }
   }
 

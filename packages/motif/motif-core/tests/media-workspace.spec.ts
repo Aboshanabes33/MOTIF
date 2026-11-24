@@ -12,3 +12,13 @@ it('refuses cross-Brand ids and unsafe sources', async () => { const { root, bra
 it('removes partial oversized uploads and releases quota', async () => { const { brand, signal } = await setup(); const store = new MediaWorkspace(2, 4); await expect(store.import(brand, 'test.mp4', bytes(), signal)).rejects.toThrow('limit'); expect(await readdir(join(brand, 'assets'))).toEqual([]); async function* small() { yield Buffer.from('a') } await expect(store.import(brand, 'test.mp4', small(), signal)).resolves.toMatchObject({ bytes: 1 }) })
 it('refuses modified bytes after review', async () => { const { brand, store, signal } = await setup(); const source = await store.import(brand, 'test.mp4', bytes(), signal); const revision = store.review(brand, source.id, [{ start: 0, end: 1 }]); await writeFile(join(brand, source.source), 'wrong fixture'); await expect(store.consume(brand, revision.id, signal)).rejects.toThrow('Source changed') })
 it('refuses symlinked assets', async () => { const { root, brand, store, signal } = await setup(); await symlink(root, join(brand, 'assets')); await expect(store.import(brand, 'test.mp4', bytes(), signal)).rejects.toThrow('symlinked') })
+it('counts retained bytes across restart and other Brands instead of resetting quota', async () => {
+  const { root, brand, signal } = await setup()
+  await mkdir(join(root, 'other', 'timeline', 'media-old'), { recursive: true })
+  await writeFile(join(root, 'other', 'timeline', 'media-old', 'output.mp4'), 'x'.repeat(150))
+  const restarted = new MediaWorkspace(100, 200)
+  await expect(restarted.import(brand, 'test.mp4', bytes(), signal)).rejects.toThrow('quota')
+  await rm(join(root, 'other'), { recursive: true })
+  await expect(restarted.import(brand, 'test.mp4', bytes(), signal)).resolves.toMatchObject({ bytes: 13 })
+  await expect(new MediaWorkspace(100, 110).ensureBudget(root, 100)).rejects.toThrow('quota')
+})

@@ -33,3 +33,10 @@ Full real pipeline subsequently passed every stage: probe -> base Whisper transc
 - These are carrier protocol tests using controlled tool output, not replacements for real Whisper/HyperFrames execution. Restart durability/cleanup, Session proposal integration and full browser/desktop acceptance remain unfinished.
 
 The reviewed source hash is also checked against the private execution snapshot, before any external tool runs. This closes the gap between review-time rehash and the later pipeline copy.
+
+## Restart and retained-storage follow-up
+
+- Small no-follow durable job records are atomically written before execution and after completion. Recovery marks running/cancelling records interrupted, never resumes native tools, and refuses malformed/oversized/symlink records.
+- Completed HTTP status/output survive a new carrier instance. Import handles and reviewed revisions deliberately do not, so resubmission requires a fresh import and review.
+- Runtime import/render admission recounts retained media bytes across Brands and Host lifetimes. Imports reserve 1 GiB, jobs reserve 3 GiB, against a 6 GiB retained-media ceiling; rendering and upload cannot overlap. The active job's separate 3 GiB monitor remains in force. These are conservative admission checks, not a filesystem quota against unrelated native programs.
+- No automatic retention deletion: full history/storage fails closed and requires maintenance. Orphan cleanup UI and Session proposal acceptance remain unfinished. Readiness stays false.

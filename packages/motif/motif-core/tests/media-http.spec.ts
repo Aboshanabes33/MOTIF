@@ -12,7 +12,7 @@ async function fixture(verified: boolean, owner = true, runner?: import('../src/
   await mkdir(join(root, 'other')); await writeFile(join(root, 'other/brand.json'), '{}')
   await mkdir(join(root, 'brand')); await writeFile(join(root, 'brand/brand.json'), '{}')
   const run = runner ? vi.fn(runner) : vi.fn().mockRejectedValue(new Error('Tool intentionally unavailable'))
-  const carrier = new MediaHttpCarrier({ root, verified, tools: { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe', whisper: 'whisper', hyperframes: 'hyperframes' }, run })
+  let carrier = new MediaHttpCarrier({ root, verified, tools: { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe', whisper: 'whisper', hyperframes: 'hyperframes' }, run })
   const peer = { principal: { kind: owner ? 'owner' : 'viewer' }, signal: new AbortController().signal } as unknown as PeerScope
   const server: Server = createServer((req, res) => { void carrier.handle(req, res, peer) })
   await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
@@ -22,7 +22,10 @@ async function fixture(verified: boolean, owner = true, runner?: import('../src/
     await new Promise<void>((resolve) => { server.close(() => resolve()) })
     await rm(root, { recursive: true, force: true })
   })
-  return { url: `http://127.0.0.1:${address.port}`, run }
+  return { url: `http://127.0.0.1:${address.port}`, run, restart: async () => {
+    await carrier.close()
+    carrier = new MediaHttpCarrier({ root, verified, tools: { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe', whisper: 'whisper', hyperframes: 'hyperframes' }, run })
+  } }
 }
 it('keeps unverified execution unavailable', async () => { const { url, run } = await fixture(false); expect(await (await fetch(url + '/motif-media/readiness')).json()).toMatchObject({ available: false }); expect((await fetch(url + '/motif-media/import?brand=brand&name=clip.mp4', { method: 'POST', headers: { 'sec-fetch-site': 'same-origin' }, body: 'video' })).status).toBe(503); expect(run).not.toHaveBeenCalled() })
 it('denies nonowners and cross-origin mutations', async () => { const viewer = await fixture(true, false); expect((await fetch(viewer.url + '/motif-media/readiness')).status).toBe(403); const owner = await fixture(true); expect((await fetch(owner.url + '/motif-media/import?brand=brand&name=clip.mp4', { method: 'POST', body: 'video' })).status).toBe(403) })
@@ -48,7 +51,7 @@ async function startFixture(url: string) {
   return revision.id
 }
 it('streams only completed owned output and honors a bounded range', async () => {
-  const { url } = await fixture(true, true, async (request) => {
+  const { url, restart } = await fixture(true, true, async (request) => {
     if (request.file === 'ffprobe') return { stdout: JSON.stringify({ format: { duration: 1 }, streams: [{ codec_type: 'video' }] }), stderr: '' }
     if (request.file === 'ffmpeg') await writeFile(join(request.cwd, request.args.at(-1)!), 'encoded fixture')
     if (request.file === 'whisper') await writeFile(join(request.cwd, 'audio.json'), JSON.stringify({ segments: [] }))
@@ -57,6 +60,8 @@ it('streams only completed owned output and honors a bounded range', async () =>
   })
   const id = await startFixture(url)
   await vi.waitFor(async () => { expect(await (await fetch(url + '/motif-media/status?brand=brand&job=' + id)).json()).toMatchObject({ state: 'completed' }) })
+  await restart()
+  expect(await (await fetch(url + '/motif-media/status?brand=brand&job=' + id)).json()).toMatchObject({ state: 'completed' })
   const head = await fetch(url + '/motif-media/output?brand=brand&job=' + id, { method: 'HEAD' })
   expect(head.status).toBe(200); expect(head.headers.get('content-length')).toBe('22'); expect(await head.text()).toBe('')
   expect((await fetch(url + '/motif-media/output?brand=other&job=' + id)).status).toBe(404)
