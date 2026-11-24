@@ -22,7 +22,7 @@ export interface IsolatedAccountRuntime {
 /** Opaque, issuer-bound namespace. Never use an email or an unverified owner argument. */
 export function accountNamespace(identity: VerifiedAccount): string {
   const issuer = new URL(identity.issuer)
-  if (issuer.protocol !== 'https:' || issuer.username || issuer.password || issuer.search || issuer.hash || !identity.subject || identity.subject.length > 512) throw new Error('Invalid verified account')
+  if (typeof identity.subject !== 'string' || issuer.protocol !== 'https:' || issuer.username || issuer.password || issuer.search || issuer.hash || !identity.subject || identity.subject.length > 512) throw new Error('Invalid verified account')
   return 'account_' + createHash('sha256').update(JSON.stringify([issuer.href, identity.subject])).digest('hex')
 }
 
@@ -44,6 +44,7 @@ export class AccountRuntimes {
   private readonly leases = new Map<string, Set<AbortController>>()
   private readonly stopping = new Map<string, Promise<void>>()
   private disposed = false
+  private generation = 0
 
   constructor(private readonly verify: (token: string) => Promise<VerifiedAccount>, private readonly clock = Date.now) {}
 
@@ -58,8 +59,10 @@ export class AccountRuntimes {
   /** Verify anew on every operation. No caller-supplied account id or runtime id is accepted. */
   async acquire(token: string): Promise<AccountRuntimeLease> {
     if (this.disposed) throw new Error('Runtime registry is closed')
+    const generation = this.generation
     let identity: VerifiedAccount
     try { identity = await this.verify(token) } catch { throw new Error('Authentication required') }
+    if (this.disposed || generation !== this.generation) throw new Error('Authentication state changed; retry')
     if (!Number.isSafeInteger(identity.expiresAt) || identity.expiresAt <= this.clock()) throw new Error('Session expired')
     const owner = accountNamespace(identity)
     const runtime = this.runtimes.get(owner)
@@ -87,6 +90,8 @@ export class AccountRuntimes {
 
   /** Fence leases synchronously, then await complete runtime teardown before reuse. */
   async revoke(owner: string): Promise<void> {
+    // Fence verification begun before sign-out, including unprovisioned accounts.
+    this.generation++
     for (const controller of this.leases.get(owner) ?? []) controller.abort(new Error('Account runtime revoked'))
     this.leases.delete(owner)
     const runtime = this.runtimes.get(owner)

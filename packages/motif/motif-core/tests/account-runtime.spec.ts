@@ -73,6 +73,34 @@ it('fences all calls after registry disposal, including in-flight verification',
   const pending = registry.acquire('a')
   await registry.dispose()
   finish(account('a'))
-  await expect(pending).rejects.toThrow('No isolated runtime')
+  await expect(pending).rejects.toThrow('Authentication state changed')
   await expect(registry.attach(runtime('a'))).rejects.toThrow('fully revoked')
+})
+
+it('rejects a pending verification after sign-out even if the account is reprovisioned', async () => {
+  let finish!: (value: VerifiedAccount) => void
+  const registry = new AccountRuntimes(() => new Promise((resolve) => { finish = resolve }), () => 1000)
+  const first = runtime('a')
+  await registry.attach(first)
+  const pending = registry.acquire('old-token')
+  await registry.revoke(first.owner)
+  await registry.attach({ ...runtime('a'), id: 'new-runtime' })
+  finish(account('a'))
+  await expect(pending).rejects.toThrow('Authentication state changed')
+  await registry.dispose()
+})
+
+it('fences verification even when sign-out occurs before initial provisioning', async () => {
+  let finish!: (value: VerifiedAccount) => void
+  const registry = new AccountRuntimes(() => new Promise((resolve) => { finish = resolve }), () => 1000)
+  const pending = registry.acquire('old-token')
+  await registry.revoke(accountNamespace(account('a')))
+  await registry.attach(runtime('a'))
+  finish(account('a'))
+  await expect(pending).rejects.toThrow('Authentication state changed')
+  await registry.dispose()
+})
+
+it('rejects malformed verified subjects before creating a namespace', () => {
+  expect(() => accountNamespace({ ...account('a'), subject: {} as never })).toThrow('Invalid verified account')
 })

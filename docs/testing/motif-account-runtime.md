@@ -15,3 +15,7 @@ Focused check: `npx vitest run packages/motif/motif-core/tests/account-runtime.s
 Affected compile: `npx tsc -b packages/motif/motif-core`.
 
 Keep #79 open. Do not advertise multi-user isolation or expose the shared runtime until the production conditions above are verified.
+
+## Pending authentication fence
+
+Revocation now increments the registry generation before teardown. An acquire awaiting asynchronous verification cannot attach to a replacement runtime after sign-out, even when the account had not yet been provisioned when revocation happened. Revocation conservatively asks all concurrent pending verifications to retry; leases already issued to other accounts are unchanged. Malformed non-string verified subjects are rejected. This is a local race fix, not real token revocation or complete authentication integration.
