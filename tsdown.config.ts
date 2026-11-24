@@ -21,8 +21,11 @@ function isBuildFaceClient(value: unknown): boolean {
 export default defineConfig(({ env }) => {
   const client = isBuildFaceClient(env?.DSH_BUILD_FACE)
   const packages = workspacePackageGlobs(globSync(['vendor/*/package.json', 'packages/*/*/package.json'], { cwd: import.meta.dirname }))
+  const members = [...packages, 'apps/cli', ...client ? [] : ['apps/desktop-host']]
+  const selected = process.env.DSH_BUNDLE_MEMBER
+  if (selected !== undefined && !members.includes(selected)) throw new Error('tsdown: invalid DSH_BUNDLE_MEMBER')
   return {
-    workspace: [...packages, 'apps/cli', ...client ? [] : ['apps/desktop-host']],
+    workspace: selected === undefined ? members : [selected],
     entry: client ? '' : ['lib/types/{index,startup}.js'],
     outDir: 'lib',
     format: ['esm'],
