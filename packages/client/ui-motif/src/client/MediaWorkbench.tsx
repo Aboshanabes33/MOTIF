@@ -73,7 +73,7 @@ export function MediaWorkbench({ brand, sendProposal }: {
     {reviewed && <><p role="status">Reviewed {reviewed.clips.length} clips, {reviewed.clips.reduce((sum, clip) => sum + clip.end - clip.start, 0).toFixed(2)} output seconds. Any edit requires another review.</p><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(reviewed, null, 2)}</pre></>}
     {brand && <MediaRenderControls key={brand} brand={brand} file={file} plan={reviewed} />}
     {error && <p role="alert">{error}</p>}
-    <p>Rendering and MP4 export are unavailable. No file is uploaded or copied to the Brand by this picker.
+    <p>Rendering and MP4 export are unavailable in production. No file is uploaded by the picker alone.
       The separate renderer remains gated until Session review and full browser/desktop acceptance are verified.</p>
   </section>
 }

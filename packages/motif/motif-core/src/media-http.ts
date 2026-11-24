@@ -152,7 +152,7 @@ export class MediaHttpCarrier {
       if (url.pathname === '/motif-media/output' && (req.method === 'GET' || req.method === 'HEAD')) {
         if (record.state !== 'completed' || !record.output) { json(res, 409, { error: 'output_not_ready' }); return }
         const canonical = await realpath(record.output), rel = relative(root, canonical)
-        if (!rel.startsWith('timeline' + sep) || rel.split(sep).at(-1) !== 'output.mp4') throw new Error('Invalid output')
+        if (canonical !== record.output || !rel.startsWith('timeline' + sep) || rel.split(sep).at(-1) !== 'output.mp4') throw new Error('Invalid output')
         const file = await open(canonical, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
         try {
           const info = await file.stat()
@@ -170,7 +170,7 @@ export class MediaHttpCarrier {
       }
       json(res, 405, { error: 'unsupported_media_operation' })
     } catch { if (!res.headersSent) json(res, signal.aborted ? 409 : 400, { error: 'media_request_failed' }); else res.destroy() }
-    finally { if (timeout) clearTimeout(timeout) }
+    finally { if (timeout) clearTimeout(timeout); if (mutating) req.setTimeout(0) }
   }
 }
 

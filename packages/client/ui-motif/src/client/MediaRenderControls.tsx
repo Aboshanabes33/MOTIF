@@ -72,7 +72,7 @@ export function MediaRenderControls({ brand, file, plan }: { brand: string; file
       <button type="button" className={styles.secondary} disabled={!available || busy} onClick={() => { void recover() }}>Load saved Brand jobs</button>
       {job && <button type="button" className={styles.secondary} disabled={busy} onClick={() => { void refresh() }}>Refresh render status</button>}
       {active && <button type="button" className={styles.secondary} disabled={busy} onClick={() => { void cancel() }}>Cancel render</button>}
-      {job?.state === 'completed' && <a href={client.output(job.id)} download="motif-output.mp4">Download verified MP4</a>}
+      {job?.state === 'completed' && <a style={{ color: '#ff9b7f' }} href={client.output(job.id)} download="motif-output.mp4">Download verified MP4</a>}
     </div>
     {history.length > 0 && <ul>{history.map(record => <li key={record.id}>
       <button type="button" disabled={busy} onClick={() => { setJob(record); setMessage(`Saved job ${record.state}. Refresh for current status.`) }}>{record.id}: {record.state}</button>

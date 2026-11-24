@@ -48,7 +48,7 @@ export function MediaProposalControls({ brand, file, send, apply }: {
   }
   return <section aria-label="Session video proposal"><h4>Ask the selected Brand Session for cuts</h4>
     <label>Editing instructions<textarea value={instruction} maxLength={4000}
-      onChange={(event) => { setInstruction(event.target.value) }} disabled={busy}/></label>
+      onChange={(event) => { setInstruction(event.target.value); setPlan(undefined); setProposal(undefined); setMessage('') }} disabled={busy}/></label>
     <button type="button" disabled={!available || !send || !file || !instruction.trim() || busy} onClick={() => { void request() }}>Request proposal in existing Session</button>
     {proposal && <button type="button" disabled={busy} onClick={() => { void check() }}>Check Session proposal</button>}
     {message && <p role="status">{message}</p>}
