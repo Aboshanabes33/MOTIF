@@ -1,5 +1,17 @@
 # Media pipeline implementation status
 
+## Current draft #103, November 24 follow-up
+
+The historical sections below describe earlier commits, not current tool availability. Current code includes local review UI, owner-only HTTP import/revision/job/output routes, byte-range streaming, real Host cookie admission tests, durable interrupted/completed job recovery, retained-media admission checks and a gated selected-Session JSON proposal bridge. Production readiness is still hardcoded false. Nothing in this draft closes #78.
+
+Real local developer smoke now passed with FFmpeg/ffprobe, OpenAI Whisper 20250625 base and HyperFrames 0.9.88 on a one-second generated video/tone/title fixture. Whisper returned an empty transcript for the tone, so this does not verify speech accuracy or transcript-driven selection. HyperFrames cache is disabled to avoid external cache symlinks; render lock remains enabled with fail-fast no-wait. These tools were temporary development installs, not product provisioning.
+
+The selected-Session proposal bridge does not make free-form native-agent execution safe merely through prompting. Its UI and render submission stay disabled. The bridge validates returned JSON and requires explicit review but has not passed a real provider/Session/media workflow. Supported desktop, full browser-to-Host render, speech transcript selection, animated composition, retention maintenance and OS provisioning/licensing remain unfinished.
+
+Current checks: 68 focused backend/UI tests, scoped core/client compilers and precommit pass. See docs/testing/motif-media-workbench.md for stage-specific evidence and caveats.
+
+## Historical foundation status
+
 This change is partial, not the full issue-47 feature. It adds a local structured-plan orchestration module and tests. There is no source picker or editor/Relay integration yet. Do not mark issue #47 closed from this patch.
 
 Verified tools/interfaces:

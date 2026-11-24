@@ -108,6 +108,7 @@ export class MediaHttpCarrier {
           await this.workspace.ensureBudget(this.options.root, 3 * 1024 ** 3)
           const input = await body(req) as { revision?: unknown }
           if (!input || typeof input.revision !== 'string') throw new Error('Review required')
+          if (this.records.has(input.revision)) throw new Error('Revision already submitted')
           const record: JobRecord = { id: input.revision, brand: brandId, root, state: 'running', controller: new AbortController() }
           this.records.set(record.id, record)
           let reviewed: { plan: EditPlan; sourceHash: string }
