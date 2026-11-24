@@ -18,6 +18,8 @@ export interface MediaCarrierOptions {
   run: ProcessRunner
   /** Explicit verification gate, not inferred from binary presence. */
   verified: boolean
+  /** Separate boundary: rendering verification never authorizes unrestricted native proposal execution. */
+  proposalVerified?: boolean
 }
 function json(res: ServerResponse, status: number, value: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
@@ -68,7 +70,7 @@ export class MediaHttpCarrier {
     }
     const url = new URL(req.url ?? '/', 'http://local.invalid')
     if (url.pathname === '/motif-media/readiness' && req.method === 'GET') {
-      json(res, 200, { available: this.options.verified, reason: this.options.verified ? undefined : 'Real local tools and complete carrier acceptance are not verified.' }); return
+      json(res, 200, { available: this.options.verified, proposalAvailable: this.options.verified && this.options.proposalVerified === true, reason: this.options.verified ? undefined : 'Real local tools and complete carrier acceptance are not verified.' }); return
     }
     if (!this.options.verified) { json(res, 503, { error: 'media_not_verified' }); return }
     const disconnected = new AbortController()
@@ -89,6 +91,9 @@ export class MediaHttpCarrier {
           const filename = url.searchParams.get('name') ?? ''
           json(res, 201, await this.workspace.import(root, filename, req, signal)); return
         } finally { this.uploading = false }
+      }
+      if (url.pathname === '/motif-media/proposal' && this.options.proposalVerified !== true) {
+        json(res, 503, { error: 'plan_only_session_not_verified' }); return
       }
       if (url.pathname === '/motif-media/proposal' && req.method === 'POST') {
         const input = await body(req) as { sourceId?: unknown; instruction?: unknown }

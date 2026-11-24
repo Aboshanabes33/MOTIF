@@ -16,7 +16,7 @@ export function MediaProposalControls({ brand, file, send, apply }: {
   useEffect(() => {
     const controller = new AbortController()
     void client.readiness(controller.signal).then((value) => {
-      if (!controller.signal.aborted) setAvailable(value.available)
+      if (!controller.signal.aborted) setAvailable(value.proposalAvailable === true)
     }).catch(() => {})
     return () => { controller.abort(); operation.current?.abort() }
   }, [client])

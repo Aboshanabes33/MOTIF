@@ -12,7 +12,7 @@ export function mediaClient(brand: string, request: typeof fetch = fetch) {
     return await response.json() as T
   }
   return {
-    readiness: (signal?: AbortSignal) => json<{ available: boolean; reason?: string }>('readiness', 'GET', undefined, signal),
+    readiness: (signal?: AbortSignal) => json<{ available: boolean; proposalAvailable?: boolean; reason?: string }>('readiness', 'GET', undefined, signal),
     async import(file: File, signal: AbortSignal): Promise<ImportedMedia> {
       const response = await request(url('import', { name: file.name }), { method: 'POST', body: file, credentials: 'same-origin', signal })
       if (!response.ok) throw new Error('Media import failed or unavailable.')

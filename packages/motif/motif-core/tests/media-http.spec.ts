@@ -85,3 +85,8 @@ it('cancels an active runner and never exposes its partial output', async () => 
   await vi.waitFor(async () => { expect(await (await fetch(url + '/motif-media/status?brand=brand&job=' + id)).json()).toMatchObject({ state: 'cancelled' }) })
   expect((await fetch(url + '/motif-media/output?brand=brand&job=' + id)).status).toBe(409)
 })
+it('does not unlock native Session proposal execution merely because rendering is verified', async () => {
+  const { url } = await fixture(true)
+  expect(await (await fetch(url + '/motif-media/readiness')).json()).toMatchObject({ available: true, proposalAvailable: false })
+  expect((await fetch(url + '/motif-media/proposal?brand=brand', { method: 'POST', headers: { 'sec-fetch-site': 'same-origin' }, body: '{}' })).status).toBe(503)
+})

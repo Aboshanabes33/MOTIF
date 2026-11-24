@@ -52,7 +52,7 @@ it('an edit during import invalidates execution even when a response arrives lat
 
 import { MediaProposalControls } from '../src/client/MediaProposalControls.tsx'
 it('uses injected existing Session and requires explicit apply before any render', async () => {
-  const request = vi.fn<typeof fetch>().mockResolvedValueOnce(response({ available: true }))
+  const request = vi.fn<typeof fetch>().mockResolvedValueOnce(response({ available: true, proposalAvailable: true }))
     .mockResolvedValueOnce(response({ id: 'source' })).mockResolvedValueOnce(response({ id: 'proposal', prompt: 'controlled Session prompt' }))
     .mockResolvedValueOnce(response({ state: 'ready', plan }))
   vi.stubGlobal('fetch', request)
