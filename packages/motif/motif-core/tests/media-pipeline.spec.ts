@@ -36,6 +36,11 @@ it('orchestrates real tool contracts, validates output, and records completion o
     expect(result.transcript.segments[0]?.end).toBe(4)
     const status=JSON.parse(await readFile(join(root,'timeline',`media-${result.jobId}`,'status.json'),'utf8'))
     expect(status.stage).toBe('completed')
+    const directory = join(root, 'timeline', `media-${result.jobId}`)
+    expect(await readFile(join(directory, 'captions.vtt'), 'utf8')).toContain('sample')
+    expect(JSON.parse(await readFile(join(directory, 'transcript.json'), 'utf8')).segments).toHaveLength(1)
+    await expect(readFile(join(directory, 'source.mp4'))).rejects.toThrow()
+    expect(await readFile(join(root, 'source.mp4'), 'utf8')).toBe('fixture')
   }finally{await rm(root,{ recursive:true,force:true })}
 })
 it('does not call a missing or invalid render a success',async()=>{

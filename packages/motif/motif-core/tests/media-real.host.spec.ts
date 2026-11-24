@@ -38,7 +38,9 @@ it.skipIf(process.env.MOTIF_REAL_MEDIA_SMOKE !== '1')('renders real local fixtur
     whisper: process.env.MOTIF_SMOKE_WHISPER ?? 'whisper', hyperframes: process.env.MOTIF_SMOKE_HYPERFRAMES ?? 'hyperframes',
   }
   const fixture = join(root, 'fixture.mp4')
-  await promisify(execFile)(tools.ffmpeg, ['-nostdin', '-y', '-f', 'lavfi', '-i', 'color=c=navy:s=320x180:d=1',
+  if (process.env.MOTIF_SMOKE_SPEECH) {
+    await promisify(execFile)(tools.ffmpeg, ['-nostdin', '-y', '-f', 'lavfi', '-i', 'color=c=navy:s=320x180:d=11', '-i', process.env.MOTIF_SMOKE_SPEECH, '-c:v', 'libx264', '-c:a', 'aac', '-shortest', '-threads', '2', fixture])
+  } else await promisify(execFile)(tools.ffmpeg, ['-nostdin', '-y', '-f', 'lavfi', '-i', 'color=c=navy:s=320x180:d=1',
     '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-c:a', 'aac', '-shortest', '-threads', '2', fixture])
   await mkdir(join(root, 'brand')); await writeFile(join(root, 'brand', 'brand.json'), '{}')
   await ctx.plugin(LocalSubprocessRuntime)
@@ -67,7 +69,7 @@ it.skipIf(process.env.MOTIF_REAL_MEDIA_SMOKE !== '1')('renders real local fixtur
   expect(importedResponse.status).toBe(201)
   const imported = await importedResponse.json() as { id: string }
   const revision = await (await fetch(origin + '/motif-media/review?brand=brand', { method: 'POST', headers,
-    body: JSON.stringify({ sourceId: imported.id, clips: [{ start: 0, end: 1, title: 'MOTIF authenticated managed render' }] }),
+    body: JSON.stringify({ sourceId: imported.id, clips: [{ start: 0, end: process.env.MOTIF_SMOKE_SPEECH ? 4 : 1, title: 'MOTIF authenticated managed render' }] }),
   })).json() as { id: string }
   const started = await fetch(origin + '/motif-media/start?brand=brand', { method: 'POST', headers, body: JSON.stringify({ revision: revision.id }) })
   expect(started.status).toBe(202)

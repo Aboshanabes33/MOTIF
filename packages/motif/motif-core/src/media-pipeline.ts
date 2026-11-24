@@ -3,6 +3,7 @@ import { mkdir, readFile, realpath, stat, writeFile, rename, open, readdir, rm }
 import { extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
+import { cutCaptions, captionsVtt, type CaptionCue } from './media-captions.ts'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 export interface EditPlan { version: 1; source: string; clips: { start: number; end: number; title?: string }[] }
 export interface MediaTools { ffmpeg: string; ffprobe: string; whisper: string; hyperframes: string }
@@ -34,13 +35,14 @@ export async function mediaSource(root: string, input: string): Promise<string> 
 }
 const html = (text: string) => text.replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c] ?? c))
 /** Build only controlled finite HTML; instructions cannot introduce scripts or remote media. */
-export function compositionHtml(clips: EditPlan['clips']): string {
+export function compositionHtml(clips: EditPlan['clips'], captions: CaptionCue[] = []): string {
   let at=0
   const body=clips.map((clip,index)=>{
     const duration=clip.end-clip.start,start=at;at+=duration
     return `<video id="clip-${index}" src="./clip-${index}.mp4" data-start="${start}" data-duration="${duration}" data-has-audio="true" playsinline></video>${clip.title?`<div id="title-${index}" class="clip title" data-start="${start}" data-duration="${duration}">${html(clip.title)}</div>`:''}`
   }).join('')
-  return `<!doctype html><html><head><style>html,body{margin:0;background:#141416}#motif{width:1280px;height:720px;position:relative;overflow:hidden}video{position:absolute;width:100%;height:100%;object-fit:contain}.title{position:absolute;bottom:8%;left:6%;right:6%;font:48px sans-serif;color:white;background:#000b;padding:16px;overflow-wrap:anywhere}</style></head><body><div id="motif" data-composition-id="motif" data-width="1280" data-height="720" data-start="0" data-duration="${at}" data-no-timeline>${body}</div></body></html>`
+  const captionHtml = captions.map((cue, index) => `<div id="caption-${index}" class="clip caption" data-start="${cue.start}" data-duration="${cue.end - cue.start}">${html(cue.text)}</div>`).join('')
+  return `<!doctype html><html><head><style>html,body{margin:0;background:#141416}#motif{width:1280px;height:720px;position:relative;overflow:hidden}video{position:absolute;width:100%;height:100%;object-fit:contain}.caption{position:absolute;bottom:3%;left:6%;right:6%;font:32px sans-serif;color:white;background:#000c;padding:8px;text-align:center;overflow-wrap:anywhere}.title{position:absolute;bottom:18%;left:6%;right:6%;font:48px sans-serif;color:white;background:#000b;padding:16px;overflow-wrap:anywhere}</style></head><body><div id="motif" data-composition-id="motif" data-width="1280" data-height="720" data-start="0" data-duration="${at}" data-no-timeline>${body}${captionHtml}</div></body></html>`
 }
 export interface TranscriptSegment {
   start: number
@@ -181,13 +183,16 @@ export async function renderEdit(root: string, plan: EditPlan, options: {
     const transcriptFile=join(directory,'audio.json')
     if((await stat(transcriptFile)).size>8*1024*1024)throw new Error('Transcript is too large')
     const transcript=validateTranscript(JSON.parse(await readFile(transcriptFile,'utf8')))
+    const captions = cutCaptions(transcript, plan.clips)
+    await atomicJson('transcript.json', transcript)
+    await writeFile(join(directory, 'captions.vtt'), captionsVtt(captions), { flag: 'wx', mode: 0o600 })
     await stage('cut')
     for(const [index,clip] of plan.clips.entries()) {
       await invoke(options.tools.ffmpeg,['-nostdin','-y','-ss',String(clip.start),'-protocol_whitelist','file,pipe','-i',source,'-t',String(clip.end-clip.start),'-map','0:v:0','-map','0:a?','-c:v','libx264','-c:a','aac','-threads','2',`clip-${index}.partial.mp4`])
       await rename(join(directory, `clip-${index}.partial.mp4`), join(directory, `clip-${index}.mp4`))
     }
     await stage('compose')
-    await writeFile(join(directory,'index.html'),compositionHtml(plan.clips))
+    await writeFile(join(directory,'index.html'),compositionHtml(plan.clips, captions))
     await stage('render')
     const output=join(directory,'output.partial.mp4')
     await invoke(options.tools.hyperframes,['render',directory,'--output',output,'--workers','1','--fps','30','--no-best-effort','--refuse-outside-files','--no-wait'],900000)
@@ -196,7 +201,11 @@ export async function renderEdit(root: string, plan: EditPlan, options: {
     const result=JSON.parse((await invoke(options.tools.ffprobe,['-v','error','-protocol_whitelist','file,pipe','-show_entries','format=duration:stream=codec_type,width,height','-of','json',output])).stdout)
     const expected=plan.clips.reduce((sum,clip)=>sum+clip.end-clip.start,0)
     if(!Number.isFinite(Number(result.format?.duration))||!result.streams?.some((s:{ codec_type:string })=>s.codec_type==='video')||Math.abs(Number(result.format?.duration)-expected)>0.25)throw new Error('Rendered output failed verification')
+    if (probe.streams.some((stream: { codec_type: string }) => stream.codec_type === 'audio') && !result.streams.some((stream: { codec_type: string }) => stream.codec_type === 'audio')) throw new Error('Rendered output lost source audio')
     await rename(output, join(directory, 'output.mp4'))
+    // Only generated scratch files owned by this completed job are removed.
+    // Imported originals, output, reviewed plan and transcript remain untouched.
+    for (const scratch of [source, join(directory, 'audio.wav'), join(directory, 'audio.json'), ...plan.clips.map((_, index) => join(directory, `clip-${index}.mp4`))]) await rm(scratch, { force: true })
     await stage('completed')
     return { jobId,output: join(directory, 'output.mp4'),transcript }
   } catch(error) {
