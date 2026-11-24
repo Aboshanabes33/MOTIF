@@ -150,7 +150,7 @@ export async function testApiKey(
   } catch {
     return { ok: false, detail: `${facts.label} could not be reached; check the network and try again.` }
   }
-  if (response.ok) return { ok: true, detail: `${facts.label} accepted the key.` }
+  if (response.ok) return { ok: true, detail: `${facts.label} accepted the models-list check. Session/Relay generation has not been verified by this check.` }
   if (response.status === 401 || response.status === 403) return { ok: false, detail: `${facts.label} rejected this key.` }
   return { ok: false, detail: `${facts.label} answered with status ${response.status}; the key could not be verified.` }
 }
