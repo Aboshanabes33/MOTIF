@@ -111,7 +111,7 @@ describe('apiKeyStatus', () => {
 describe('testApiKey', () => {
   it('accepts when the provider answers 200', async () => {
     const result = await testApiKey('anthropic', 'sk-ant-x', { fetch: fetchWith(200) })
-    expect(result).toEqual({ ok: true, detail: 'Anthropic accepted the key.' })
+    expect(result).toEqual({ ok: true, detail: 'Anthropic accepted the models-list check. Session/Relay generation has not been verified by this check.' })
   })
 
   it('sends the provider-specific auth headers', async () => {
@@ -151,4 +151,13 @@ it('refuses redirects on authenticated verification requests', async () => {
   })
   await testApiKey('anthropic', 'sk-test', { fetch: call as typeof fetch })
   expect(call).toHaveBeenCalledTimes(1)
+})
+
+it('does not mistake either provider models check for successful Relay generation', async () => {
+  for (const provider of ['anthropic', 'openai'] as const) {
+    const result = await testApiKey(provider, 'sk-synthetic', { fetch: fetchWith(200) })
+    expect(result.ok).toBe(true)
+    expect(result.detail).toContain('models-list')
+    expect(result.detail).toContain('generation has not been verified')
+  }
 })
