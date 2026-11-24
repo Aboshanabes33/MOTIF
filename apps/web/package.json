@@ -80,6 +80,8 @@
     "@deepseek-ai/dsh-experimental-forge-bundle": "workspace:*"
   },
   "dependencies": {
-    "@deepseek-ai/dsh-message-quotes": "workspace:*"
+    "@deepseek-ai/dsh-message-quotes": "workspace:*",
+    "@convex-dev/auth": "^2.1.0",
+    "convex": "^1.51.0"
   }
 }

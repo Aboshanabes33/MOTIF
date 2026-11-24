@@ -5,7 +5,7 @@ import { setupEmailPassword } from "@convex-dev/auth/methods/email-password/serv
 
 // The frontend origin the emailed links point at. Set SITE_URL on the
 // deployment when the frontend does not run on the Vite default.
-const SITE_URL = env.SITE_URL ?? "http://localhost:5173";
+const SITE_URL = env.SITE_URL ?? "http://localhost:3080";
 
 const auth = setupConvexAuth({ component: components.auth });
 
@@ -34,9 +34,9 @@ export const {
     from: `${env.SENDER_NAME ?? "MOTIF"} <${env.SENDER_EMAIL}>`,
   },
   urls: {
-    signUp: `${SITE_URL}/validate-email`,
+    signUp: `${SITE_URL}/account.html?flow=validate`,
     changeEmail: `${SITE_URL}/confirm-email-change`,
-    recovery: `${SITE_URL}/reset-password`,
+    recovery: `${SITE_URL}/account.html?flow=reset`,
   },
 }).attachUserCallbacks({
   createUser: internal.users.createUser,
