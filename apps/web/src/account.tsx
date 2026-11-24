@@ -24,7 +24,17 @@ function Reset({ code }: { code: string }) {
   const state = useCompletePasswordRecovery(resetApi, { emailCode: code })
   const [error, setError] = useState('')
   if (state.status !== 'ready') return <p role="status">{state.status === 'loading' ? 'Checking recovery link...' : state.status === 'complete' ? 'Password changed. You are signed in.' : 'This recovery link cannot be used. Request a new one in this browser.'}</p>
-  return <form onSubmit={(e) => { e.preventDefault(); const data = new FormData(e.currentTarget); void state.completePasswordRecovery({ newPassword: String(data.get('password')) }).then((result) => { setError(result.status === 'error' ? 'Password could not be changed. Check password requirements and try again.' : '') }) }}><label>New password<input name="password" type="password" autoComplete="new-password" minLength={12} required disabled={state.pending}/></label><button disabled={state.pending}>Reset password and sign in</button><p role="alert">{error}</p></form>
+  const completeRecovery = state.completePasswordRecovery
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setError('')
+    const form = e.currentTarget
+    try {
+      const result = await completeRecovery({ newPassword: String(new FormData(form).get('password')) })
+      if (result.status === 'error') setError('Password could not be changed. Check password requirements and try again.')
+    } catch { setError('Cannot reach account service. Check your connection and try again.') }
+    finally { const input = form.elements.namedItem('password'); if (input instanceof HTMLInputElement) input.value = '' }
+  }
+  return <form onSubmit={(e) => { void submit(e) }}><label>New password<input name="password" type="password" autoComplete="new-password" minLength={12} required disabled={state.pending}/></label><button disabled={state.pending}>Reset password and sign in</button><p role="alert">{error}</p></form>
 }
 function Brands() {
   const brands = useQuery(listBrands, {})
@@ -32,7 +42,7 @@ function Brands() {
   const { signOut } = useAuthActions()
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
-  return <><h2>Your account Brands</h2><p>These records belong to your verified account. They are separate from local Host Brand folders.</p>{brands === undefined ? <p>Loading Brands...</p> : brands === null ? <p>Session unavailable. Sign in again.</p> : <ul>{brands.map(brand => <li key={brand._id}>{brand.name}</li>)}</ul>}<form onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const name = String(new FormData(form).get('name')).trim(); setPending(true); void create({ name }).then(() => { form.reset() }).catch(() => { setError('Could not save Brand. Your session may have expired.') }).finally(() => { setPending(false) }) }}><label>Brand name<input name="name" required maxLength={120} disabled={pending}/></label><button disabled={pending || brands == null}>Create Brand</button></form><p className="notice">AI sessions, local files and native execution are unavailable for account users until an isolated account runtime gateway is configured. Signing in does not unlock a shared Host.</p><button onClick={() => { void signOut().catch(() => { setError('Sign out could not finish. Check your connection and retry.') }) }}>Sign out</button><p role="alert">{error}</p></>
+  return <><h2>Your account Brands</h2><p>These records belong to your verified account. They are separate from local Host Brand folders.</p>{brands === undefined ? <p>Loading Brands...</p> : brands === null ? <p>Session unavailable. Sign in again.</p> : <ul>{brands.map(brand => <li key={brand._id}>{brand.name}</li>)}</ul>}<form onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const name = String(new FormData(form).get('name')).trim(); if (!name) { setError('Brand name is required.'); return }; setError(''); setPending(true); void create({ name }).then(() => { form.reset() }).catch(() => { setError('Could not save Brand. Your session may have expired.') }).finally(() => { setPending(false) }) }}><label>Brand name<input name="name" required maxLength={120} disabled={pending}/></label><button disabled={pending || brands == null}>Create Brand</button></form><p className="notice">AI sessions, local files and native execution are unavailable for account users until an isolated account runtime gateway is configured. Signing in does not unlock a shared Host.</p><button onClick={() => { void signOut().catch(() => { setError('Sign out could not finish. Check your connection and retry.') }) }}>Sign out</button><p role="alert">{error}</p></>
 }
 export function Account() {
   const { isLoading, isAuthenticated } = useConvexAuth()
