@@ -74,8 +74,9 @@ it('uses an immutable source snapshot and strips ambient secrets from tools', as
   process.env.MOTIF_TEST_API_KEY = 'synthetic-not-for-tools'
   try {
     await writeFile(join(root, 'source.mp4'), 'original bytes')
-    await expect(renderEdit(root, plan(), { tools, signal: new AbortController().signal, run: async request => {
+    await expect(renderEdit(root, plan(), { tools, signal: new AbortController().signal, run: async (request) => {
       expect(request.env?.MOTIF_TEST_API_KEY).toBeUndefined()
+      expect(request.env?.HYPERFRAMES_EXTRACT_CACHE_DIR).toBe('off')
       const source = request.args.at(-1)!
       expect(source).not.toBe(join(root, 'source.mp4'))
       expect(await readFile(source, 'utf8')).toBe('original bytes')
@@ -100,7 +101,7 @@ it('snapshots and probes a real local FFmpeg video without claiming transcriptio
     let probed = false
     await expect(renderEdit(root, { version: 1, source: 'source.mp4', clips: [{ start: 0, end: 1 }] }, {
       tools, signal: new AbortController().signal,
-      run: async request => {
+      run: async (request) => {
         if (request.file !== 'ffprobe') throw new Error('Whisper/render intentionally unavailable in smoke test')
         const result = await execute(request.file, request.args, { cwd: request.cwd, env: request.env })
         expect(JSON.parse(result.stdout).streams.some((stream: { codec_type: string }) => stream.codec_type === 'video')).toBe(true)

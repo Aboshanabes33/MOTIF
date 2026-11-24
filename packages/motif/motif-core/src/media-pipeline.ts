@@ -125,7 +125,7 @@ export async function renderEdit(root: string, plan: EditPlan, options: {
   const invoke=async (file:string,args:string[],timeout=120000)=>{
     signal.throwIfAborted()
     await checkQuota()
-    const value = await run({ file,args,cwd:directory,signal,timeout,env:{ ...scrubbedParentEnv(),HYPERFRAMES_NO_TELEMETRY:'1',DO_NOT_TRACK:'1' } })
+    const value = await run({ file,args,cwd:directory,signal,timeout,env:{ ...scrubbedParentEnv(),HYPERFRAMES_NO_TELEMETRY:'1',DO_NOT_TRACK:'1',HYPERFRAMES_EXTRACT_CACHE_DIR:'off' } })
     signal.throwIfAborted()
     await checkQuota()
     return value
