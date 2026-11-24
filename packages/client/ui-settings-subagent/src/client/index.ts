@@ -56,7 +56,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.session', 'configFor
  * Mount the Subagent settings page while the Host serves either of its namespaces.
  * @param ctx - the browser plugin context.
  */
-export function apply(ctx: ClientContext): void {
+function applyDeveloper(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-subagent: dictionaries')
   const limits = new SubagentLimitsCardController(ctx.configForms.get(SUBAGENT_NS))
@@ -90,4 +90,12 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: () => subagentCardFace(limitsFace, modelsFace),
   }, SubagentCard))), 'ui-settings-subagent: page')
+}
+
+/** Mount the existing Harness plugin only in accepted Developer Mode. */
+export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.configForms.developerTools.compose(() => {
+    const fiber = ctx.plugin({ inject, apply: applyDeveloper })
+    return async () => { await fiber.dispose() }
+  }, (error: unknown) => { ctx.logger.error(error) }), 'Harness developer composition')
 }

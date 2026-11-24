@@ -1,3 +1,4 @@
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 /** Rows for the More menus of the left sidebar, Conversation View tabs, and right-sidebar guide. */
 import type { Context } from '@deepseek-ai/cordis'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -20,13 +21,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Services used by the menu rows' footer actions; the optional `pluginNavigation` shows the discovery row while present. */
-export const inject = ['slots', 'locale', 'uiWorkspace']
+export const inject = ['slots', 'locale', 'uiWorkspace', 'configForms']
 
 /**
  * Register the same menu rows into each region's More menu.
  * @param ctx - Browser context with slot, locale, and Workspace services, and the optional plugin navigation.
  */
-export function apply(ctx: Context): void {
+function applyDeveloper(ctx: Context): void {
   ctx.effect(() => ctx.locale.register('entryCustomization', { en, zh, ja, es, fr, de, ru, pt }))
   const t = ctx.locale.bind('entryCustomization')
   // The Plugins page provides its navigation only while the current Peer may use it.
@@ -63,4 +64,12 @@ export function apply(ctx: Context): void {
     name: 'sidebar.right.tab.guide.actions', id: 'entry-customization', locale: 'entryCustomization',
     inject: () => injected('rightbar'),
   }, EntryMenuContent))
+}
+
+/** Mount the existing Harness plugin only in accepted Developer Mode. */
+export function apply(ctx: Context): void {
+  ctx.effect(() => ctx.configForms.developerTools.compose(() => {
+    const fiber = ctx.plugin({ inject, apply: applyDeveloper })
+    return async () => { await fiber.dispose() }
+  }, (error: unknown) => { ctx.logger.error(error) }), 'Harness developer composition')
 }

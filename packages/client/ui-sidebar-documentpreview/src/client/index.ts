@@ -89,7 +89,7 @@ export const inject = ['slots', 'locale', 'sidebarRightTabs', 'remote', 'remote.
  * @param ctx - client root context carrying the registry, slots, copy, and file readers.
  * @param config - Host-synced Office and Excel limits, read once here; an absent value uses the schema defaults.
  */
-export function apply(ctx: ClientContext, config: SyncedConfig<DocumentPreviewConfig>): void {
+function applyDeveloper(ctx: ClientContext, config: SyncedConfig<DocumentPreviewConfig>): void {
   const previews = new DocumentPreviewRegistry()
   const disposePreviews = ctx.reflect.provide('documentPreviews', previews)
   ctx.effect(() => disposePreviews)
@@ -131,4 +131,12 @@ export function apply(ctx: ClientContext, config: SyncedConfig<DocumentPreviewCo
   registerOffice(ctx, config.office.get() ?? OFFICE_DEFAULTS)
   registerExcel(ctx, config.excel.get() ?? EXCEL_DEFAULTS)
   registerCode(ctx)
+}
+
+/** Mount the existing Harness plugin only in accepted Developer Mode. */
+export function apply(ctx: ClientContext, config: SyncedConfig<DocumentPreviewConfig>): void {
+  ctx.effect(() => ctx.configForms.developerTools.compose(() => {
+    const fiber = ctx.plugin({ inject, apply: applyDeveloper }, config)
+    return async () => { await fiber.dispose() }
+  }, (error: unknown) => { ctx.logger.error(error) }), 'Harness developer composition')
 }
