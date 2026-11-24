@@ -28,6 +28,24 @@ pnpm run dev:desktop
 
 For subsequent launches of unchanged built artifacts, `pnpm run start:desktop` skips the rebuild. The development launcher uses an isolated development home and prints its home/userData paths. Do not point it at old data. Neither launcher publishes or uploads a release.
 
+## Build an unsigned Windows installer
+
+After `pnpm run build --serial` succeeds, run this from the repository root in native Windows PowerShell:
+
+```powershell
+pnpm run package:desktop:win:x64:unsigned
+```
+
+This packaging script requires a Windows x64 build host with x64 Node. Linux/Codespaces and ARM64 Node hosts are rejected. The build command alone does not create an installer. Packaging is separate from the development launcher above.
+
+The configured output directory is `apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts/`. After packaging succeeds, find the installer from the repository root:
+
+```powershell
+Get-ChildItem .\apps\desktop\.desktop-build\targets\win-x64\unsigned-artifacts\*-unsigned.exe
+```
+
+The configured filename starts with `deepseek-harness-` and ends with `-unsigned.exe`. This is an unsigned installer, so Windows may show a publisher/security warning. These commands and paths were checked against the repository scripts, not by building or running on Windows. A successful package step does not prove clean-machine installation, Electron behavior or optional media tools work. No installer is uploaded or published by these instructions. Stop on a packaging error and save the first error rather than trying an old installer.
+
 ## Acceptance checklist
 
 1. Open a fresh Brand. Enable Developer Mode. Check real Plugins, Models, presets, trajectory, document preview, automation and advanced settings. Return to normal mode and check developer registrations disappear.
