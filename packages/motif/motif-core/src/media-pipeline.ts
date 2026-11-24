@@ -183,7 +183,7 @@ export async function renderEdit(root: string, plan: EditPlan, options: {
     await writeFile(join(directory,'index.html'),compositionHtml(plan.clips))
     await stage('render')
     const output=join(directory,'output.partial.mp4')
-    await invoke(options.tools.hyperframes,['render',directory,'--output',output,'--workers','1','--fps','30','--no-best-effort','--refuse-outside-files'],900000)
+    await invoke(options.tools.hyperframes,['render',directory,'--output',output,'--workers','1','--fps','30','--no-best-effort','--refuse-outside-files','--no-wait'],900000)
     await stage('verify')
     if((await stat(output)).size===0)throw new Error('Render produced an empty file')
     const result=JSON.parse((await invoke(options.tools.ffprobe,['-v','error','-protocol_whitelist','file,pipe','-show_entries','format=duration:stream=codec_type,width,height','-of','json',output])).stdout)
