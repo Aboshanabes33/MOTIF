@@ -32,6 +32,7 @@ export class MediaJobs {
     run: ProcessRunner
     signal: AbortSignal
     timeoutMs?: number
+    sourceHash?: string
     maxBytes?: number
   }) {
     if (this.disposed) throw new Error('Media runtime is closed')
@@ -72,5 +73,5 @@ export class MediaJobs {
 /** Unverified flows stay disabled, independently of whether binaries happen to exist. */
 export const MEDIA_EDITOR_READINESS = Object.freeze({
   available: false as const,
-  reason: 'Media editing is not ready: reviewed Session plans, authenticated source/output routes and real Whisper/HyperFrames smoke tests are not connected yet.',
+  reason: 'Media editing is not ready: constrained Session proposals, speech selection, full shell/desktop acceptance and deployment provisioning remain unverified.',
 })

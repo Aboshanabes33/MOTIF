@@ -1,0 +1,4 @@
+import { expect, it, vi } from 'vitest'
+import { mediaClient } from '../src/client/media-client.ts'
+it('uses only same-origin owner paths and server revision ids', async () => { const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ id: 'job', state: 'running' }))); const client = mediaClient('brand one', request); await client.start('server-revision', new AbortController().signal); expect(request).toHaveBeenCalledWith('/motif-media/start?brand=brand+one', expect.objectContaining({ method: 'POST', credentials: 'same-origin', body: JSON.stringify({ revision: 'server-revision' }) })); expect(client.output('job/id')).toBe('/motif-media/output?brand=brand+one&job=job%2Fid') })
+it('refuses non-OK state rather than reporting success', async () => { const request = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 503 })); await expect(mediaClient('brand', request).readiness()).rejects.toThrow('unavailable') })

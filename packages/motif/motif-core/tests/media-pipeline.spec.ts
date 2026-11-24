@@ -36,6 +36,11 @@ it('orchestrates real tool contracts, validates output, and records completion o
     expect(result.transcript.segments[0]?.end).toBe(4)
     const status=JSON.parse(await readFile(join(root,'timeline',`media-${result.jobId}`,'status.json'),'utf8'))
     expect(status.stage).toBe('completed')
+    const directory = join(root, 'timeline', `media-${result.jobId}`)
+    expect(await readFile(join(directory, 'captions.vtt'), 'utf8')).toContain('sample')
+    expect(JSON.parse(await readFile(join(directory, 'transcript.json'), 'utf8')).segments).toHaveLength(1)
+    await expect(readFile(join(directory, 'source.mp4'))).rejects.toThrow()
+    expect(await readFile(join(root, 'source.mp4'), 'utf8')).toBe('fixture')
   }finally{await rm(root,{ recursive:true,force:true })}
 })
 it('does not call a missing or invalid render a success',async()=>{
@@ -74,8 +79,9 @@ it('uses an immutable source snapshot and strips ambient secrets from tools', as
   process.env.MOTIF_TEST_API_KEY = 'synthetic-not-for-tools'
   try {
     await writeFile(join(root, 'source.mp4'), 'original bytes')
-    await expect(renderEdit(root, plan(), { tools, signal: new AbortController().signal, run: async request => {
+    await expect(renderEdit(root, plan(), { tools, signal: new AbortController().signal, run: async (request) => {
       expect(request.env?.MOTIF_TEST_API_KEY).toBeUndefined()
+      expect(request.env?.HYPERFRAMES_EXTRACT_CACHE_DIR).toBe('off')
       const source = request.args.at(-1)!
       expect(source).not.toBe(join(root, 'source.mp4'))
       expect(await readFile(source, 'utf8')).toBe('original bytes')
@@ -100,7 +106,7 @@ it('snapshots and probes a real local FFmpeg video without claiming transcriptio
     let probed = false
     await expect(renderEdit(root, { version: 1, source: 'source.mp4', clips: [{ start: 0, end: 1 }] }, {
       tools, signal: new AbortController().signal,
-      run: async request => {
+      run: async (request) => {
         if (request.file !== 'ffprobe') throw new Error('Whisper/render intentionally unavailable in smoke test')
         const result = await execute(request.file, request.args, { cwd: request.cwd, env: request.env })
         expect(JSON.parse(result.stdout).streams.some((stream: { codec_type: string }) => stream.codec_type === 'video')).toBe(true)
@@ -121,5 +127,27 @@ it('enforces the snapshot budget before launching a tool', async () => {
       run: async () => { launched = true; return { stdout: '', stderr: '' } },
     })).rejects.toThrow('snapshot budget')
     expect(launched).toBe(false)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+it('binds execution snapshot to the reviewed source hash before spawning any tool', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'motif-media-reviewed-'))
+  try {
+    await writeFile(join(root, 'source.mp4'), 'changed after review')
+    let calls = 0
+    await expect(renderEdit(root, plan(), { tools, sourceHash: '0'.repeat(64), signal: new AbortController().signal, run: async () => { calls++; return { stdout: '', stderr: '' } } })).rejects.toThrow('Reviewed source changed')
+    expect(calls).toBe(0)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+it('refuses a symlinked timeline before creating private job files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'motif-media-timeline-'))
+  try {
+    await writeFile(join(root, 'source.mp4'), 'fixture')
+    const { symlink } = await import('node:fs/promises')
+    await symlink(tmpdir(), join(root, 'timeline'))
+    let calls = 0
+    await expect(renderEdit(root, plan(), { tools, signal: new AbortController().signal, run: async () => { calls++; return { stdout: '', stderr: '' } } })).rejects.toThrow('symlinked')
+    expect(calls).toBe(0)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
