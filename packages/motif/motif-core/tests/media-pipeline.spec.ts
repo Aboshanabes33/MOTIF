@@ -124,3 +124,13 @@ it('enforces the snapshot budget before launching a tool', async () => {
     expect(launched).toBe(false)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+it('binds execution snapshot to the reviewed source hash before spawning any tool', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'motif-media-reviewed-'))
+  try {
+    await writeFile(join(root, 'source.mp4'), 'changed after review')
+    let calls = 0
+    await expect(renderEdit(root, plan(), { tools, sourceHash: '0'.repeat(64), signal: new AbortController().signal, run: async () => { calls++; return { stdout: '', stderr: '' } } })).rejects.toThrow('Reviewed source changed')
+    expect(calls).toBe(0)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})

@@ -1,7 +1,7 @@
 /** Local media job boundary. Plans are data, never shell programs. */
 import { mkdir, readFile, realpath, stat, writeFile, rename, open, readdir, rm } from 'node:fs/promises'
 import { extname, isAbsolute, join, relative, resolve } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 export interface EditPlan { version: 1; source: string; clips: { start: number; end: number; title?: string }[] }
@@ -75,6 +75,8 @@ export async function renderEdit(root: string, plan: EditPlan, options: {
   timeoutMs?: number
   /** Maximum workspace bytes retained by this job. */
   maxBytes?: number
+  /** Bind the private execution snapshot to the bytes approved at review. */
+  sourceHash?: string
 }): Promise<{ jobId: string; output: string; transcript: Transcript }> {
   validateEditPlan(plan)
   plan = { version: 1, source: plan.source, clips: plan.clips.map(clip => ({ ...clip })) }
@@ -139,17 +141,19 @@ export async function renderEdit(root: string, plan: EditPlan, options: {
       if (!before.isFile() || before.size > 1024 * 1024 * 1024 || before.size > maxBytes) throw new Error('Source exceeds snapshot budget')
       const output = await open(source + '.partial', 'wx', 0o600)
       try {
-        const buffer = Buffer.alloc(1024 * 1024)
+        const buffer = Buffer.alloc(1024 * 1024), hash = createHash('sha256')
         let offset = 0
         for (;;) {
           signal.throwIfAborted()
           const { bytesRead } = await input.read(buffer, 0, buffer.length, offset)
           if (bytesRead === 0) break
+          hash.update(buffer.subarray(0, bytesRead))
           offset += bytesRead
           if (offset > before.size) throw new Error('Source changed during import')
           let written = 0
           while (written < bytesRead) written += (await output.write(buffer, written, bytesRead - written)).bytesWritten
         }
+        if (options.sourceHash && hash.digest('hex') !== options.sourceHash) throw new Error('Reviewed source changed before execution')
         const after = await input.stat()
         if (offset !== before.size || before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) throw new Error('Source changed during import')
       } finally { await output.close() }

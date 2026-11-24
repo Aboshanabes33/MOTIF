@@ -32,6 +32,7 @@ export class MediaJobs {
     run: ProcessRunner
     signal: AbortSignal
     timeoutMs?: number
+    sourceHash?: string
     maxBytes?: number
   }) {
     if (this.disposed) throw new Error('Media runtime is closed')

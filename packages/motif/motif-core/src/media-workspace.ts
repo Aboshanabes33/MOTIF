@@ -87,7 +87,7 @@ export class MediaWorkspace {
   }
 
   /** Consume once, fail closed across Host restart, verify immutable imported bytes again. */
-  async consume(root: string, id: string, signal: AbortSignal): Promise<EditPlan> {
+  async consume(root: string, id: string, signal: AbortSignal): Promise<{ plan: EditPlan; sourceHash: string }> {
     const revision = this.revisions.get(id)
     if (!revision) throw new Error('Review this plan again')
     const source = this.source(root, revision.sourceId)
@@ -105,7 +105,7 @@ export class MediaWorkspace {
         hash.update(buffer.subarray(0, bytesRead)); offset += bytesRead
       }
       if (hash.digest('hex') !== revision.hash) throw new Error('Source changed; import and review again')
-      return structuredClone(revision.plan)
+      return { plan: structuredClone(revision.plan), sourceHash: revision.hash }
     } finally { await file.close() }
   }
 }

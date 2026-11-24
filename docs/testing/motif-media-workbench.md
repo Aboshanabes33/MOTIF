@@ -23,3 +23,13 @@ Installed isolated test-only HyperFrames 0.9.88 and OpenAI Whisper 20250625 with
 Full pipeline integration exposed a real incompatibility: HyperFrames frame extraction defaults to an external cache symlink, correctly refused by the job quota walker. The pipeline now disables that cache explicitly (`HYPERFRAMES_EXTRACT_CACHE_DIR=off`) rather than weakening symlink containment. Full pipeline retry reached rendering but was interrupted by command execution timeout; no complete pipeline success is claimed. Production readiness remains false. Tool installations are temporary test environment setup, not product packaging.
 
 Full real pipeline subsequently passed every stage: probe -> base Whisper transcription -> cut -> composition -> HyperFrames render -> output probe -> completed. Fixture was one-second generated blue video with tone and title, empty speech transcript expected. The repeat initially waited on a stale HyperFrames render lock owned by a zombie from the interrupted smoke. Pipeline now uses `--no-wait` to fail visibly rather than hang behind another render. The successful controlled smoke used a fresh dedicated test lock directory, not disabling render locking. This verifies tool compatibility on a tiny fixture only, not production Host authentication, HTTP download/cancel, speech accuracy, resource limits or desktop acceptance. Readiness remains false.
+
+## Carrier acceptance follow-up
+
+- Real Loader/WebServer/Connection/Token fixture: anonymous request is 401, exchanged owner cookie reaches readiness, cross-site mutation is 403. Production readiness remains false.
+- Deterministic HTTP pipeline fixture: import, server review, start, completed status, full HEAD, bounded/suffix-capable byte ranges (206), unsatisfiable range (416), and cross-Brand output refusal.
+- Cancellation test waits for the runner to start, requests cancellation, waits for cancelled status and verifies partial output stays unavailable.
+- Each record now has its own abort controller, including source rehash before runner start. A synchronous start reservation also fences concurrent starts while the control body is being read.
+- These are carrier protocol tests using controlled tool output, not replacements for real Whisper/HyperFrames execution. Restart durability/cleanup, Session proposal integration and full browser/desktop acceptance remain unfinished.
+
+The reviewed source hash is also checked against the private execution snapshot, before any external tool runs. This closes the gap between review-time rehash and the later pipeline copy.

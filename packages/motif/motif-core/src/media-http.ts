@@ -9,7 +9,7 @@ import { MediaWorkspace } from './media-workspace.ts'
 import { MediaJobs } from './media-jobs.ts'
 import type { EditPlan, MediaTools, ProcessRunner } from './media-pipeline.ts'
 
-interface JobRecord { id: string; brand: string; root: string; state: string; output?: string }
+interface JobRecord { id: string; brand: string; root: string; state: string; controller: AbortController; output?: string }
 export interface MediaCarrierOptions {
   root: string
   tools: MediaTools
@@ -32,6 +32,7 @@ export class MediaHttpCarrier {
   private readonly workspace = new MediaWorkspace()
   private readonly jobs = new MediaJobs(1)
   private readonly records = new Map<string, JobRecord>()
+  private starting = false
   private readonly stop = new AbortController()
   constructor(private readonly options: MediaCarrierOptions) {}
   async close(): Promise<void> { this.stop.abort(); await this.jobs.drain() }
@@ -65,18 +66,24 @@ export class MediaHttpCarrier {
         json(res, 201, this.workspace.review(root, input.sourceId, input.clips as EditPlan['clips'])); return
       }
       if (url.pathname === '/motif-media/start' && req.method === 'POST') {
-        if (this.records.size >= 100 || [...this.records.values()].some(record => ['running', 'cancelling'].includes(record.state))) throw new Error('Media runtime busy or history full')
-        const input = await body(req) as { revision?: unknown }
-        if (!input || typeof input.revision !== 'string') throw new Error('Review required')
-        const record: JobRecord = { id: input.revision, brand: brandId, root, state: 'running' }
-        this.records.set(record.id, record)
-        let plan: EditPlan
-        try { plan = await this.workspace.consume(root, input.revision, signal) }
-        catch (error) { this.records.delete(record.id); throw error }
-        void this.jobs.start(brandId, root, plan, { tools: this.options.tools, run: this.options.run, signal }).then((result) => {
-          record.state = 'completed'; record.output = result.output
-        }).catch(() => { record.state = signal.aborted || record.state === 'cancelling' ? 'cancelled' : 'failed' })
-        json(res, 202, { id: record.id, state: record.state }); return
+        if (this.starting || this.records.size >= 100 || [...this.records.values()].some(record => ['running', 'cancelling'].includes(record.state))) throw new Error('Media runtime busy or history full')
+        this.starting = true
+        try {
+          const input = await body(req) as { revision?: unknown }
+          if (!input || typeof input.revision !== 'string') throw new Error('Review required')
+          const record: JobRecord = { id: input.revision, brand: brandId, root, state: 'running', controller: new AbortController() }
+          this.records.set(record.id, record)
+          let reviewed: { plan: EditPlan; sourceHash: string }
+          try { reviewed = await this.workspace.consume(root, input.revision, AbortSignal.any([signal, record.controller.signal])) }
+          catch (error) { this.records.delete(record.id); throw error }
+          void this.jobs.start(brandId, root, reviewed.plan, {
+            sourceHash: reviewed.sourceHash, tools: this.options.tools, run: this.options.run,
+            signal: AbortSignal.any([signal, record.controller.signal]),
+          }).then((result) => {
+            record.state = 'completed'; record.output = result.output
+          }).catch(() => { record.state = signal.aborted || record.state === 'cancelling' ? 'cancelled' : 'failed' })
+          json(res, 202, { id: record.id, state: record.state }); return
+        } finally { this.starting = false }
       }
       const record = this.records.get(url.searchParams.get('job') ?? '')
       if (!record || record.root !== root) { json(res, 404, { error: 'job_not_found' }); return }
@@ -84,7 +91,7 @@ export class MediaHttpCarrier {
         json(res, 200, { id: record.id, state: record.state, stage: this.jobs.status(brandId)?.state }); return
       }
       if (url.pathname === '/motif-media/cancel' && req.method === 'POST') {
-        if (record.state === 'running') { this.jobs.cancel(brandId); record.state = 'cancelling' }
+        if (record.state === 'running') { record.state = 'cancelling'; record.controller.abort(); this.jobs.cancel(brandId) }
         json(res, 202, { id: record.id, state: record.state }); return
       }
       if (url.pathname === '/motif-media/output' && (req.method === 'GET' || req.method === 'HEAD')) {
@@ -95,13 +102,32 @@ export class MediaHttpCarrier {
         try {
           const info = await file.stat()
           if (!info.isFile() || info.size < 1 || info.size > 3 * 1024 ** 3) throw new Error('Invalid output')
-          res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': String(info.size), 'Content-Disposition': 'attachment; filename="motif-output.mp4"', 'X-Content-Type-Options': 'nosniff' })
+          const range = parseMediaRange(req.headers.range, info.size)
+          if (range === null) { res.writeHead(416, { 'Content-Range': `bytes */${info.size}` }); res.end(); return }
+          const start = range?.start ?? 0, end = range?.end ?? info.size - 1
+          res.writeHead(range ? 206 : 200, { 'Accept-Ranges': 'bytes',
+            ...(range ? { 'Content-Range': `bytes ${start}-${end}/${info.size}` } : {}),
+            'Content-Type': 'video/mp4', 'Content-Length': String(end - start + 1), 'Content-Disposition': 'attachment; filename="motif-output.mp4"', 'X-Content-Type-Options': 'nosniff' })
           if (req.method === 'HEAD') res.end()
-          else await pipeline(file.createReadStream({ autoClose: false }), res, { signal })
+          else await pipeline(file.createReadStream({ autoClose: false, start, end }), res, { signal })
         } finally { await file.close() }
         return
       }
       json(res, 405, { error: 'unsupported_media_operation' })
     } catch { if (!res.headersSent) json(res, signal.aborted ? 409 : 400, { error: 'media_request_failed' }); else res.destroy() }
   }
+}
+
+/** One bounded HTTP byte range, including suffix requests. Multi-range requests are refused. */
+export function parseMediaRange(header: string | undefined, size: number): { start: number; end: number } | null | undefined {
+  if (header === undefined) return undefined
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header)
+  if (!match || (!match[1] && !match[2])) return null
+  const suffix = match[1] === ''
+  const first = Number(match[1]), last = Number(match[2])
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last)) return null
+  const start = suffix ? Math.max(0, size - last) : first
+  const end = suffix || !match[2] ? size - 1 : Math.min(size - 1, last)
+  if (suffix && last < 1 || start >= size || start > end) return null
+  return { start, end }
 }
