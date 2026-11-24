@@ -56,7 +56,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.session', 'configFor
  * Mount the Subagent settings page while the Host serves either of its namespaces.
  * @param ctx - the browser plugin context.
  */
-function applyDeveloper(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-subagent: dictionaries')
   const limits = new SubagentLimitsCardController(ctx.configForms.get(SUBAGENT_NS))

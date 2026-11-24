@@ -40,7 +40,7 @@ export const inject = ['slots', 'locale', 'configForms']
  * Mount the shell settings page while the Host serves its namespace.
  * @param ctx - the browser plugin context.
  */
-function applyDeveloper(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-shell: dictionaries')
   // The base bundle composes exactly one shell executor per platform; the page binds the served one.

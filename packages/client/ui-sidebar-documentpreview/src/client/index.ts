@@ -89,7 +89,7 @@ export const inject = ['slots', 'locale', 'sidebarRightTabs', 'remote', 'remote.
  * @param ctx - client root context carrying the registry, slots, copy, and file readers.
  * @param config - Host-synced Office and Excel limits, read once here; an absent value uses the schema defaults.
  */
-function applyDeveloper(ctx: ClientContext, config: SyncedConfig<DocumentPreviewConfig>): void {
+export function applyDeveloper(ctx: ClientContext, config: SyncedConfig<DocumentPreviewConfig>): void {
   const previews = new DocumentPreviewRegistry()
   const disposePreviews = ctx.reflect.provide('documentPreviews', previews)
   ctx.effect(() => disposePreviews)

@@ -27,7 +27,7 @@ export const inject = ['slots', 'locale', 'uiWorkspace', 'configForms']
  * Register the same menu rows into each region's More menu.
  * @param ctx - Browser context with slot, locale, and Workspace services, and the optional plugin navigation.
  */
-function applyDeveloper(ctx: Context): void {
+export function applyDeveloper(ctx: Context): void {
   ctx.effect(() => ctx.locale.register('entryCustomization', { en, zh, ja, es, fr, de, ru, pt }))
   const t = ctx.locale.bind('entryCustomization')
   // The Plugins page provides its navigation only while the current Peer may use it.

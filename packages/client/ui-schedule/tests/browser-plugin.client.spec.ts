@@ -6,7 +6,7 @@ import { UiConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { resolveSlotLabel, type HostObservable, type StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
 import { StaticRemoteAccess, stubConfigForm } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
-import { apply, inject } from '../src/client/index.ts'
+import { applyDeveloper as apply, inject } from '../src/client/index.ts'
 import { apply as applyNode } from '../src/index.ts'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -205,7 +205,7 @@ describe('ui-schedule browser half', () => {
 
   it('declares only the services used by registration', () => {
     expect(inject).toEqual([
-      'slots', 'locale', 'remote', 'remote.schedule', 'conversation', 'uiConversation', 'uiWorkspace', 'sessions',
+      'slots', 'locale', 'remote', 'remote.schedule', 'conversation', 'uiConversation', 'uiWorkspace', 'sessions', 'configForms',
       'workspaces', 'sidebarRightTabs', 'sidebarRight', 'remoteAccess',
     ])
   })

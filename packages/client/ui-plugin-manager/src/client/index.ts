@@ -94,7 +94,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.pluginManager', 'rem
  * Peer may list the installed bundles.
  * @param ctx - the browser plugin context.
  */
-function applyDeveloper(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-plugin-manager: dictionaries')
   const t = ctx.locale.bind(NS)
   const controller = new PluginManagerController(ctx)

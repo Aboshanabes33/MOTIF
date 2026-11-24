@@ -70,7 +70,7 @@ export const inject = [
  * Mount the roster surfaces: hero chip, session-header label, settings section.
  * @param ctx - the browser plugin context.
  */
-function applyDeveloper(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   const toolsSettings = ctx.configForms.get<{ enabled: boolean }>('ui-settings')
   const presetSettings = ctx.configForms.get(AGENT_PRESET_SETTINGS_NS)
   let active = true

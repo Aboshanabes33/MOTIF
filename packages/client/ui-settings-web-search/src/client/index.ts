@@ -46,7 +46,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'remot
  * Mount the web search and fetch settings page while the Host serves the `web` namespace.
  * @param ctx - the browser plugin context.
  */
-function applyDeveloper(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-web-search: dictionaries')
   const card = new WebSearchCardController({

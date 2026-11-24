@@ -39,7 +39,7 @@ export const inject = ['slots', 'locale', 'configForms']
  * Mount the agent loop's settings page while the Host serves its namespace.
  * @param ctx - the browser plugin context.
  */
-function applyDeveloper(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-agent-loop: dictionaries')
   const t = ctx.locale.bind(NS)
   const card = new AgentLoopCardController(ctx.configForms.get(AGENT_LOOP_NS))

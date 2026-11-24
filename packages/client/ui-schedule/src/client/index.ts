@@ -104,7 +104,7 @@ function inputCorrection(error: RemoteFailure): 'host.notFuture' | 'host.invalid
  * one created task while the current Peer may read the task catalog.
  * @param ctx - browser services used by these contributions.
  */
-function applyDeveloper(ctx: ClientContext): void {
+export function applyDeveloper(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-schedule: dictionaries')
   const managerDictionaries = {
     zh: managerZh,

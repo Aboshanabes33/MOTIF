@@ -438,6 +438,7 @@
       name: '@deepseek-ai/dsh-client-ui-settings-models'
       config:
         credentialOnboarding: false
+        hideAccountOnboarding: true
 
     # Plugin management: the sidebar Plugins page installs, enables, disables,
     # and removes the profile's bundles through the `pluginManager` Remote.

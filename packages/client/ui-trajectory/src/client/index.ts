@@ -47,7 +47,7 @@ export const inject = ['slots', 'sessions', 'uiSession', 'uiConversation', 'loca
  * rides the slot service's effect wrapper, so plugin unload removes the tab.
  * @param ctx - client root context.
  */
-function applyDeveloper(ctx: Context): void {
+export function applyDeveloper(ctx: Context): void {
   const trajectorySources = new WeakMap<SessionBinding, ObservableSnapshot<TrajectorySnapshot>>()
   const trajectorySource = (binding: SessionBinding): ObservableSnapshot<TrajectorySnapshot> => {
     let source = trajectorySources.get(binding)
