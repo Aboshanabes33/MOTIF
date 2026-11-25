@@ -1,17 +1,36 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { MotifBridge } from './contract.js';
+import type { MotifBridge, Reply } from './contract.js';
 import './style.css';
-declare global { interface Window { motif: MotifBridge } }
-function Spike() {
-  const [status, setStatus] = useState('Not checked');
-  const [busy, setBusy] = useState(false);
-  async function run(kind: 'status' | 'pair') {
-    setBusy(true);
-    try { const reply = await window.motif.request({kind}); setStatus(reply.kind === 'status' ? `${reply.name} · ${reply.pairedClients} paired clients` : reply.saved ? 'Private configuration saved. Pairing expires in 15 minutes.' : 'Pairing cancelled.'); }
-    catch { setStatus('Request failed. No additional capability was granted.'); }
-    finally { setBusy(false); }
+declare global { interface Window { motif?: MotifBridge } }
+type Agent = Extract<Reply,{kind:'agents'}>['agents'][number];
+const tabs=['Today','Brands','Record','Search'] as const;
+function Desktop() {
+  const [view,setView]=useState<string>('Today');const [segment,setSegment]=useState('Videos');
+  const [query,setQuery]=useState('');const [agents,setAgents]=useState<Agent[]>([]);const [selected,setSelected]=useState('');
+  const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');const [onboarding,setOnboarding]=useState(true);
+  const [clock,setClock]=useState(new Date());
+  const native=!!window.motif;
+  async function detect() {
+    if(!window.motif) {setMessage('Desktop connection unavailable. Open the Electron app to detect agents and add MCP.');return;}
+    setBusy(true);setMessage('Checking installed agents…');
+    try {const r=await window.motif.request({kind:'agents'});if(r.kind!=='agents')throw new Error('Unexpected reply');setAgents(r.agents);const found=r.agents.filter(a=>a.detected&&a.supported);setSelected(found.length===1?found[0].id:'');setMessage(found.length===1?'One agent detected. Review your selection.':found.length?'Choose the agent you use.':'No agent executable verified. You can select an agent manually.');}
+    catch {setMessage('Detection failed. No configuration was changed.');}finally{setBusy(false);}
   }
-  return <main><p className="eyebrow">ARCHITECTURE SPIKE / 116</p><h1>MOTIF</h1><p className="intro">A small, independent desktop boundary.</p><section><h2>Local connection</h2><p>One read-only capability. No shell, media access, or remote services.</p><div><button disabled={busy} onClick={() => run('status')}>Check service</button><button className="secondary" disabled={busy} onClick={() => run('pair')}>Pair local MCP client</button></div><output aria-live="polite">{status}</output></section><footer>Phase 0 only. Product features and supported operating systems are not approved or verified by this spike.</footer></main>;
+  useEffect(()=>{void detect();const t=setInterval(()=>setClock(new Date()),1000);return()=>clearInterval(t);},[]);
+  useEffect(()=>{const listener=(e:KeyboardEvent)=>{const el=e.target as HTMLElement;if(el.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(el.tagName))return;if(e.key==='/'){e.preventDefault();setView('Search');document.getElementById('search')?.focus();}if(/^[1-4]$/.test(e.key))setView(tabs[Number(e.key)-1]);if(e.key==='Escape')setOnboarding(false);};window.addEventListener('keydown',listener);return()=>window.removeEventListener('keydown',listener);},[]);
+  async function install() {
+    if(!selected||!window.motif)return;setBusy(true);setMessage('Adding MCP… Confirm the native prompt to continue.');
+    try {const r=await window.motif.request({kind:'install',agent:selected as Agent['id']});if(r.kind!=='installed')throw new Error('Unexpected response');setMessage(`Added successfully. Configuration saved to ${r.file}.${r.backup?' Backup saved.':''} Restart your agent. Its connection has not yet been verified.`);}
+    catch(error){setMessage(`MCP was not added: ${error instanceof Error?error.message:'Setup failed'}. Review the client config before retrying.`);}finally{setBusy(false);}
+  }
+  function control(action:'minimize'|'maximize'|'close'){void window.motif?.request({kind:'window',action});}
+  return <div className="app"><div className="mountains"><i/><i/><i/></div><header className="titlebar"><span>MOTIF</span><div className="drag"/><div className="window-buttons">{(['minimize','maximize','close'] as const).map((a,i)=><button key={a} aria-label={a} disabled={!native} onClick={()=>control(a)}>{['−','□','×'][i]}</button>)}</div></header>
+    <div className="body"><aside className="glass sidebar"><nav>{tabs.map((t,i)=><button key={t} className={view===t?'active':''} onClick={()=>setView(t)}><span className="icon">{['▦','◇','♩','⌕'][i]}</span><span className="nav-label">{t}</span><kbd>{i+1}</kbd></button>)}</nav><div className="side-bottom"><button onClick={()=>setOnboarding(true)}><span className="icon">⚙</span><span className="nav-label">Agent setup</span></button><p><span className={native?'dot':'dot offline'}/><span className="nav-label">{native?'Desktop bridge ready':'Browser preview only'}</span></p></div></aside>
+    <main><div className="view-header"><div><p className="eyebrow">YOUR LOCAL WORKSPACE</p><h1>{view==='Record'?'Voice note':view}</h1><p className="subtitle">{view==='Today'?'No workflow service connected':view==='Brands'?'No brands yet':view==='Record'?'Voice recording is not available yet':'Search your local library'}</p></div><div className="actions"><input className="glass" id="search" aria-label="Search library" placeholder="Search library  /" value={query} onFocus={()=>setView('Search')} onChange={e=>setQuery(e.target.value)}/><button className="glass" onClick={()=>setOnboarding(true)}>Agent setup</button></div></div>
+    <div className="workspace"><section className="feed">{view==='Today'&&<div className="glass segments">{['Videos','Brands','Footage'].map(s=><button key={s} className={segment===s?'active':''} onClick={()=>setSegment(s)}>{s}</button>)}</div>}<div className="empty-card"><div className="empty-icon">{view==='Brands'?'◇':view==='Record'?'♩':view==='Search'?'⌕':'▦'}</div><h2>{view==='Search'?(query?`Nothing matches "${query}"`:'Your library is empty'):view==='Record'?'Recording unavailable':view==='Brands'||segment==='Brands'?'No brands yet':segment==='Footage'?'No footage imported':'No videos yet'}</h2><p>{view==='Record'?'A real recording and storage service is required. No microphone is being recorded.':'Projects, media import and rendering are not implemented in this build. No sample items or invented progress.'}</p></div></section><aside className="inspector"><p className="eyebrow">WORKSPACE STATUS</p><h2>A clean start</h2><p>No active brief. No rendering jobs.</p><hr/><p className="eyebrow">LOCAL MCP</p><p>The current connector exposes one read-only status tool. It does not generate videos or access your files.</p><button className="glass" onClick={()=>setOnboarding(true)}>Configure agent</button><hr/><p className="small">Saved configuration is not proof of a connected client. Restart your agent and check its MCP tools.</p></aside></div></main></div>
+    <footer><span>Development build · unavailable features are not simulated</span><span>1–4 Navigate · / Search <time>{clock.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</time></span></footer>
+    {onboarding&&<div className="scrim"><section className="glass setup" role="dialog" aria-modal="true" aria-labelledby="setup-title"><p className="eyebrow">CONNECT YOUR AGENT</p><h2 id="setup-title">Make MOTIF available locally</h2><p>Choose Claude Desktop, Codex or OpenCode. Add MCP preserves other settings and creates a backup before changing an existing config.</p><fieldset disabled={busy||!native}><legend>Your agent</legend>{agents.map(a=><label key={a.id} className={selected===a.id?'chosen':''}><input type="radio" name="agent" value={a.id} checked={selected===a.id} disabled={!a.supported} onChange={()=>setSelected(a.id)}/><div><strong>{a.name}</strong><span>{a.detected?'Detected executable':a.supported?'Select manually':'Not supported on this OS'}</span><small>{a.evidence}</small></div></label>)}</fieldset><p role="status" className="setup-status">{message}</p><div className="setup-buttons"><button onClick={()=>setOnboarding(false)} disabled={busy}>Close</button><button onClick={()=>void detect()} disabled={busy||!native}>Check again</button><button className="primary" onClick={()=>void install()} disabled={busy||!native||!selected}>{busy?'Working…':'Add MCP'}</button></div><p className="small">Only a status capability is registered. No paid service, provider login, file access, or arbitrary command capability is added.</p></section></div>}
+  </div>;
 }
-createRoot(document.getElementById('root')!).render(<Spike/>);
+createRoot(document.getElementById('root')!).render(<Desktop/>);

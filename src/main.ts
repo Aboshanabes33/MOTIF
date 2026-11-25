@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { Request, Reply } from './contract.js';
+import { detectAgents, installMcp } from './agents.js';
 import { startService } from './service.js';
 
 app.enableSandbox();
@@ -10,7 +11,7 @@ void app.whenReady().then(async () => {
 const service = await startService();
 const page = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/index.html');
 const pageURL = pathToFileURL(page).href;
-const window = new BrowserWindow({ width: 920, height: 640, webPreferences: {
+const window = new BrowserWindow({ width: 1440, height: 900, minWidth: 760, minHeight: 620, frame: false, webPreferences: {
   preload: path.join(path.dirname(fileURLToPath(import.meta.url)), 'preload.cjs'),
   nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true,
 } });
@@ -19,9 +20,21 @@ window.webContents.on('will-navigate', event => event.preventDefault());
 window.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 window.webContents.session.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith(pathToFileURL(path.dirname(page) + path.sep).href) }));
 let pairing = false;
+let installing = false;
 ipcMain.handle('motif:request', async (event, raw: unknown) => {
   if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== pageURL) throw new Error('Untrusted sender');
   const request = Request.parse(raw);
+  if (request.kind === 'agents') return Reply.parse({kind:'agents',agents:await detectAgents()});
+  if (request.kind === 'window') { if(request.action==='minimize') window.minimize(); else if(request.action==='maximize') { if(window.isMaximized()) window.unmaximize();else window.maximize(); } else setImmediate(()=>window.close()); return {kind:'window'}; }
+  if (request.kind === 'install') {
+    if(installing) throw new Error('Setup already active'); installing=true;
+    try {
+    const approval=await dialog.showMessageBox(window,{type:'question',buttons:['Cancel','Add MCP'],defaultId:0,cancelId:0,message:`Add MOTIF to ${request.agent}?`,detail:'Close the agent before continuing. This adds a local read-only status connector, preserves other settings and saves a backup. Restart the agent afterward. It does not connect AI models or enable media tools.'});
+    if(approval.response!==1) throw new Error('Setup cancelled');
+    const result=await installMcp(request.agent,{command:process.execPath,script:path.join(path.dirname(fileURLToPath(import.meta.url)),'mcp-stdio.cjs')});
+    return Reply.parse({kind:'installed',...result});
+    } finally { installing=false; }
+  }
   if (request.kind === 'status') return Reply.parse(service.status());
   if (pairing) throw new Error('Pairing already open');
   pairing = true;
@@ -50,7 +63,9 @@ await window.loadFile(page);
 if (process.env.MOTIF_SMOKE === '1') {
   const result = await window.webContents.executeJavaScript(`(async () => ({nodeAbsent: typeof require === 'undefined' && typeof process === 'undefined', status: await window.motif.request({kind:'status'}), invalidRejected: await window.motif.request({kind:'shell',command:'whoami'}).then(()=>false,()=>true)}))()`);
   if (!result.nodeAbsent || !result.invalidRejected || result.status.name !== 'MOTIF Phase 0') throw new Error('Electron smoke failed');
-  await window.webContents.executeJavaScript("document.querySelector('button').click()");
+  await new Promise(resolve=>setTimeout(resolve,250));
+  await writeFile('/tmp/motif-onboarding.png',(await window.webContents.capturePage()).toPNG());
+  await window.webContents.executeJavaScript("document.querySelector('.setup-buttons button').click()");
   await new Promise(resolve => setTimeout(resolve, 150));
   console.log('ELECTRON_SMOKE', JSON.stringify(result));
   await writeFile('/tmp/motif-phase0.png', (await window.webContents.capturePage()).toPNG());
