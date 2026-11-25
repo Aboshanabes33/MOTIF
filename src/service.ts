@@ -4,7 +4,7 @@ import {z} from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
-export async function startService(media?:{state:()=>unknown;run:(id:string,kind:'render'|'transcribe')=>Promise<unknown>;cancel:()=>void}) {
+export async function startService(media?:{state:()=>unknown;run:(id:string,kind:'render'|'transcribe'|'captions')=>Promise<unknown>;cancel:()=>void}) {
   const clients = new Map<string, { name: string; expires: number }>();
   const hash = (token: string) => createHash('sha256').update(token).digest('hex');
   const app = express();
@@ -24,7 +24,8 @@ export async function startService(media?:{state:()=>unknown;run:(id:string,kind
     if(media){
       mcp.registerTool('motif_workspace',{description:'Read owner-selected project state and managed source IDs. No arbitrary paths.',inputSchema:{}},async()=>({content:[{type:'text',text:JSON.stringify(media.state())}]}));
       mcp.registerTool('motif_render',{description:'Create a bounded 60-second 720p H264 derivative from an already owner-imported source ID. Requires project folder selected in MOTIF.',inputSchema:{sourceId:z.string().uuid()}},async({sourceId})=>({content:[{type:'text',text:JSON.stringify(await media.run(sourceId,'render'))}]}));
-      mcp.registerTool('motif_transcribe',{description:'Transcribe owner-imported source using a pre-cached base Whisper model; no download. CPU-only.',inputSchema:{sourceId:z.string().uuid()}},async({sourceId})=>({content:[{type:'text',text:JSON.stringify(await media.run(sourceId,'transcribe'))}]}));
+      mcp.registerTool('motif_transcribe',{description:'Transcribe owner-imported source using a pre-cached large-v3-q5_0 Whisper.cpp model with ten-second chunks; no download. CPU-only.',inputSchema:{sourceId:z.string().uuid()}},async({sourceId})=>({content:[{type:'text',text:JSON.stringify(await media.run(sourceId,'transcribe'))}]}));
+      mcp.registerTool('motif_captions',{description:'Burn latest real transcript into a bounded source with local HyperFrames. Transcript may contain errors. Native approval required.',inputSchema:{sourceId:z.string().uuid()}},async({sourceId})=>({content:[{type:'text',text:JSON.stringify(await media.run(sourceId,'captions'))}]}));
       mcp.registerTool('motif_cancel',{description:'Cancel the active project media job',inputSchema:{}},async()=>{media.cancel();return {content:[{type:'text',text:'Cancellation requested'}]};});
     }
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
