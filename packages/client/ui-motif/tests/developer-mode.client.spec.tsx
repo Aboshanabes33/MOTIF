@@ -11,7 +11,7 @@ function preference(initial = false) {
   const setEnabled = vi.fn(async (next: boolean) => { enabled=next;listeners.forEach(fn=>fn()) })
   const enabledSource = {
     getSnapshot: () => enabled,
-    subscribe: (fn) => { listeners.add(fn); return () => { listeners.delete(fn) } },
+    subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn) } },
   }
   const value: DeveloperModePreference = { enabled: enabledSource, setEnabled }
   return { value,setEnabled }

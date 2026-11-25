@@ -18,7 +18,7 @@ const CONNECTIONS: MotifConnection[] = [
 ]
 
 function snapshot(activity: MotifSnapshot['activity'], connections = CONNECTIONS): MotifSnapshot {
-  return { brands: [], connections, activity }
+  return { brands: [], brandProblems: [], connections, activity }
 }
 
 describe('AiSection active indicators', () => {

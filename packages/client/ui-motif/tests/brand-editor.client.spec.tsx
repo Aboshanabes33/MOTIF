@@ -115,7 +115,8 @@ describe('BrandEditor', () => {
   })
 
   it('disables the composer for a Brand without a registered workspace', () => {
-    render(<BrandEditor brand={makeBrand({ workspaceId: undefined })} t={t} onClose={() => {}}
+    const { workspaceId: _workspaceId, ...brand } = makeBrand()
+    render(<BrandEditor brand={brand} t={t} onClose={() => {}}
       loadTimeline={async () => []} sendEditRequest={async () => ({ ok: true, message: '' })} />)
     const input = screen.getByLabelText('editor.editRequest') as HTMLInputElement
     expect(input.disabled).toBe(true)

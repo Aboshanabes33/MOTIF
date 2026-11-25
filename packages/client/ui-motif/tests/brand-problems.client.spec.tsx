@@ -13,7 +13,7 @@ const t: NonNullable<MotifInjected['t']> = (key: MotifCopy, vars?: Readonly<Reco
   vars === undefined ? key : `${key} ${Object.values(vars).join(' ')}`
 
 function snapshotWith(brandProblems: MotifSnapshot['brandProblems']): MotifSnapshot {
-  return { brands: [], brandProblems, connections: [] }
+  return { brands: [], brandProblems, activity: [], connections: [] }
 }
 
 describe('BrandsSection brand problems', () => {

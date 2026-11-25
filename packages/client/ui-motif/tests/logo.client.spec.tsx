@@ -5,7 +5,8 @@ import { BrandsSection } from '../src/client/MotifSection.tsx'
 import { MAX_LOGO_BYTES, validateLogoBytes } from '../src/client/logo.ts'
 afterEach(cleanup)
 async function openForm() {
-  render(<BrandsSection t={key => key} load={async () => ({ brands:[],connections:[] })} createBrand={vi.fn()} />)
+  render(<BrandsSection t={key => key}
+    load={async () => ({ brands:[],brandProblems:[],activity:[],connections:[] })} createBrand={vi.fn()} />)
   await waitFor(() => expect(screen.getByText('brands.manually')).toBeTruthy())
   fireEvent.click(screen.getByText('brands.manually'))
   return screen.getByLabelText('brand.form.logo')

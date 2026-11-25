@@ -11,7 +11,7 @@ afterEach(cleanup)
 const t: NonNullable<MotifInjected['t']> = (key: MotifCopy) => key
 
 function snapshotWith(connections: MotifConnection[]): MotifSnapshot {
-  return { brands: [], connections }
+  return { brands: [], brandProblems: [], activity: [], connections }
 }
 
 const NOT_INSTALLED: MotifConnection = {

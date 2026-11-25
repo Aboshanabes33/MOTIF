@@ -27,7 +27,7 @@ function makeBrand(overrides: Partial<MotifBrand> = {}): MotifBrand {
 }
 
 function snap(brands: MotifBrand[]): MotifSnapshot {
-  return { brands, connections: [] }
+  return { brands, brandProblems: [], activity: [], connections: [] }
 }
 
 describe('BrandsSection states and navigation', () => {
@@ -54,7 +54,8 @@ describe('BrandsSection states and navigation', () => {
 
   it('disables Open for a Brand without a workspace and opens one that has it', async () => {
     const openBrand = vi.fn()
-    render(<BrandsSection t={t} load={async () => snap([makeBrand(), makeBrand({ id: 'loose', name: 'Loose', path: '/brands/loose', workspaceId: undefined })])} openBrand={openBrand} />)
+    const { workspaceId: _workspaceId, ...loose } = makeBrand({ id: 'loose', name: 'Loose', path: '/brands/loose' })
+    render(<BrandsSection t={t} load={async () => snap([makeBrand(), loose])} openBrand={openBrand} />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
     const buttons = screen.getAllByRole('button', { name: 'brands.open' })
     expect(buttons).toHaveLength(2)
@@ -66,7 +67,7 @@ describe('BrandsSection states and navigation', () => {
   })
 
   it('creates a Brand through the form and opens its workspace', async () => {
-    const createBrand = vi.fn(async () => ({ workspaceId: 'ws-9' }))
+    const createBrand = vi.fn<MotifInjected['createBrand']>(async () => ({ workspaceId: 'ws-9' }))
     const openBrand = vi.fn()
     render(<BrandsSection t={t} load={async () => snap([])} createBrand={createBrand} openBrand={openBrand} />)
     await waitFor(() => expect(screen.getByText('brands.empty')).toBeTruthy())
@@ -91,7 +92,7 @@ describe('BrandsSection states and navigation', () => {
   })
 
   it('requires a name before saving', async () => {
-    const createBrand = vi.fn(async () => ({ workspaceId: 'ws-9' }))
+    const createBrand = vi.fn<MotifInjected['createBrand']>(async () => ({ workspaceId: 'ws-9' }))
     render(<BrandsSection t={t} load={async () => snap([])} createBrand={createBrand} />)
     await waitFor(() => expect(screen.getByText('brands.empty')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: '+ brands.new' }))

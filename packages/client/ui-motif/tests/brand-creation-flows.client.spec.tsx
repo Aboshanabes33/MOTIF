@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { MotifWebsiteSuggestion } from '@deepseek-ai/dsh-motif-core/types'
+import type { MotifWebsiteSuggestion, MotifSnapshot } from '@deepseek-ai/dsh-motif-core/types'
 import type { MotifCopy } from '../src/client/locales.ts'
 import type { MotifInjected } from '../src/client/MotifSection.tsx'
 import { BrandsSection } from '../src/client/MotifSection.tsx'
@@ -11,7 +11,7 @@ afterEach(cleanup)
 /** Key-identity translator: specs assert on copy keys, not phrasing. */
 const t: NonNullable<MotifInjected['t']> = (key: MotifCopy) => key
 
-const EMPTY_SNAPSHOT = { brands: [], connections: [] }
+const EMPTY_SNAPSHOT: MotifSnapshot = { brands: [], brandProblems: [], activity: [], connections: [] }
 
 const SUGGESTION: MotifWebsiteSuggestion = {
   name: 'Example',
@@ -28,7 +28,8 @@ const SUGGESTION: MotifWebsiteSuggestion = {
   source: 'https://example.com',
 }
 
-function renderBrands(overrides: Partial<MotifInjected> = {}) {
+type TestOverrides = { [K in keyof MotifInjected]?: MotifInjected[K] | undefined }
+function renderBrands(overrides: TestOverrides = {}) {
   const createBrand = vi.fn(async () => ({ workspaceId: 'ws-new' }))
   const analyzeWebsite = vi.fn(async (_url: string, _signal: AbortSignal) => SUGGESTION)
   const openBrand = vi.fn()

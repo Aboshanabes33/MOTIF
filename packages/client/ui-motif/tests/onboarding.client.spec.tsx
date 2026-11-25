@@ -14,6 +14,8 @@ const t: NonNullable<MotifInjected['t']> = (key: MotifCopy, vars?: Readonly<Reco
 function snapshot(signedIn: ('yes' | 'no' | 'unknown')[]): MotifSnapshot {
   return {
     brands: [],
+    brandProblems: [],
+    activity: [],
     connections: signedIn.map((state, index) => ({
       backend: index === 0 ? 'claude-code' : 'codex',
       label: index === 0 ? 'Claude Code' : 'Codex',
