@@ -15,3 +15,5 @@ export async function checkCapabilities(env:NodeJS.ProcessEnv=process.env):Promi
   catch{return {id:tool.id,name:tool.name,available:false,detail:'Executable found but health check failed or timed out. No media job was run.'};}
  }));
 }
+
+export async function findMediaExecutable(id:'ffmpeg'|'whisper'):Promise<string|undefined>{for(const dir of (process.env.PATH??'').split(path.delimiter).filter(Boolean)){const file=path.join(dir,id+(process.platform==='win32'?'.exe':''));try{await access(file,process.platform==='win32'?constants.F_OK:constants.X_OK);if((await stat(file)).isFile())return file;}catch{}}}
