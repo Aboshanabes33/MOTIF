@@ -60,7 +60,7 @@ export function addEntry(id: AgentId, source: string, entry: {command: string; a
   const input = source.trim() ? source : '{}\n';
   return applyEdits(input,modify(input,keys,value,{formattingOptions:{insertSpaces:true,tabSize:2,eol:'\n'}}));
 }
-export async function installMcp(id: AgentId, launch: {command:string;script:string}, e = current()) {
+export async function installMcp(id: AgentId, launch: {command:string;script:string;connection?:string}, e = current()) {
   const agent = (await detectAgents(e)).find(a => a.id === id)!;
   if (!agent.supported) throw new Error('Claude Desktop auto-configuration is not supported for this OS/install variant. No file was changed.');
   // Prefer existing JSONC rather than silently creating a higher-precedence OpenCode file.
@@ -79,7 +79,7 @@ export async function installMcp(id: AgentId, launch: {command:string;script:str
     let source = ''; let exists = false;
     try { const st=await lstat(file); if(!st.isFile() || st.isSymbolicLink() || st.size>1024*1024) throw new Error('Unsafe configuration file'); source=await readFile(file,'utf8');exists=true; }
     catch(error:any) { if(error.code!=='ENOENT') throw error; }
-    const next = addEntry(id,source,{command:launch.command,args:[launch.script],env:{ELECTRON_RUN_AS_NODE:'1'}});
+    const next = addEntry(id,source,{command:launch.command,args:[launch.script,...(launch.connection?[launch.connection]:[])],env:{ELECTRON_RUN_AS_NODE:'1'}});
     const backup = exists ? file+'.motif-backup-'+randomUUID() : undefined;
     if (backup) await writeFile(backup,source,{flag:'wx',mode:0o600});
     temp=file+'.motif-'+randomUUID();await writeFile(temp,next,{flag:'wx',mode:0o600});
