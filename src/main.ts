@@ -12,6 +12,7 @@ import { checkCapabilities,findMediaExecutable } from './capabilities.js';
 import { detectAgents, installMcp } from './agents.js';
 import { startService } from './service.js';
 
+if(app.isPackaged&&process.platform==='win32')process.env.MOTIF_BUNDLED_ROOT=path.join(process.resourcesPath,'motif-tools');
 if(process.env.MOTIF_SMOKE==='1') app.setPath('userData',mkdtempSync(path.join(os.tmpdir(),'motif-electron-smoke-')));
 app.enableSandbox();
 void app.whenReady().then(async () => {

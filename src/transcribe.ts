@@ -1,7 +1,8 @@
+import {bundledRoot} from './bundled-tools.js';
 import {access,readFile,writeFile,readdir} from 'node:fs/promises';import path from 'node:path';
 export const DEFAULT_MODEL='large-v3-q5_0';
-export function modelPath(){return path.join(process.env.HOME??process.env.USERPROFILE??'','.cache','whisper',`ggml-${DEFAULT_MODEL}.bin`);}
-export async function requireModel(){try{await access(modelPath());}catch{throw new Error('Cache ggml-large-v3-q5_0.bin in ~/.cache/whisper first. MOTIF never downloads models automatically.');}}
+export function modelPath(){const root=bundledRoot();if(root)return path.join(root,'models',`ggml-${DEFAULT_MODEL}.bin`);return path.join(process.env.HOME??process.env.USERPROFILE??'','.cache','whisper',`ggml-${DEFAULT_MODEL}.bin`);}
+export async function requireModel(){try{await access(modelPath());}catch{throw new Error('Required large-v3-q5_0 model missing. Packaged builds require the bundled model; development uses ~/.cache/whisper. No download attempted.');}}
 export async function transcribe(input:string,dir:string,source:string,ffmpeg:string,whisper:string,run:(exe:string,args:string[])=>Promise<void>){
  await run(ffmpeg,['-nostdin','-v','error','-protocol_whitelist','file,pipe','-i',input,'-t','60','-vn','-ac','1','-ar','16000','-f','segment','-segment_time','10',path.join(dir,'part-%02d.wav')]);
  const files=(await readdir(dir)).filter(f=>/^part-\d\d\.wav$/.test(f)).sort();if(files.length===0||files.length>6)throw new Error('Invalid bounded audio chunks');
