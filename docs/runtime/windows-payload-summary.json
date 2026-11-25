@@ -1,7 +1,7 @@
 {
-  "files": 5817,
+  "files": 5816,
   "bytes": 1822901716,
-  "manifestSha256": "de9f6cf62add61a85b6785c6910feb8df7c671266b59a75471abaaafe3917b3b",
+  "manifestSha256": "6c98bcde7060613175943b332f69b8022f9f4ad5bce8794684190ef9584b0cfe",
   "components": {
     "chrome": {
       "bytes": 470514394,
