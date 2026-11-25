@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "redistributionReviewed": false,
+  "blockers": [
+    "Microsoft VC runtime DLLs absent",
+    "FFmpeg exact dependency sources and build materials not audited",
+    "Chrome and npm transitive notice/source audit incomplete",
+    "No clean offline Windows execution"
+  ],
+  "components": [
+    {
+      "component": "whisper.zip",
+      "url": "https://github.com/ggml-org/whisper.cpp/releases/download/b5907/whisper-bin-x64.zip",
+      "archiveBytes": 9168428,
+      "archiveSha256": "ecca07b277d943e9b9f4712856a144b857271a6b333104e511e1988e80db582b"
+    },
+    {
+      "component": "chrome.zip",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/158.0.8127.36/win64/chrome-win64.zip",
+      "archiveBytes": 214927656,
+      "archiveSha256": "6a8ad290952cc612c7777ffb3eb62f345539a2a1a8d440cfac190c6d36b34d2c"
+    },
+    {
+      "component": "node.zip",
+      "url": "https://nodejs.org/dist/v22.23.5/node-v22.23.5-win-x64.zip",
+      "archiveBytes": 35630346,
+      "archiveSha256": "4a191082e9706866830379d577d2cc8a50c776fcd9436a8d061b063ed0d9a0e3"
+    },
+    {
+      "component": "ffmpeg.zip",
+      "url": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+      "archiveBytes": 119467219,
+      "archiveSha256": "b9bbbb3acece000cbeec994f856649354e52c773807841e78908374b24d658fd"
+    },
+    {
+      "component": "model",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-large-v3-q5_0.bin",
+      "sha256": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"
+    }
+  ]
+}
