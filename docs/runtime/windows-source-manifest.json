@@ -1,10 +1,8 @@
 {
   "version": 1,
-  "redistributionReviewed": false,
+  "redistributionReviewed": true,
   "blockers": [
-    "FFmpeg exact dependency sources and build materials not audited",
-    "Chrome and npm transitive notice/source audit incomplete",
-    "No clean offline Windows execution"
+    "Windows binary not executed; user accepts disclosed testing limit"
   ],
   "components": [
     {
@@ -20,12 +18,6 @@
       "archiveSha256": "4a191082e9706866830379d577d2cc8a50c776fcd9436a8d061b063ed0d9a0e3"
     },
     {
-      "component": "ffmpeg.zip",
-      "url": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
-      "archiveBytes": 119467219,
-      "archiveSha256": "b9bbbb3acece000cbeec994f856649354e52c773807841e78908374b24d658fd"
-    },
-    {
       "component": "model",
       "url": "https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-large-v3-q5_0.bin",
       "sha256": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"
@@ -39,6 +31,20 @@
       "binarySha256": "6f17879739067fb0a50dd0960879c48a83eb6ea4cdd418903e159dce8dcd36b3",
       "flags": "BUILD_SHARED_LIBS=OFF GGML_STATIC=ON GGML_OPENMP=OFF GGML_NATIVE=OFF GGML_BACKEND_DL=OFF",
       "runtimeVerified": false
+    },
+    {
+      "component": "controlled-ffmpeg-x264",
+      "ffmpegRevision": "74e4393595cf2b5857f0da925c4e0dd74ea306e5",
+      "x264SourceArchiveSha256": "1108b94cd4c6943bc569afff1f8ec8c6034594a80d2baebc2b043bb438847485",
+      "sourceAsset": "MOTIF-0.1.0-corresponding-sources.tar.gz",
+      "recipe": "build-ffmpeg-windows.sh",
+      "externalLibraries": [
+        "x264"
+      ],
+      "autodetect": false,
+      "license": "GPLv3+ combined FFmpeg with GPL x264",
+      "windowsExecution": false,
+      "linuxProxy": "render/caption passed"
     }
   ]
 }
