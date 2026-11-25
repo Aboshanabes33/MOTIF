@@ -2,12 +2,12 @@ import { z } from 'zod';
 import { BrandInput, Brand } from './brand-contract.js';
 export const AgentId = z.enum(['claude-desktop','codex','opencode']);
 const Agent = z.object({id:AgentId,name:z.string(),detected:z.boolean(),evidence:z.string(),config:z.string(),configDetected:z.boolean(),supported:z.boolean()}).strict();
-const Media=z.object({project:z.string().nullable(),sources:z.array(z.object({id:z.string().uuid(),name:z.string(),file:z.string().uuid()})),jobs:z.array(z.object({id:z.string().uuid(),sourceId:z.string().uuid(),kind:z.enum(['render','transcribe']),state:z.enum(['running','succeeded','failed','cancelled']),startedAt:z.string(),finishedAt:z.string().optional(),output:z.string().optional(),error:z.string().optional()}))});
+const Media=z.object({project:z.string().nullable(),sources:z.array(z.object({id:z.string().uuid(),name:z.string(),file:z.string().uuid()})),jobs:z.array(z.object({id:z.string().uuid(),sourceId:z.string().uuid(),kind:z.enum(['render','transcribe','captions']),state:z.enum(['running','succeeded','failed','cancelled']),startedAt:z.string(),finishedAt:z.string().optional(),output:z.string().optional(),error:z.string().optional()}))});
 export const Request = z.discriminatedUnion('kind', [
  z.object({kind:z.literal('project-select')}).strict(),
  z.object({kind:z.literal('source-import')}).strict(),
  z.object({kind:z.literal('media-state')}).strict(),
- z.object({kind:z.literal('media-run'),sourceId:z.string().uuid(),job:z.enum(['render','transcribe'])}).strict(),
+ z.object({kind:z.literal('media-run'),sourceId:z.string().uuid(),job:z.enum(['render','transcribe','captions'])}).strict(),
  z.object({kind:z.literal('media-cancel')}).strict(),
   z.object({kind:z.literal('brands')}).strict(),
   z.object({kind:z.literal('brand-save'),brand:BrandInput,id:z.string().uuid().optional()}).strict(),
