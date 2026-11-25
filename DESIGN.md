@@ -1,20 +1,24 @@
-# MOTIF Mobile, Liquid Glass Design Spec
+# MOTIF Desktop, Liquid Glass Design Spec
 
-Design 10 of the MOTIF concept set: a mobile companion app in Apple's Liquid Glass style, over a deep teal landscape. This spec is the source of truth for rebuilding the screens faithfully.
+The MOTIF desktop app (Windows, Electron) in Apple's Liquid Glass style, over a deep teal landscape. This spec is the source of truth for rebuilding the screens faithfully. It is the desktop edition of the design: same material, palette and type as the mobile concept, recomposed for a window with a sidebar, pointer and keyboard.
 
 ## 1. Foundations
 
+### Window
+
+- The app is one frameless-style window with a custom title bar: MOTIF wordmark left (display serif, 15px, letter spacing 0.14em), a drag region in the middle, and Windows-style window controls right (minimize, maximize, close; each 46px wide, full bar height 44px). Hover: controls get `rgba(255,255,255,0.10)`; close gets `#e81123` with a white glyph, matching Windows.
+- App surface max width 1440px, min height about 860px, full window background.
+
 ### Canvas
 
-- App column max width 430px, centered, full height (min 780px). On screens wider than 430px the app sits centered on a dark band (#0b2426), like a phone on a desk.
 - Background, painted in this order:
-  1. Radial glow: `radial-gradient(120% 60% at 80% -10%, rgba(126,200,186,0.35), transparent 55%)` (soft light from top right).
+  1. Radial glow: `radial-gradient(90% 55% at 85% -10%, rgba(126,200,186,0.32), transparent 55%)` (soft light from top right).
   2. Vertical gradient: `#2f7268` (0%) to `#21574f` (34%) to `#16403c` (62%) to `#0c2729` (100%).
-  3. Mountain silhouettes, absolute bottom, height about 46% of the panel, three layers back to front:
+  3. Mountain silhouettes anchored to the bottom, about 42% of the window height, three layers back to front with broad, irregular peaks:
      - `#12403c` at 70% opacity
      - `#0d302e` at 90% opacity
      - `#082321` at 100%
-     Drawn as soft peaked paths, wider than tall, overlapping. They are decoration behind content, never above it.
+     Decoration behind content, never above it. Peaks are wide and organic; never a repeating zigzag pattern.
 
 ### Color tokens
 
@@ -23,118 +27,145 @@ Design 10 of the MOTIF concept set: a mobile companion app in Apple's Liquid Gla
 | Text primary | `#eef5f3` | Titles, card titles, active controls |
 | Text secondary | `rgba(238,245,243,0.75)` | Subtitles |
 | Text tertiary | `rgba(238,245,243,0.68)` | Card detail lines |
-| Text inactive | `rgba(238,245,243,0.55)` | Inactive tab icons |
-| Text faint | `rgba(238,245,243,0.45)` | The honesty caption |
+| Text inactive | `rgba(238,245,243,0.55)` to `0.72` | Inactive nav items |
+| Text faint | `rgba(238,245,243,0.45)` to `0.5` | Status bar, kbd hints |
 | Content card | `rgba(7,24,25,0.66)` | Video, brand, note cards |
-| Content card deep | `rgba(5,18,19,0.78)` | Brief card |
+| Content panel deep | `rgba(5,18,19,0.78)` | Inspector, brief |
 | Card border | `rgba(255,255,255,0.07)` | 1px edge on content cards |
-| Accent mint | `#9fd8cd` | Progress bar fill |
-| Recording red | `rgba(237,49,62,0.5)` to `rgba(237,49,62,0.25)` | Active record button tint |
-| Brand swatches | `#e9a23b` amber, `#5fa8a0` teal, `#987fa0` mauve, `#5c76ad` blue | Brand identity blocks |
+| Accent mint | `#9fd8cd` | Progress bar fill, connected-status dot |
+| Recording red | `rgba(237,49,62,0.5)` to `0.25` | Active record button |
+| Close hover red | `#e81123` | Window close button hover only |
+| Brand swatches | `#e9a23b`, `#5fa8a0`, `#987fa0`, `#5c76ad` | Brand identity blocks |
 
 ### Type
 
-- Display: a high-contrast serif (Aime 400 in the reference; a Didone-style serif such as Playfair Display works). 44px, line height 1.05, letter spacing -0.02em. Screen titles only ("Today", "Brands", "Voice note", "Search").
-- Body: a neutral grotesk (KMR Melange Grotesk in the reference; Inter or system sans works). 350 to 600 weight.
-  - Card title 17px / 600
-  - Screen subtitle 15px, card detail 14px
-  - Controls 15px / 500, chips 14px / 600
-  - Clip names 13px, honesty caption 11px
+- Display: a high-contrast serif (Aime 400 in the reference; Playfair Display works). Window title 44px, line height 1.05, letter spacing -0.02em. View titles only ("Today", "Brands", "Voice note", "Search").
+- Body: a neutral grotesk (KMR Melange Grotesk in the reference; Inter or system sans works).
+  - Card title 16px / 600, card detail 13.5px
+  - View subtitle 15px, nav items 15px / 500
+  - Controls 14.5px / 500, chips 14px / 600
+  - Inspector title 18px / 600, inspector body 13.5px
+  - Status bar 11.5px, kbd hints 11px
 
 ## 2. Liquid Glass rules
 
-Glass appears on controls only: the segmented control, tab bar, + button, reply chip, search field, record button, action sheet. Never on content.
+Glass appears on controls only: the sidebar, segmented control, search field, New button, reply chip, record button and the New dialog. Never on content.
 
 The recipe, one material everywhere:
 
 ```
 background: linear-gradient(160deg,
-  rgba(255,255,255,0.20) 0%,
+  rgba(255,255,255,0.18) 0%,
   rgba(255,255,255,0.08) 45%,
   rgba(255,255,255,0.04) 100%);
 backdrop-filter: blur(22px) saturate(1.5);
-border: 1px solid rgba(255,255,255,0.32);
+border: 1px solid rgba(255,255,255,0.30);
 box-shadow:
-  inset 0 1px 0 rgba(255,255,255,0.5),    /* specular top edge */
+  inset 0 1px 0 rgba(255,255,255,0.45),    /* specular top edge */
   inset 0 -1px 0 rgba(255,255,255,0.10),
   0 14px 34px rgba(2,18,18,0.35);
 ```
 
 Rules:
 
-1. Glass only where the user acts. Content under the glass stays solid and readable.
-2. Never glass on glass. Inside a glass surface, nested rows and buttons use plain fills (`rgba(255,255,255,0.14)`), not a second glass treatment.
+1. Glass only where the user acts. Content (cards, inspector, list rows) stays solid and dark.
+2. Never glass on glass. Inside a glass surface, nested rows use plain fills (`rgba(255,255,255,0.14)` hover and `rgba(255,255,255,0.24)` active), not a second glass treatment.
 3. The glass picks up the color behind it; keep the backdrop colorful under controls.
 4. One material. Do not mix frost levels, tints or border brightnesses across controls.
-5. Rounded: pills are fully rounded (999px), the action sheet 30px, the + button a circle.
+5. Corners: pills fully rounded (999px), sidebar 22px, dialog 24px, record button a circle.
 
-## 3. Components
+## 3. Layout
 
-### Status bar (decorative)
-Real device time left (14px / 600), three dot signal dots plus "5G" right. Padding 18px 26px 4px.
+```
++------------------------------------------------------+
+| MOTIF                              _  []  X          |  title bar, 44px
++----------+-------------------------------------------+
+| sidebar  |  header: title + subtitle | search | New  |
+| (glass)  |  segmented control                       |
+| 216px    |  content: feed (grid)  |  inspector 300px |
+|          |                                           |
++----------+-------------------------------------------+
+| status bar: honesty line | shortcut hints | clock    |
++------------------------------------------------------+
+```
 
-### Header
-Screen title (display serif 44px) with a one-line subtitle below (15px secondary). Padding 18px 26px 14px. Subtitle states real status, for example "One render running on your PC" or "Nothing rendering on your PC".
+- Body padding 18px 22px, gap 18px between sidebar, feed and inspector.
+- Sidebar: 216px, glass, radius 22px, padding 10px. Nav items 46px tall, radius 14px, icon 21px plus label plus a small kbd hint (1-4) at the trailing edge. Footer inside the sidebar: connection line ("PC connected") with an 8px mint dot, separated by a hairline.
+- Header: title and subtitle left; actions right (search pill 260px wide, New pill). Header sits on the plain backdrop, not in a panel.
+- Segmented control: glass pill 380px wide, padding 4px, segments 40px tall. Active segment `rgba(255,255,255,0.28)` with inset highlight.
+- Feed: grid `repeat(auto-fill, minmax(300px, 1fr))`, 12px gap. Footage uses `minmax(190px, 1fr)` tiles 120px tall.
+- Inspector: solid deep panel 300px, radius 20px, padding 18px 20px. Sections with small uppercase labels (12px / 600, letter spacing 0.08em), a hairline rule between sections.
+- Status bar: full-width strip, hairline top border, `rgba(5,16,17,0.55)` fill, 11.5px faint text. Left: the honesty line in mockups. Right: keyboard hints and the real clock.
 
-### Segmented control
-Glass pill, margin 6px 22px 14px, padding 4px, three equal segments (Videos / Brands / Footage), each min height 44px. Active segment: `rgba(255,255,255,0.28)` fill, inset top highlight, small drop shadow, white text. Inactive: transparent, 85% white text.
+### Responsive behavior
+
+The desktop window shrinks gracefully:
+- Below 1080px: inspector 260px, search 200px.
+- Below 900px: sidebar collapses to a 64px icon rail (labels and kbd hints hidden), inspector stacks under the feed.
+- Below 640px: header stacks (title above, actions row below, search takes the remaining width), single-column feed, compact title 36px, status-bar hints hidden.
+
+## 4. Pointer and keyboard states
+
+Desktop means hover and focus are first-class:
+
+- Hover on content cards: border brightens to `rgba(255,255,255,0.18)`, card lifts 1px, fill deepens slightly. 0.15s ease.
+- Hover on nav items and dialog buttons: plain fill `rgba(255,255,255,0.10)` to `0.22`.
+- Hover on the New and record buttons: the glass gradient brightens one step.
+- Keyboard focus: a 2px `rgba(255,255,255,0.75)` outline with 2px offset on every focusable element, via `:focus-visible`. Never remove it without replacing it.
+- Press feedback: scale 0.95 to 0.97 on buttons.
+- Shortcuts: 1, 2, 3, 4 switch views (Today, Brands, Record, Search); `/` opens Search and focuses the field; Escape closes the dialog and blurs the field. Shortcuts never fire while typing in an input. Show the hints (kbd chips in the sidebar, status bar line, "( / )" in the search placeholder).
+
+## 5. Components
+
+### Title bar
+As in section 3. The MOTIF wordmark uses the display serif; window controls are 12px stroke glyphs.
+
+### Sidebar
+Glass. Nav item active: `rgba(255,255,255,0.24)` fill, inset top highlight, white text and icon. Inactive: 72% white. The connection footer is honest sample text in mockups, real status in the app.
 
 ### Video card (content)
-Solid card (`rgba(7,24,25,0.66)`, border `rgba(255,255,255,0.07)`, radius 26px, padding 12px 16px 12px 12px). Row: 76x64 thumbnail (radius 18px), then title 17px/600 and detail line "Brand - status". A rendering card also shows a 4px progress track (`rgba(255,255,255,0.14)` track, `#9fd8cd` fill, width animates with 1.6s ease). Thumbnails are small landscape illustrations (sunset dusk, desert, mist), layered mountain silhouettes over a sky gradient with a sun disc.
+Solid card (radius 20px, padding 12px 16px 12px 12px). Row: 96x68 thumbnail (radius 14px), title, detail "Brand - status". Rendering cards show a 4px progress track (`rgba(255,255,255,0.14)` track, `#9fd8cd` fill, width animates 1.6s ease). Thumbnails are small layered-mountain illustrations (dusk, desert, mist).
 
-### Brief card
-Deeper solid card (`rgba(5,18,19,0.78)`). Title plus one line of copy, and a glass chip button ("Reply", radius 999px, min height 40px, 14px/600) that jumps to the Record screen.
+### Brand row
+A solid card that is also a button: 44px swatch (radius 13px), name, detail, + / - at the trailing edge. Selecting one shows its details in the inspector; the selected row keeps a brighter border.
 
-### Brand card
-Solid card holding a full-width row button: 44px color swatch (radius 14px, inset top highlight), name and detail, and a + / - affordance at the trailing edge. Expanded state reveals voice, colors and latest video as small lines (13.5px), indented 66px.
+### Footage tile
+Thumbnail 120px tall (radius 16px), duration pill top right (12px / 600 on `rgba(5,18,19,0.72)`), name below (13px).
 
-### Footage grid
-Two columns, 12px gap. Each clip: thumbnail 110px tall (radius 20px), duration pill top right (12px/600 on `rgba(5,18,19,0.72)`), name below (13px).
+### Inspector
+Solid deep panel. Brief section: title, one line of copy, glass Reply chip (radius 999px, min height 40px) that opens Record. Activity section: live lines like "Rendering Ramadan teaser - 72%" and "No voice notes yet", always derived from real state.
 
-### Tab bar and + button
-Bottom row, padding 0 20px 22px, 12px gap.
-- Tab bar: glass pill, padding 5px, four equal icon buttons (grid = Today, tag = Brands, mic = Record, search), min height 52px, icons 23px stroke 1.7. Active tab: `rgba(255,255,255,0.26)` fill, inset top highlight, white icon. Inactive: 55% white.
-- + button: separate glass circle 62px, white plus icon 26px stroke 2. Opens the action sheet.
+### Record view
+Centered glass circle 120px with a 42px mic icon. Recording state: red gradient tint, brighter border, label "Recording 0:07 - click again to stop". Idle label "Click to start a voice note". Stopping adds a voice-note card listing its destination.
 
-### Action sheet
-Scrim `rgba(4,14,15,0.45)` over the app panel; sheet is a glass panel (radius 30px) pinned to the bottom, margin 0 14px 18px. Title line (14px/600, secondary), then full-width option buttons (min height 50px, radius 18px, `rgba(255,255,255,0.14)` fill, 16px/500, left aligned) and a plain Cancel. Tap scrim or Cancel to close.
+### Search
+Glass pill in the header (always visible, every view). Focusing it switches to the Search view; results (videos, brands, footage cards) appear in the feed grid. Empty state: "Nothing matches '<query>'."
 
-### Record screen
-Centered glass circle 108px with mic icon 40px. Recording state: red gradient tint (`rgba(237,49,62,0.5)` to 0.25), brighter border, label under it reads "Recording 0:07 - tap to stop". Idle label: "Tap to start a voice note". Stopping adds a voice-note card (solid card, title "Voice note 0:07", detail naming its destination).
+### New dialog
+Centered glass panel (radius 24px, max width 380px) over a `rgba(4,14,15,0.45)` scrim. Title, then full-width option rows (radius 14px, `rgba(255,255,255,0.14)` fill, hover `0.22`), then a plain Cancel. Scrim click, Cancel or Escape closes. Each option runs the real creation flow.
 
-### Search screen
-Glass pill search field (margin 4px 22px 14px, min height 48px, search icon 20px at 80% opacity, input 15px white, placeholder 60% white). Results reuse the video, brand and clip cards. Empty state: one line, "Nothing matches '<query>'." (14px, 70% white).
+### Status bar
+Left: honesty line in mockups ("Concept mockup with sample content."), removed in the real app. Right: shortcut hints and the real clock.
 
-### Honesty caption
-Centered 11px faint line above the tab bar: "Concept mockup with sample content." (Drop this in the real app; keep it in any mockup.)
+## 6. Motion
 
-## 4. Layout
-
-- Page gutters: 22px for content, 26px for header and status bar, 20px for the tab bar row.
-- Vertical rhythm: 12px between cards, 14px after the segmented control and search field.
-- Every interactive target is at least 44px tall.
-- Spacing and radii summary: cards 26px, thumbnails 18px, swatches 14px, pills and tab bar 999px, sheet 30px, sheet buttons 18px, clips 20px.
-
-## 5. Motion and states
-
-- Control transitions: 0.18s ease on background, color, box shadow.
-- Press feedback: scale to 0.93 to 0.98 depending on control size.
-- Progress bars animate width over 1.6s ease; live values tick upward until done, then the status flips to "ready to review".
+- Control transitions 0.18s ease; card hover 0.15s ease.
+- Progress bars animate width over 1.6s ease; live values tick until done, then the status flips to "ready to review" everywhere it appears (card and inspector agree).
 - A freshly added card carries a 1px `rgba(255,255,255,0.35)` outline so the user sees where it landed.
-- Empty search shows a sentence, never a blank area.
 
-## 6. Do and don't
+## 7. Do and don't
 
 Do:
-- Keep glass on controls only, over the colorful backdrop.
-- Keep content cards solid, dark and quiet so the glass controls stand out.
-- Let every control do something real, even in a mockup (switch, filter, add, record a timer).
-- Keep one accent (mint) for progress and nothing else.
-- Write status text that reflects actual state.
+- Keep glass on controls only, over the colorful backdrop; content solid.
+- Give every control hover, active and `:focus-visible` states.
+- Keep one accent (mint) for progress and connection status only.
+- Derive every status line from real state, in the card and the inspector alike.
+- Keep touch targets comfortable (44px minimum height on rows and buttons).
 
 Don't:
 - Don't stack glass surfaces inside each other.
-- Don't add borders, glows or gradients to content cards beyond the spec.
-- Don't use bright accent colors for decoration; the palette is teal, white and one mint.
-- Don't show fake progress, fake counts or buttons that do nothing.
-- Don't shrink text below 11px or touch targets below 44px.
+- Don't add glows, gradients or bright borders to content cards.
+- Don't use the Windows close red anywhere else.
+- Don't show fake progress, fake counts or dead buttons; an unimplemented feature is hidden or marked unavailable.
+- Don't let keyboard shortcuts fire while the user is typing in a field.
+- Don't repeat the mountain silhouettes as a regular pattern.
