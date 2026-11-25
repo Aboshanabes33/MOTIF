@@ -2,18 +2,11 @@
   "version": 1,
   "redistributionReviewed": false,
   "blockers": [
-    "Microsoft VC runtime DLLs absent",
     "FFmpeg exact dependency sources and build materials not audited",
     "Chrome and npm transitive notice/source audit incomplete",
     "No clean offline Windows execution"
   ],
   "components": [
-    {
-      "component": "whisper.zip",
-      "url": "https://github.com/ggml-org/whisper.cpp/releases/download/b5907/whisper-bin-x64.zip",
-      "archiveBytes": 9168428,
-      "archiveSha256": "ecca07b277d943e9b9f4712856a144b857271a6b333104e511e1988e80db582b"
-    },
     {
       "component": "chrome.zip",
       "url": "https://storage.googleapis.com/chrome-for-testing-public/158.0.8127.36/win64/chrome-win64.zip",
@@ -36,6 +29,16 @@
       "component": "model",
       "url": "https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-large-v3-q5_0.bin",
       "sha256": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"
+    },
+    {
+      "component": "static-whisper-cli",
+      "sourceRevision": "092fa10992dec2a91680591697c857b566db7150",
+      "sourceArchive": "sources/whisper-cpp-092fa109.tar.gz",
+      "toolchain": "llvm-mingw-20261117-ucrt-ubuntu-22.04-x86_64",
+      "toolchainArchiveSha256": "e7a15a49a2ea95e9f3d8a9d0cfabe5052a4b10fb4777cc54de5a8c27b64bb701",
+      "binarySha256": "6f17879739067fb0a50dd0960879c48a83eb6ea4cdd418903e159dce8dcd36b3",
+      "flags": "BUILD_SHARED_LIBS=OFF GGML_STATIC=ON GGML_OPENMP=OFF GGML_NATIVE=OFF GGML_BACKEND_DL=OFF",
+      "runtimeVerified": false
     }
   ]
 }

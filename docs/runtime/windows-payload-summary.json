@@ -1,7 +1,7 @@
 {
-  "files": 5890,
-  "bytes": 2007735214,
-  "manifestSha256": "7705cdf2326b1a0ac9b92dbd24e5ddeb1523069a1da01db41d975105c7b5fcc6",
+  "files": 5852,
+  "bytes": 1998306308,
+  "manifestSha256": "0bd2c56bef4f63dbe54acb7a3b7ed00e9180eb36d16818313d59cf93d437c010",
   "components": {
     "chrome": {
       "bytes": 470514394,
@@ -16,8 +16,8 @@
       "files": 5479
     },
     "licenses": {
-      "bytes": 25240,
-      "files": 4
+      "bytes": 40381,
+      "files": 5
     },
     "models": {
       "bytes": 1081140203,
@@ -28,16 +28,20 @@
       "files": 14
     },
     "SOURCE-MANIFEST.json": {
-      "bytes": 1568,
+      "bytes": 1839,
+      "files": 1
+    },
+    "sources": {
+      "bytes": 10060750,
       "files": 1
     },
     "THIRD_PARTY_NOTICES.txt": {
-      "bytes": 787,
+      "bytes": 871,
       "files": 1
     },
     "whisper": {
-      "bytes": 23943680,
-      "files": 41
+      "bytes": 4438528,
+      "files": 1
     }
   }
 }

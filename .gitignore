@@ -6,3 +6,4 @@ dist-electron/
 /release/
 /release-bundled/
 /vendor/
+/.whisper-windows-build/
