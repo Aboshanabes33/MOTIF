@@ -1,7 +1,12 @@
 import { z } from 'zod';
+import { BrandInput, Brand } from './brand-contract.js';
 export const AgentId = z.enum(['claude-desktop','codex','opencode']);
-const Agent = z.object({id:AgentId,name:z.string(),detected:z.boolean(),evidence:z.string(),config:z.string(),supported:z.boolean()}).strict();
+const Agent = z.object({id:AgentId,name:z.string(),detected:z.boolean(),evidence:z.string(),config:z.string(),configDetected:z.boolean(),supported:z.boolean()}).strict();
 export const Request = z.discriminatedUnion('kind', [
+  z.object({kind:z.literal('brands')}).strict(),
+  z.object({kind:z.literal('brand-save'),brand:BrandInput,id:z.string().uuid().optional()}).strict(),
+  z.object({kind:z.literal('brand-remove'),id:z.string().uuid()}).strict(),
+  z.object({kind:z.literal('capabilities')}).strict(),
   z.object({ kind: z.literal('status') }).strict(),
   z.object({ kind:z.literal('agents') }).strict(),
   z.object({ kind:z.literal('install'), agent:AgentId }).strict(),
@@ -10,6 +15,8 @@ export const Request = z.discriminatedUnion('kind', [
 ]);
 export type Request = z.infer<typeof Request>;
 export const Reply = z.discriminatedUnion('kind', [
+  z.object({kind:z.literal('brands'),brands:z.array(Brand)}).strict(),
+  z.object({kind:z.literal('capabilities'),capabilities:z.array(z.object({id:z.string(),name:z.string(),available:z.boolean(),detail:z.string()}).strict())}).strict(),
   z.object({kind:z.literal('agents'),agents:z.array(Agent)}).strict(),
   z.object({kind:z.literal('installed'),file:z.string(),backup:z.string().optional()}).strict(),
   z.object({kind:z.literal('window')}).strict(),

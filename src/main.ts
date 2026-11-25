@@ -1,14 +1,21 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { mkdtempSync } from 'node:fs';
+import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import { Request, Reply } from './contract.js';
+import { BrandStore } from './brands.js';
+import { checkCapabilities } from './capabilities.js';
 import { detectAgents, installMcp } from './agents.js';
 import { startService } from './service.js';
 
+if(process.env.MOTIF_SMOKE==='1') app.setPath('userData',mkdtempSync(path.join(os.tmpdir(),'motif-electron-smoke-')));
 app.enableSandbox();
 void app.whenReady().then(async () => {
 const service = await startService();
+const brands=new BrandStore(path.join(app.getPath('userData'),'motif-data'));
+let capabilityCheck:Promise<unknown>|undefined;
 const page = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/index.html');
 const pageURL = pathToFileURL(page).href;
 const window = new BrowserWindow({ width: 1440, height: 900, minWidth: 760, minHeight: 620, frame: false, webPreferences: {
@@ -24,6 +31,10 @@ let installing = false;
 ipcMain.handle('motif:request', async (event, raw: unknown) => {
   if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== pageURL) throw new Error('Untrusted sender');
   const request = Request.parse(raw);
+  if(request.kind==='brands')return Reply.parse({kind:'brands',brands:await brands.list()});
+  if(request.kind==='brand-save')return Reply.parse({kind:'brands',brands:await brands.save(request.brand,request.id)});
+  if(request.kind==='brand-remove'){const answer=await dialog.showMessageBox(window,{type:'warning',buttons:['Cancel','Delete brand'],defaultId:0,cancelId:0,message:'Delete this local Brand?',detail:'Only metadata is removed. Source files and outputs are not touched.'});if(answer.response!==1)throw new Error('Delete cancelled');return Reply.parse({kind:'brands',brands:await brands.remove(request.id)});}
+  if(request.kind==='capabilities'){capabilityCheck??=checkCapabilities().finally(()=>{capabilityCheck=undefined;});return Reply.parse({kind:'capabilities',capabilities:await capabilityCheck});}
   if (request.kind === 'agents') return Reply.parse({kind:'agents',agents:await detectAgents()});
   if (request.kind === 'window') { if(request.action==='minimize') window.minimize(); else if(request.action==='maximize') { if(window.isMaximized()) window.unmaximize();else window.maximize(); } else setImmediate(()=>window.close()); return {kind:'window'}; }
   if (request.kind === 'install') {
@@ -69,6 +80,15 @@ if (process.env.MOTIF_SMOKE === '1') {
   await new Promise(resolve => setTimeout(resolve, 150));
   console.log('ELECTRON_SMOKE', JSON.stringify(result));
   await writeFile('/tmp/motif-phase0.png', (await window.webContents.capturePage()).toPNG());
+  const saved=await window.webContents.executeJavaScript("window.motif.request({kind:'brand-save',brand:{name:'Desktop verification Brand',voice:'Real local test metadata, created for this smoke test only.',colors:['#21574f','#eef5f3']}})");
+  if(saved.kind!=='brands'||saved.brands.length!==1)throw new Error('Brand IPC save failed');
+  await window.reload();
+  await new Promise(resolve=>setTimeout(resolve,500));
+  await window.webContents.executeJavaScript("document.querySelector('.setup-buttons button').click();document.querySelectorAll('.sidebar nav button')[1].click()");
+  await new Promise(resolve=>setTimeout(resolve,250));
+  await writeFile('/tmp/motif-brand-saved.png',(await window.webContents.capturePage()).toPNG());
+  const restored=await brands.list();if(restored.length!==1)throw new Error('Brand reload failed');
+  console.log('BRAND_SMOKE',JSON.stringify({saved:true,reloaded:true,id:restored[0].id}));
   app.quit();
 }
 
