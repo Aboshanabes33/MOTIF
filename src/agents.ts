@@ -8,7 +8,7 @@ import { readdir, stat } from 'node:fs/promises';
 import TOML from '@iarna/toml';
 export const agentIds = ['claude-desktop', 'codex', 'opencode'] as const;
 export type AgentId = typeof agentIds[number];
-export interface Agent { id: AgentId; name: string; detected: boolean; evidence: string; config: string; supported: boolean }
+export interface Agent { id: AgentId; name: string; detected: boolean; evidence: string; config: string; configDetected: boolean; supported: boolean }
 interface Environment { home: string; platform: NodeJS.Platform; env: NodeJS.ProcessEnv }
 const current = (): Environment => ({ home: os.homedir(), platform: process.platform, env: process.env });
 async function isFile(file: string) { try { return (await lstat(file)).isFile(); } catch { return false; } }
@@ -28,9 +28,13 @@ export async function detectAgents(e = current()): Promise<Agent[]> {
       const names=await readdir(packages).catch(()=>[] as string[]);
       msix=names.some(n=>/^(Claude_pzs8sxrjxfjjc|AnthropicPBC\.Claude_fnn82j28hfe8t)$/.test(n));
     }
-    const config = id === 'claude-desktop' ? path.join(e.platform === 'darwin' ? path.join(e.home,'Library/Application Support') : roaming,'Claude/claude_desktop_config.json') : id === 'codex' ? path.join(e.env.CODEX_HOME ?? path.join(e.home,'.codex'),'config.toml') : path.join(e.env.XDG_CONFIG_HOME ?? path.join(e.home,'.config'),'opencode/opencode.json');
+    let config = id === 'claude-desktop' ? path.join(e.platform === 'darwin' ? path.join(e.home,'Library/Application Support') : roaming,'Claude/claude_desktop_config.json') : id === 'codex' ? path.join(e.env.CODEX_HOME ?? path.join(e.home,'.codex'),'config.toml') : path.join(e.env.XDG_CONFIG_HOME ?? path.join(e.home,'.config'),'opencode/opencode.json');
+    if(id==='claude-desktop' && msix){
+      const candidates=['Claude_pzs8sxrjxfjjc','AnthropicPBC.Claude_fnn82j28hfe8t'].map(n=>path.join(local,'Packages',n,'LocalCache/Roaming/Claude/claude_desktop_config.json'));
+      for(const candidate of candidates) if(await isFile(candidate)){config=candidate;break;}
+    }
     const configExists = await isFile(config);
-    result.push({ id, name: id === 'claude-desktop' ? 'Claude Desktop' : id === 'codex' ? 'Codex' : 'OpenCode', detected: !!found, evidence: found ? `Executable found: ${found}` : msix ? 'Windows packaged Claude data found. Installation/config redirection needs native verification; automatic write disabled.' : configExists ? 'Configuration exists; installation not verified' : 'Not detected in known locations. Select manually if installed elsewhere.', config, supported: !msix && (id !== 'claude-desktop' || e.platform !== 'linux') });
+    result.push({ id, name: id === 'claude-desktop' ? 'Claude Desktop' : id === 'codex' ? 'Codex' : 'OpenCode', detected: !!found, evidence: found ? `Executable found: ${found}` : msix ? 'Windows packaged Claude data found. Installation/config redirection needs native verification; automatic write disabled.' : configExists ? 'Configuration exists; installation not verified' : 'Not detected in known locations. Select manually if installed elsewhere.', config, configDetected:configExists, supported: !msix && (id !== 'claude-desktop' || e.platform !== 'linux') });
   }
   return result;
 }
@@ -56,7 +60,7 @@ export function addEntry(id: AgentId, source: string, entry: {command: string; a
   const input = source.trim() ? source : '{}\n';
   return applyEdits(input,modify(input,keys,value,{formattingOptions:{insertSpaces:true,tabSize:2,eol:'\n'}}));
 }
-export async function installMcp(id: AgentId, launch: {command:string;script:string}, e = current()) {
+export async function installMcp(id: AgentId, launch: {command:string;script:string;connection?:string}, e = current()) {
   const agent = (await detectAgents(e)).find(a => a.id === id)!;
   if (!agent.supported) throw new Error('Claude Desktop auto-configuration is not supported for this OS/install variant. No file was changed.');
   // Prefer existing JSONC rather than silently creating a higher-precedence OpenCode file.
@@ -75,7 +79,7 @@ export async function installMcp(id: AgentId, launch: {command:string;script:str
     let source = ''; let exists = false;
     try { const st=await lstat(file); if(!st.isFile() || st.isSymbolicLink() || st.size>1024*1024) throw new Error('Unsafe configuration file'); source=await readFile(file,'utf8');exists=true; }
     catch(error:any) { if(error.code!=='ENOENT') throw error; }
-    const next = addEntry(id,source,{command:launch.command,args:[launch.script],env:{ELECTRON_RUN_AS_NODE:'1'}});
+    const next = addEntry(id,source,{command:launch.command,args:[launch.script,...(launch.connection?[launch.connection]:[])],env:{ELECTRON_RUN_AS_NODE:'1'}});
     const backup = exists ? file+'.motif-backup-'+randomUUID() : undefined;
     if (backup) await writeFile(backup,source,{flag:'wx',mode:0o600});
     temp=file+'.motif-'+randomUUID();await writeFile(temp,next,{flag:'wx',mode:0o600});
