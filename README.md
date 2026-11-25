@@ -1,3 +1,9 @@
+# MOTIF desktop foundation, work in progress
+
+The current PR adds the desktop design shell and real agent MCP registration. Read [onboarding implementation and limits](docs/onboarding.md) first. Projects, Brands, recording, media and AI workflows are not implemented; empty states are deliberate. Run `npm ci`, `npm run check`, `npm run build`, `npm test`, `npm start`. Desktop only for detection/config writes; browser preview disables those actions.
+
+The Phase0 notes below describe the earlier spike and are retained as historical evidence, not a statement that the expanded onboarding is verified on Windows.
+
 # MOTIF Phase 0
 
 Architecture spike for #116. Not the MOTIF product. No Harness runtime, UI, Cordis, provider, shell, media processing, deployment, or CI integration.
