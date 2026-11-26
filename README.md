@@ -83,5 +83,4 @@ Or open the **MCP Agent** tab (`5`) inside MOTIF for one-click client configs (C
 - `build/` — Official MOTIF desktop icons (`icon.ico`, `icon.png`)
 - `release-page/` — Standalone static Release & Windows download page (`index.html`)
 - `.github/workflows/release-windows.yml` — Automated Windows x64 NSIS + Portable build & GitHub Release publisher
-- `src/edit-studio/` — Legacy Edit Studio engine preserved for compatibility (patched with root `PUT /api/prefs`)
 - `tests/` — Automated HTTP API and JSON-RPC 2.0 stdio MCP test suites

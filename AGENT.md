@@ -2,7 +2,7 @@
 
 ## Repository
 
-MOTIF is a proprietary, local-first Node.js and browser video editing application. Source code is under `src/edit-studio/studio`; do not publish or redistribute proprietary implementation details.
+MOTIF is a proprietary, local-first desktop studio application built with React 19 + TypeScript (`src/`), a shared Node.js HTTP/SSE server (`server/`), an MCP stdio server (`mcp/`), and Electron (`electron/`). Do not publish or redistribute proprietary implementation details.
 
 ## Working conventions
 
@@ -33,10 +33,9 @@ Brand logos must be images no larger than 2 MB. The Library UI is the entry poin
 
 ## Validation
 
-Before finishing a change, run the smallest relevant checks:
+Before finishing a change, run the relevant checks:
 
 ```bash
-node --check src/edit-studio/studio/server/app.mjs
-node --check src/edit-studio/studio/public/js/ui/panels/brands.js
-node --check src/edit-studio/studio/public/js/ui/panels/library.js
+npm run build
+npm test
 ```
