@@ -25,11 +25,11 @@
    - Frameless Electron desktop shell with secure preload IPC (`contextIsolation: true`, `sandbox: true`).
    - Embedded local HTTP + SSE backend (`server/motif-server.mjs`) + unpacked MCP server (`asarUnpack: ["mcp/**", "server/**"]`).
    - Official custom MOTIF Windows icon (`build/icon.ico`).
-   - Builds both **Windows NSIS Installer** (`MOTIF-Setup-<ver>-x64.exe`) and **Portable** (`MOTIF-Portable-<ver>-x64.exe`), automated via `.github/workflows/release-windows.yml`.
+   - Built-in Windows x64 Portable `.exe` builder (`npm run build:win-exe`) & Electron packaging (`npm run dist:win`) with official MOTIF icon (`build/icon.ico`).
 
-4. **Release Page (`/releases` & `release-page/index.html`)**
-   - Accessible inside the React app (`Releases` view or standalone route `/releases`) and as a zero-build static landing page (`release-page/index.html`).
-   - Displays Windows Installer & Portable downloads, live GitHub Releases from `Aboshanabes33/MOTIF`, SHA-256 verification, bilingual changelog, system requirements, and MCP setup config.
+4. **Website & Releases Page (`https://getmotif.vercel.app` & `/releases`)**
+   - Live website at **[https://getmotif.vercel.app](https://getmotif.vercel.app)** with dedicated Releases page at **[https://getmotif.vercel.app/releases](https://getmotif.vercel.app/releases)**, plus the built-in desktop Releases view (`/releases`) and static fallback (`release-page/index.html`).
+   - Displays Windows Portable `.exe` (`MOTIF-Portable-2.0.0-x64.exe`), SHA-256 verification, bilingual changelog, MCP setup config, and Waitlist signup.
 
 ---
 
@@ -82,5 +82,5 @@ Or open the **MCP Agent** tab (`5`) inside MOTIF for one-click client configs (C
 - `electron/` — Electron main process (`main.mjs`) & preload IPC bridge (`preload.cjs`)
 - `build/` — Official MOTIF desktop icons (`icon.ico`, `icon.png`)
 - `release-page/` — Standalone static Release & Windows download page (`index.html`)
-- `.github/workflows/release-windows.yml` — Automated Windows x64 NSIS + Portable build & GitHub Release publisher
+- `launcher/` & `scripts/build-win-exe.py` — Self-contained Windows x64 Portable `.exe` builder
 - `tests/` — Automated HTTP API and JSON-RPC 2.0 stdio MCP test suites
