@@ -174,6 +174,10 @@ export interface ReleaseArtifact {
   recommended: boolean;
   url: string;
   note: string;
+  size?: number;
+  sha256?: string;
+  ready?: boolean;
+  directDownload?: boolean;
 }
 
 export interface CurrentRelease {
@@ -188,6 +192,7 @@ export interface CurrentRelease {
   reactVersion: string;
   mcpProtocol: string;
   releaseUrl: string;
+  checksumsUrl?: string;
   highlights: string[];
   highlightsAr: string[];
   artifacts: ReleaseArtifact[];

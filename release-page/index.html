@@ -191,16 +191,16 @@
 
         <div class="dl-grid">
           <div class="dl-box primary">
-            <strong>Windows Installer (NSIS Setup)</strong>
-            <span class="mono">MOTIF-Setup-2.0.0-x64.exe</span>
-            <p class="sub" style="font-size:13px;">Recommended for Windows 10/11 — Start Menu shortcut, local workspace, and unpacked MCP server ready for AI agents.</p>
-            <a class="btn btn-primary" href="https://github.com/Aboshanabes33/MOTIF/releases/latest" target="_blank" rel="noreferrer">Download Installer (.exe)</a>
+            <strong>Windows Portable App (.exe)</strong>
+            <span class="mono">MOTIF-Portable-2.0.0-x64.exe · 64-bit</span>
+            <p class="sub" style="font-size:13px;">Single standalone Windows 10/11 executable with official MOTIF icon, bundled Node.js 24 LTS runtime, React Liquid Glass Studio, and built-in MCP server.</p>
+            <a id="portableDl" class="btn btn-primary" href="https://github.com/Aboshanabes33/MOTIF/releases/tag/v2.0.0" target="_blank" rel="noreferrer">Download MOTIF 2.0.0 (.exe)</a>
           </div>
           <div class="dl-box">
-            <strong>Windows Portable Executable</strong>
-            <span class="mono">MOTIF-Portable-2.0.0-x64.exe</span>
-            <p class="sub" style="font-size:13px;">Single standalone Windows x64 executable with zero installation wizard required.</p>
-            <a class="btn" href="https://github.com/Aboshanabes33/MOTIF/releases/latest" target="_blank" rel="noreferrer">Download Portable (.exe)</a>
+            <strong>Windows Electron Installer (NSIS Setup)</strong>
+            <span class="mono">MOTIF-Setup-2.0.0-x64.exe · 64-bit</span>
+            <p class="sub" style="font-size:13px;">Full Electron NSIS installer with Start Menu &amp; Desktop shortcuts (built via <code>npm run dist:win</code> or GitHub Actions Windows runner).</p>
+            <a class="btn" href="https://github.com/Aboshanabes33/MOTIF/releases/tag/v2.0.0" target="_blank" rel="noreferrer">View v2.0.0 Release</a>
           </div>
         </div>
       </section>
@@ -275,6 +275,18 @@
         }).join("");
       }
 
+      fetch("/downloads/MOTIF-Portable-2.0.0-x64.exe", { method: "HEAD" })
+        .then((r) => {
+          if (!r.ok) return;
+          const btn = document.getElementById("portableDl");
+          const size = Number(r.headers.get("content-length") || 0);
+          btn.href = "/downloads/MOTIF-Portable-2.0.0-x64.exe";
+          btn.removeAttribute("target");
+          btn.setAttribute("download", "MOTIF-Portable-2.0.0-x64.exe");
+          if (size > 0) btn.textContent = `Download MOTIF 2.0.0 (.exe · ${fmtSize(size)})`;
+        })
+        .catch(() => {});
+
       fetch("https://api.github.com/repos/Aboshanabes33/MOTIF/releases?per_page=8")
         .then((r) => r.ok ? r.json() : Promise.reject())
         .then((data) => {
@@ -285,16 +297,10 @@
           syncEl.textContent = "Offline fallback catalog";
           renderReleases([
             {
-              tag_name: "v0.1.2-lite-test",
-              name: "MOTIF 0.1.2 Lite test, Groq plus bundled FFmpeg",
-              html_url: "https://github.com/Aboshanabes33/MOTIF/releases/tag/v0.1.2-lite-test",
-              assets: [{ name: "MOTIF-0.1.2-lite-test-x64.exe", size: 149420354, browser_download_url: "https://github.com/Aboshanabes33/MOTIF/releases/download/v0.1.2-lite-test/MOTIF-0.1.2-lite-test-x64.exe" }],
-            },
-            {
-              tag_name: "v0.1.0",
-              name: "MOTIF 0.1.0, bundled Windows x64",
-              html_url: "https://github.com/Aboshanabes33/MOTIF/releases/tag/v0.1.0",
-              assets: [{ name: "MOTIF-0.1.0-bundled-x64.exe", size: 1419558058, browser_download_url: "https://github.com/Aboshanabes33/MOTIF/releases/download/v0.1.0/MOTIF-0.1.0-bundled-x64.exe" }],
+              tag_name: "v2.0.0",
+              name: "MOTIF v2.0.0 — Windows x64 (React + Liquid Glass + MCP)",
+              html_url: "https://github.com/Aboshanabes33/MOTIF/releases/tag/v2.0.0",
+              assets: [],
             },
           ]);
         });
