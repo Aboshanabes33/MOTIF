@@ -1,0 +1,393 @@
+{
+  "name": "video-edit",
+  "version": "1.1",
+  "updated": "2026-10-07",
+  "kind": "agent-stack",
+  "title": {
+    "ar": "مونتاج الفيديو — بلا برنامج مونتاج",
+    "en": "Video editing — no editing app"
+  },
+  "summary": {
+    "ar": "مونتاج فيديو عمودي 9:16 لصنّاع المحتوى بالعربي: شيل السكتات، تفريغ بتوقيت كل كلمة، كابشن عربي متزامن، موشن قرافيكس ومشاهد وصور بأسلوب المستخدم وألوانه وخطه. قص وكابشن سريع أو مونتاج كامل.",
+    "en": "Arabic talking-head video editing: silence cutting, word-timed transcripts, synced Arabic captions, motion graphics and scenes in the creator's own style, colors and font. Quick cut+caption or full edit."
+  },
+  "entrypoint": "SKILL.md",
+  "readOnly": true,
+  "places": {
+    "skill": ".",
+    "_skill_note": {
+      "ar": "مجلد المهارة للقراءة فقط — ممنوع الكتابة فيه.",
+      "en": "The skill folder is read-only — never write inside it."
+    },
+    "home": "~/Documents/video-edit",
+    "_home_note": {
+      "ar": "مجلد بيانات المستخدم: VEB_HOME يغلب. على ويندوز إذا كان المسار فيه حروف غير إنجليزية أو OneDrive أو AppData → C:\\EditStudio (نفس قاعدة _paths.py و_paths.js).",
+      "en": "User data home: VEB_HOME wins. On Windows a non-ASCII / OneDrive / AppData path falls back to C:\\EditStudio (same rule as _paths.py and _paths.js)."
+    },
+    "profile": "profile.json",
+    "voice": "voice.md",
+    "dialect": "dialect.json",
+    "mechanisms": "mechanisms.json",
+    "ledger": "LEDGER.md",
+    "sounds": "sounds/",
+    "refs": "refs/",
+    "engine": "remotion-shared/",
+    "projects": "projects/",
+    "work": "projects/<name>/"
+  },
+  "modes": {
+    "quick": {
+      "ar": "قص وكابشن بس — يشيل السكتات ويركّب الكابشن، دقائق.",
+      "en": "Cut + captions only. Removes silences and burns the captions.",
+      "writeModeFile": true,
+      "stages": ["setup", "start", "source", "cut", "transcribe", "captions", "script_review", "cutzoom", "render", "srt", "verify", "deliver", "ledger_board", "studio"]
+    },
+    "light": {
+      "ar": "قص وكابشن وزوم وأصوات خفيفة — حركة بسيطة بلا مشاهد.",
+      "en": "Cut + captions + zoom + light sound effects. No scenes.",
+      "writeModeFile": true,
+      "stages": ["setup", "start", "source", "cut", "transcribe", "captions", "script_review", "cutzoom", "sfx", "render", "master", "srt", "verify", "deliver", "ledger_board", "studio"]
+    },
+    "full": {
+      "ar": "مونتاج كامل — مشاهد ورسوم وصور وأسلوب.",
+      "en": "Full edit — scenes, graphics, images and the creator's style.",
+      "writeModeFile": false,
+      "stages": ["setup", "start", "source", "cut", "transcribe", "captions", "script_review", "cutzoom", "scenes", "sfx", "render", "master", "srt", "verify", "deliver", "ledger_board", "studio"]
+    }
+  },
+  "frames": {
+    "tall": { "size": [1080, 1920], "ar": "طولي — ريلز وتيك توك (الافتراضي)", "en": "Vertical 9:16 — reels and TikTok (default)" },
+    "wide": { "size": [1920, 1080], "ar": "عرضي — يوتيوب ولينكدإن", "en": "Wide 16:9 — YouTube and LinkedIn" },
+    "square": { "size": [1080, 1080], "ar": "مربع", "en": "Square 1:1" }
+  },
+  "aspectToFrame": { "9:16": "tall", "16:9": "wide", "1:1": "square" },
+  "styles": [
+    { "id": "simple", "doc": "styles/simple/STYLE.md", "ar": "بسيط — خلفية بألوانه وأشكال ورسوم نظيفة، أصوات مركّبة بالكود.", "en": "Simple — his background color, clean code-drawn shapes and synth SFX." },
+    { "id": "collage", "doc": "styles/collage/STYLE.md", "ar": "كولاج الورق — ورق حقيقي ودبابيس وخيط أحمر وأختام، شكل لوحة تحقيق.", "en": "Paper collage — real paper, pins, red yarn and stamps; an investigation board." }
+  ],
+  "references": [
+    { "id": "onboarding", "path": "references/onboarding.md", "ar": "أسئلة البداية — مرة وحدة لكل مستخدم.", "en": "First-run questions — once per user." },
+    { "id": "rules", "path": "references/rules.md", "ar": "القواعد الثابتة كاملة — تُقرأ قبل أول مشهد.", "en": "The full fixed rules — read before the first scene." },
+    { "id": "scenes", "path": "references/scenes.md", "ar": "تصميم المشاهد والآليات.", "en": "Scene and mechanism design." },
+    { "id": "sfx", "path": "references/sfx.md", "ar": "المؤثرات الصوتية وحدودها.", "en": "Sound effects and their limits." },
+    { "id": "generated-images", "path": "references/generated-images.md", "ar": "الصور المولّدة وبرومبتاتها.", "en": "Generated images and prompts." },
+    { "id": "light-engine", "path": "references/light-engine.md", "ar": "المحرّك الخفيف — بديل لو ريموشن ما اشتغل.", "en": "Light engine — fallback when Remotion fails." },
+    { "id": "ideas", "path": "styles/IDEAS.md", "ar": "أفكار عوالم المقطع وكلمات بحث بنترست.", "en": "Video-world ideas and Pinterest search words." }
+  ],
+  "redLines": [
+    { "ar": "مسّ صورته أو صوته — حتى «تحسيناً»: تدرّج لوني، تشبع، تباين، ضغط، معايرة. الافتراضي كسب صفر.", "en": "Never touch his image or voice — not even as an 'improvement': grade, saturation, contrast, compression, normalization. Default is zero gain." },
+    { "ar": "كسر قيود المحتوى من أسئلة البداية — تُفحص بالفريم لا بالافتراض.", "en": "Never break the content restrictions from onboarding — inspect the frame, don't assume." },
+    { "ar": "موسيقى من عندك — إلا لو طلبها أو أعطى الملف.", "en": "No music of your own — only if he asks or supplies the file." },
+    { "ar": "النشر أو الجدولة — التسليم ملف فقط.", "en": "No publishing or scheduling — delivery is a file only." },
+    { "ar": "حذف ملفاته أو الكتابة فوقها — ولا تسمّي التسليم باسم يطابق مصدره.", "en": "Never delete or overwrite his files — never name the delivery like its source." },
+    { "ar": "تجاوز «هل أنت إنسان؟» بأي موقع — ابحث عن مصدر ثاني.", "en": "Never bypass any site's 'are you human?' check — find another source." },
+    { "ar": "الكتابة داخل مجلد المهارة — للقراءة فقط.", "en": "Never write inside the skill folder — read-only." }
+  ],
+  "environment": {
+    "shell": {
+      "windows": "Git Bash (MINGW) only — not PowerShell, not WSL, not System32\\bash.exe",
+      "mac": "bash"
+    },
+    "python": {
+      "windows": "python3 is an alias written by 00_setup.sh for the editing venv — never use python or py",
+      "mac": "python3"
+    },
+    "exitCodes": {
+      "3": "gate/validator refused — the reason is the line above (disk < 25 GB, frames missing, face crop, audio/color changed)",
+      "4": "output file is open in another program (close it)",
+      "11": "a tool was just installed — close and reopen Claude, then run 00_setup.sh again (without --install)",
+      "14": "work folder is not on local NTFS",
+      "20": "running inside WSL — use Git Bash on Windows instead"
+    }
+  },
+  "stages": [
+    {
+      "id": "setup",
+      "n": 0,
+      "title": { "ar": "جهّز الجهاز", "en": "Prepare the machine" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": [],
+      "commands": ["bash scripts/00_setup.sh"],
+      "install": ["bash scripts/00_setup.sh --install"],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "يفحص الجهاز ويطبع الجاهز والناقص وحجمه. لا تنزّل شي قبل موافقته. محرّك الرسم (ريموشن ~400 ميقا) مرة وحدة: bash scripts/04b_remotion.sh <work> engine",
+        "en": "Detects the machine and prints what is ready/missing and its size. Never install without consent. Motion engine (~400 MB, once): bash scripts/04b_remotion.sh <work> engine"
+      }
+    },
+    {
+      "id": "start",
+      "n": 1,
+      "title": { "ar": "مجلد الشغل والهوية", "en": "Work folder and identity" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": { "all": ["theme.json"] },
+      "commands": ["python3 -c \"import sys,pathlib;sys.path.insert(0,'scripts');import _paths;_paths.ensure();print(pathlib.Path(_paths.data('projects')).as_posix())\""],
+      "tool": "video_edit_start",
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "video_edit_start يسوي المجلد وينسخ profile.json ← theme.json وlogo.png وstyle.json. لا هوية بعد؟ أسئلة البداية أولاً (references/onboarding.md) ثم make_theme.py.",
+        "en": "video_edit_start creates the folder and copies profile.json → theme.json plus logo.png and style.json. No identity yet? Run onboarding first, then make_theme.py."
+      }
+    },
+    {
+      "id": "source",
+      "n": 2,
+      "title": { "ar": "خذ الفيديو", "en": "Take the footage" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": { "all": ["src.mov"] },
+      "commands": ["ffprobe -v error -show_entries format=duration -of csv=p=0 \"{work}/src.mov\""],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "ملف على جهازه أولاً، أو رابط قوقل درايف. 4K أفضل للزوم، و1080p يشتغل عادي. عرضي؟ سؤال واحد: عرضي أو طولي ← theme.json frame.",
+        "en": "A local file first, or a Google Drive link. 4K is better for punch-in zoom, 1080p is fine. Wide source? One question: wide or vertical → theme.json frame."
+      }
+    },
+    {
+      "id": "cut",
+      "n": 3,
+      "title": { "ar": "خطة القص", "en": "Cut plan" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": { "all": ["cut.json"] },
+      "commands": ["python3 scripts/01_cut_plan.py \"{work}\""],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": { "ar": "قل له كم انشال: «شلت ٥٢ ثانية سكوت — الفيديو صار ٤٦ بدل ٩٨».", "en": "Tell him what was removed: '52s of silence cut — 46s instead of 98s.'" }
+    },
+    {
+      "id": "transcribe",
+      "n": 4,
+      "title": { "ar": "التفريغ بتوقيت الكلمة", "en": "Word-timed transcript" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": { "all": ["a.json"] },
+      "commands": ["python3 scripts/01b_transcribe.py \"{work}\" --lang ar"],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "ياخذ دقايق — شغّله بالخلفية وقل له الوقت المتوقع. أول مرة ينزل النموذج (~3 قيقا). a.wav للتفريغ فقط — ممنوع بالتجميع النهائي.",
+        "en": "Takes minutes — run it in the background and say the estimate. First run downloads the model (~3 GB). a.wav is for transcription only — never in the final mix."
+      }
+    },
+    {
+      "id": "captions",
+      "n": 5,
+      "title": { "ar": "التصحيح والكابشن", "en": "Corrections and captions" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": { "all": ["caps.json"], "recommended": ["fixes.json"] },
+      "commands": ["python3 scripts/02_captions.py \"{work}\""],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "التصحيح إلزامي (التفريغ يغلط بالعامية ~7٪). اكتب fixes.json أولاً: عدد كلمات كل جملة = عدد كلمات التفريغ. الكابشن كلامه بالحرف لا السكربت.",
+        "en": "Correction is mandatory (~7% dialect errors). Write fixes.json first: word count per sentence must equal the transcript's. Captions are his exact words, not the script."
+      }
+    },
+    {
+      "id": "script_review",
+      "n": 6,
+      "title": { "ar": "اعرض النص عليه", "en": "Show him the script" },
+      "modes": ["quick", "light", "full"],
+      "optional": true,
+      "artifacts": [],
+      "commands": [
+        "python3 scripts/10_script_edit.py \"{work}\" show",
+        "python3 scripts/10_script_edit.py \"{work}\" dupes",
+        "python3 scripts/10_script_edit.py \"{work}\" drop 6 8",
+        "python3 scripts/10_script_edit.py \"{work}\" undo"
+      ],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "إلزامي قبل تصميم المشاهد — الحذف بعدها يزيح كل الأوقات. لا تتخطّاها.",
+        "en": "Run it before designing scenes — dropping lines later shifts every timing. Do not skip."
+      }
+    },
+    {
+      "id": "cutzoom",
+      "n": 7,
+      "title": { "ar": "القص والزوم", "en": "Cut and zoom" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": { "all": ["cutz.mp4", "voice.wav"] },
+      "commands": [
+        "python3 scripts/03_cut_zoom.py \"{work}\"",
+        "node scripts/12_face_guard.js \"{work}\" scan"
+      ],
+      "checks": ["node scripts/12_face_guard.js \"{work}\" check"],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "voice.wav هو صوته للتسليم، بلا أي معالجة. الوجه: face_guard scan يحسب faceAnchor من وجهه. الزوم يقصّ من فوق — لو شكا الوجه: noZoom.",
+        "en": "voice.wav is his delivery audio, untouched. face_guard scan computes faceAnchor from his face. Zoom crops from the top — if the face suffers: noZoom."
+      }
+    },
+    {
+      "id": "scenes",
+      "n": 8,
+      "title": { "ar": "صمّم المشاهد", "en": "Design the scenes" },
+      "modes": ["full"],
+      "artifacts": { "all": ["Scenes.tsx", "formats.json", "stage.json"] },
+      "commands": [
+        "bash scripts/04b_remotion.sh \"{work}\" setup",
+        "bash scripts/04b_remotion.sh \"{work}\" studio",
+        "python3 scripts/18_stage_from_scenes.py \"{work}\""
+      ],
+      "checks": [
+        "python3 scripts/19_scene_audit.py \"{work}\"",
+        "node scripts/12_face_guard.js \"{work}\" check",
+        "node scripts/13_repeat_check.js \"{work}\" \"{name}\"",
+        "node scripts/16_coverage_check.js \"{work}\""
+      ],
+      "doc": "references/scenes.md",
+      "note": {
+        "ar": "أهم خطوة: اقرأ references/scenes.md ودليل أسلوبه كاملين قبل أول مشهد. مشهد كل 15 ثانية، الصيغ الأربع (FULL · CARD · SIDE · NONE)، ولا آلية مكرّرة من آخر مقطعين (LEDGER.md).",
+        "en": "The most important step: read references/scenes.md and his style guide fully before the first scene. One scene per 15s, the four formats (FULL · CARD · SIDE · NONE), no mechanism repeated from the last two videos (LEDGER.md)."
+      }
+    },
+    {
+      "id": "sfx",
+      "n": 9,
+      "title": { "ar": "المؤثرات الصوتية", "en": "Sound effects" },
+      "modes": ["light", "full"],
+      "artifacts": { "all": ["sfx.json"], "recommended": ["sfx.wav"] },
+      "commands": ["python3 scripts/05_sfx.py \"{work}\""],
+      "collageCommands": ["python3 styles/collage/mix_sfx.py \"{work}\""],
+      "checks": ["python3 scripts/05b_sfx_audit.py \"{work}\""],
+      "doc": "references/sfx.md",
+      "note": {
+        "ar": "الصوت الدلالي عند الكلمة نفسها من caps.json. الحدود: ≤ 20/دقيقة · ≥ 1.0 ث بين صوتين · ≤ 3 مرات للصوت. 05b يخرج 3 = لا ترندر.",
+        "en": "Semantic SFX land on the exact word from caps.json. Limits: ≤ 20/min · ≥ 1.0s between sounds · ≤ 3 times per sound. 05b exit 3 = do not render."
+      }
+    },
+    {
+      "id": "render",
+      "n": 10,
+      "title": { "ar": "الرندر", "en": "Render" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": { "all": ["ad-final.mp4"] },
+      "commands": [
+        "python3 scripts/22_preflight.py \"{work}\" --name {name}",
+        "bash scripts/04b_remotion.sh \"{work}\" render \"{work}/ad-final.mp4\""
+      ],
+      "checks": [
+        "bash scripts/04b_remotion.sh \"{work}\" render-test",
+        "python3 scripts/22_preflight.py \"{work}\" --name {name} --out \"{work}/ad-final.mp4\""
+      ],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "«رندر نجح» ما يعني «سليم» — 22_preflight هو الحكم. الصورة تُرندر صامتة ثم يُلصق voice.wav بلا إعادة ترميز (القاعدتان 19 و90).",
+        "en": "'Render succeeded' does not mean 'correct' — 22_preflight is the judge. Video renders silent, then voice.wav is attached without re-encoding (rules 19 and 90)."
+      }
+    },
+    {
+      "id": "master",
+      "n": 11,
+      "title": { "ar": "الصوت النهائي", "en": "Final audio" },
+      "modes": ["full", "light"],
+      "optional": true,
+      "artifacts": { "all": ["ad-master.mp4"] },
+      "commands": ["bash scripts/06b_master.sh \"{work}\" \"{work}/ad-final.mp4\" \"{work}/ad-master.mp4\""],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "بس لو طلب المعايرة أو عنده ملف صوتي بالخلفية. الافتراضي كسب صفر — المعايرة بكسب ثابت فقط، ممنوع loudnorm.",
+        "en": "Only if he asked for normalization or supplied a background audio file. Default zero gain — fixed gain only, loudnorm is forbidden."
+      }
+    },
+    {
+      "id": "srt",
+      "n": 12,
+      "title": { "ar": "ملف الترجمة", "en": "Subtitle file" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": { "any": ["*.srt", "*.txt"] },
+      "commands": ["python3 scripts/09_srt.py \"{work}\" {name}"],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": { "ar": "‎.srt ليوتيوب ولينكدإن و‎.txt لنص كابشن البوست.", "en": ".srt for YouTube/LinkedIn and .txt for the post caption." }
+    },
+    {
+      "id": "verify",
+      "n": 13,
+      "title": { "ar": "التحقق قبل التسليم", "en": "Verify before delivery" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": [],
+      "commands": [
+        "python3 scripts/22_preflight.py \"{work}\" --name {name}",
+        "python3 scripts/22_preflight.py \"{work}\" --name {name} --out \"{work}/ad-final.mp4\"",
+        "node scripts/12_face_guard.js \"{work}\" check",
+        "bash scripts/07_contact_sheet.sh \"{work}\" \"{work}/sheet.jpg\" 4.6 12.3 27.6"
+      ],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "«ما تقول سليم إلا وفاحص خرج بصفر». ورقة اللقطات تُشاء وتُعرض عليه. ويندوز: افتحها له بـstart.",
+        "en": "'Never call it clean unless a validator exited zero.' Build the contact sheet and show it to him. Windows: open it with start."
+      }
+    },
+    {
+      "id": "deliver",
+      "n": 14,
+      "title": { "ar": "التسليم", "en": "Delivery" },
+      "modes": ["quick", "light", "full"],
+      "artifacts": [],
+      "commands": [],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "أثناء المراجعة: <الاسم>-نسخة<N>.mp4 — ولا مرة باسم يطابق المصدر. بعد الاعتماد: <الاسم>.mp4 ونفس الاسم لـ.srt و.txt. اعرض: المدة وكم انشال وعدد المشاهد، واذكر إنك ما نشرت شي. لا تحذف مجلد الشغل.",
+        "en": "While reviewing: <name>-copy<N>.mp4 — never the source's name. After approval: <name>.mp4 with the same base for .srt and .txt. Report duration, removed silence and scene count, and say nothing was published. Never delete the work folder."
+      }
+    },
+    {
+      "id": "ledger_board",
+      "n": 15,
+      "title": { "ar": "السجل ولوحة الآليات", "en": "Ledger and mechanism board" },
+      "modes": ["quick", "light", "full"],
+      "optional": true,
+      "artifacts": [],
+      "commands": [
+        "python3 scripts/14_ledger.py",
+        "bash scripts/15_board.sh {name} \"{work}/ad-final.mp4\""
+      ],
+      "checks": [],
+      "doc": "references/rules.md",
+      "note": {
+        "ar": "بعد التسليم: سجّل الآليات بـmechanisms.json (المرفوض أولاً) ثم 14_ledger، ولقطة من كل آلية بـ15_board.",
+        "en": "After delivery: log mechanisms in mechanisms.json (rejected first), run 14_ledger, and shoot every mechanism with 15_board."
+      }
+    },
+    {
+      "id": "studio",
+      "n": 16,
+      "title": { "ar": "الاستوديو (لو مثبّت)", "en": "Studio handoff (if installed)" },
+      "modes": ["quick", "light", "full"],
+      "optional": true,
+      "artifacts": [],
+      "commands": [],
+      "checks": [],
+      "doc": "SKILL.md",
+      "note": {
+        "ar": "لو مهارة edit-studio موجودة: سؤال واحد بعد أول نسخة «أفتحه لك في الاستوديو ونعدّل؟». مو مثبّت؟ لا تذكر الاستوديو.",
+        "en": "If the edit-studio skill exists: one question after the first cut — 'open it in the Studio and adjust?'. Not installed? Never mention it."
+      }
+    }
+  ],
+  "checks": {
+    "preflight": {
+      "ar": "قبل الرندر: 18 جدول النوافذ · 19 فراغ/جمود/شعر · 05b المؤثرات · 13 تكرار · 16 تغطية · 23 نظرة · 24 قطع",
+      "en": "Before render: 18 stage table · 19 gaps/frozen/hair · 05b SFX · 13 repeats · 16 coverage · 23 gaze · 24 cuts",
+      "command": "python3 scripts/22_preflight.py \"{work}\" --name {name}"
+    },
+    "postflight": {
+      "ar": "بعد الرندر: 21 اللون · 25 الومضات · 20 الصوت · معدل البت ≥ ثلث المصدر",
+      "en": "After render: 21 color · 25 flashes · 20 voice · bitrate ≥ one third of the source",
+      "command": "python3 scripts/22_preflight.py \"{work}\" --name {name} --out \"{work}/ad-final.mp4\""
+    }
+  },
+  "delivery": {
+    "reviewNaming": "<name>-نسخة<N>.mp4",
+    "finalNaming": "<name>.mp4 + <name>.srt + <name>.txt",
+    "windowsIllegal": ": ? * \" < > | / \\",
+    "never": ["publish", "schedule", "overwrite the source", "delete the work folder"]
+  }
+}

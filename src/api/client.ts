@@ -6,6 +6,11 @@ import type {
   Project,
   ReleasesPayload,
   VoiceNote,
+  VideoEditStack,
+  VideoEditStatus,
+  VideoMode,
+  VideoPlan,
+  VideoRunResult,
   WorkspacePrefs,
   WorkspaceSnapshot,
 } from "../types";
@@ -105,4 +110,28 @@ export const api = {
     ),
 
   getReleases: () => requestJson<ReleasesPayload>("/api/releases"),
+
+  /* Video agent — the video-edit stack */
+  getVideoStatus: () => requestJson<VideoEditStatus>("/api/video/edit/status"),
+  getVideoStack: () => requestJson<VideoEditStack>("/api/video/edit/stack"),
+  getVideoPlan: (payload: { name: string; mode?: VideoMode; frame?: string; source?: string }) =>
+    requestJson<VideoPlan & { ok: boolean }>("/api/video/edit/plan", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  setVideoMode: (payload: { work: string; mode: VideoMode }) =>
+    requestJson<{ ok: boolean; work: string; mode: VideoMode }>("/api/video/edit/mode", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getVideoStage: (payload: { stage: string; work: string; name?: string; mode?: VideoMode }) =>
+    requestJson<{ ok: boolean; commands: string[]; checks: string[] }>("/api/video/edit/stage", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  runVideoStage: (payload: { stage: string; work: string; name?: string; mode?: VideoMode }) =>
+    requestJson<VideoRunResult>("/api/video/edit/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };

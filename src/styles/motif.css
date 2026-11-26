@@ -1549,3 +1549,122 @@ code,
     display: none;
   }
 }
+
+/* ── Video Agent (video-edit stack) ─────────────────────────────────────── */
+
+.three-col-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: start;
+}
+
+.sc-row:hover {
+  border-color: var(--card-border-hover);
+  background: rgba(159, 216, 205, 0.08);
+}
+
+.sc-row.is-active {
+  border-color: var(--accent-ring);
+  background: var(--accent-soft);
+}
+
+.stage-row {
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.stage-row.is-done {
+  border-color: rgba(159, 216, 205, 0.28);
+}
+
+.stage-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+
+.stage-head:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.stage-n {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  min-width: 22px;
+}
+
+.stage-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 14px 14px;
+  border-top: 1px solid var(--card-border);
+}
+
+.cmd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: rgba(5, 18, 19, 0.72);
+  border: 1px solid var(--card-border);
+}
+
+.cmd-row code {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.run-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(5, 18, 19, 0.5);
+  border: 1px solid var(--card-border);
+}
+
+@media (max-width: 1080px) {
+  .three-col-grid {
+    grid-template-columns: 1fr;
+  }
+}
