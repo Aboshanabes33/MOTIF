@@ -1,5 +1,5 @@
 #!/bin/bash
-# setup.sh — تثبيت «B Studio» أو تحديثه من هذه الحزمة إلى مجلد البيانات.
+# setup.sh — تثبيت «MOTIF» أو تحديثه من هذه الحزمة إلى مجلد البيانات.
 #   bash setup.sh             فحص فقط: يطبع الجاهز والناقص وحجمه (لا يغيّر شيئاً)
 #   bash setup.sh --install   يثبّت أو يحدّث (بعد موافقة المستخدم) كل شي مع بعض: أدوات مهارة المونتاج (00_setup.sh --install:
 #                             Node وffmpeg وبايثون والتفريغ وكاشف الوجه) + الاستوديو للقراءة فقط + بايثون الاستوديو + نموذج
@@ -86,7 +86,7 @@ yam_get(){   # <الملف> <بصمته>: ينزل لاسم موقت، ولو ا
   mkdir -p "$YAM" && curl -fsSL $CURL_TLS --max-time 600 -o "$YAM/$1.part" "$YAM_URL/$1" && [ "$(sha256_of "$YAM/$1.part")" = "$2" ] && mv -f "$YAM/$1.part" "$YAM/$1" && return 0
   rm -f "$YAM/$1.part"; return 1
 }
-APP_NAME="${STUDIO_APP_NAME:-B Studio}"
+APP_NAME="${STUDIO_APP_NAME:-MOTIF}"
 # بايثون التفريغ: بويندوز venv مهارة المونتاج (MPY من _common.sh)، وبالماك بايثون الجهاز اللي فيه mlx_whisper
 stt_py(){
   local c

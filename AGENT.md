@@ -2,7 +2,7 @@
 
 ## Repository
 
-B Studio is a proprietary, local-first Node.js and browser video editing application. Source code is under `src/edit-studio/studio`; do not publish or redistribute proprietary implementation details.
+MOTIF is a proprietary, local-first Node.js and browser video editing application. Source code is under `src/edit-studio/studio`; do not publish or redistribute proprietary implementation details.
 
 ## Working conventions
 

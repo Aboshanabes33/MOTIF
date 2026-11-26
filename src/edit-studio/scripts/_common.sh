@@ -1,7 +1,7 @@
-# _common.sh — مشترك بين سكربتات «B Studio» (يُقرأ بـ source، لا يُشغَّل وحده)
+# _common.sh — مشترك بين سكربتات «MOTIF» (يُقرأ بـ source، لا يُشغَّل وحده)
 #   SCRIPTS_DIR : مجلد هذه السكربتات      PKG_DIR : المجلد فوقه (مجلد المهارة، أو مجلد التثبيت app)
 #   DATA        : مجلد الاستوديو داخله (STUDIO_DATA أو $VEB/studio)   APP : النسخة المثبّتة ($DATA/app)
-STUDIO_NAME="B Studio"
+STUDIO_NAME="MOTIF"
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_DIR="$(cd "$SCRIPTS_DIR/.." && pwd)"
 # النظام: ماك، أو ويندوز من Git Bash (اللي يشتغل فيه كلود على ويندوز)

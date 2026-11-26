@@ -2044,7 +2044,7 @@ jobs:
       - name: desktop shortcut
         shell: pwsh
         run: |
-          $l = Join-Path $HOME "Desktop/B Studio.lnk"
+          $l = Join-Path $HOME "Desktop/MOTIF.lnk"
           if (!(Test-Path $l)) { throw "no shortcut on the desktop" }
           $s = (New-Object -ComObject WScript.Shell).CreateShortcut($l)
           "target: $($s.TargetPath)"; "icon: $($s.IconLocation)"
@@ -2150,7 +2150,7 @@ jobs:
           [ $rc -eq 0 ] || exit $rc
           grep -q 'البصمة (SHA-256) مطابقة' "$HOME/update.txt"
           grep -q '↺ edit-studio' "$HOME/update.txt"
-          tail -1 "$HOME/update.txt" | grep -q "^✅ تحدّث B Studio إلى $WANT" || { echo "the last line is not for the person"; exit 1; }
+          tail -1 "$HOME/update.txt" | grep -q "^✅ تحدّث MOTIF إلى $WANT" || { echo "the last line is not for the person"; exit 1; }
           grep -q "\"version\": \"$WANT\"" "$HOME/Documents/video-edit/studio/app/manifest.json" || { echo "update.sh did not install the studio"; exit 1; }
           # the same release with a changed archive (a copy here): nothing runs, nothing changes
           L="$HOME/rel-bad"; F="edit-studio-$WANT.tar.gz"; mkdir -p "$L/latest/download" "$L/download/v$WANT"
@@ -3120,7 +3120,7 @@ jobs:
           let browser = null;
           const fail = async (why) => { console.error('FAILED:', why); if (browser) await browser.close().catch(() => {}); process.exit(1); };
           async function until(fn, ms, what) { const t0 = Date.now(); for (;; await sleep(500)) { const v = await fn(); if (v) return v; if (Date.now() - t0 > ms) throw new Error(`${what}: not in ${Math.round(ms / 1000)} s`); } }
-          // the chat's tools, as the B Studio plugin starts them (studio-mcp.mjs --chat), spoken to as Claude Code does
+          // the chat's tools, as the MOTIF plugin starts them (studio-mcp.mjs --chat), spoken to as Claude Code does
           function chat(folder) {
             const c = spawn(process.execPath, [process.env.MCP, '--chat', '--url', url, '--project', folder], { env: { ...process.env, STUDIO_DIR: '', STUDIO_BASE: '' }, stdio: ['pipe', 'pipe', 'pipe'] });
             let buf = '', id = 0, err = '';

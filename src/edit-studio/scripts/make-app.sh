@@ -1,10 +1,10 @@
 #!/bin/bash
-# make-app.sh — يصنع تطبيق «B Studio» على سطح المكتب: ضغطة وحدة تشغّل الاستوديو وتفتحه.
+# make-app.sh — يصنع تطبيق «MOTIF» على سطح المكتب: ضغطة وحدة تشغّل الاستوديو وتفتحه.
 #   bash make-app.sh [مجلد]     الافتراضي سطح المكتب. التطبيق يشغّل <البيانات>/studio/app/scripts/start.sh
 . "$(dirname "$0")/_common.sh"
 device_ok || { echo "$MSG_DEVICE"; exit 20; }
 installed || { echo "$MSG_NOT_INSTALLED"; exit 12; }
-NAME="${STUDIO_APP_NAME:-B Studio}"
+NAME="${STUDIO_APP_NAME:-MOTIF}"
 DEST_DIR="${1:-$(desktop_dir)}"
 DEST="$DEST_DIR/$NAME.app"
 if [ "$OS" = win ]; then
@@ -55,7 +55,7 @@ if [ "$OS" = win ]; then
       $s = (New-Object -ComObject Shell.Application).NameSpace([IO.Path]::GetDirectoryName($env:LNK)).ParseName([IO.Path]::GetFileName($env:LNK)).GetLink
       $s.Path = $env:TGT; $s.ShowCommand = [int]$env:STYLE
       if ($env:JS) { $s.Arguments = "//B //NoLogo `"$env:JS`"" } else { $s.Arguments = $env:ARGS }
-      $s.WorkingDirectory = $env:USERPROFILE; $s.Description = "B Studio"
+      $s.WorkingDirectory = $env:USERPROFILE; $s.Description = "MOTIF"
       if (Test-Path -LiteralPath $env:ICO) { $s.SetIconLocation($env:ICO, 0) }; $s.Save()
     } catch { Remove-Item -LiteralPath $env:LNK -ErrorAction SilentlyContinue; exit 1 }' >/dev/null 2>&1 && [ -e "$DEST_DIR/$NAME.lnk" ]; then
     echo "التطبيق جاهز: $(showpath "$DEST_DIR")/$NAME.lnk"

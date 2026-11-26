@@ -1,5 +1,5 @@
 #!/bin/bash
-# doctor.sh — تشخيص «B Studio»: يفحص كل شي ويطبع تقريراً واحداً بالعربي.
+# doctor.sh — تشخيص «MOTIF»: يفحص كل شي ويطبع تقريراً واحداً بالعربي.
 #   bash doctor.sh     الخروج = عدد المشكلات (0 = كل شي جاهز). التنبيهات (⚠) لا تُحسب مشكلات.
 #   bash doctor.sh --deep   ويندوز: ومعه تفريغ تجريبي على كرت الشاشة
 . "$(dirname "$0")/_common.sh"
@@ -290,7 +290,7 @@ if installed && [ -n "$NODE" ]; then
   if [ "$OS" = win ]; then
     # ويندوز: الاختصار اللي يكتبه make-app.sh (سطح المكتب الحقيقي) لازم يفتح هذي النسخة: اختصار بنفس الاسم من تثبيت ثاني
     #   (مجلد بيانات ثاني) كان ينحسب موجود. وسايطه فيها مجلد البيانات: ...\launch-studio.js او "C:/..." او '/c/...' (نسخ اقدم)
-    DLNK="$(desktop_dir)/${STUDIO_APP_NAME:-B Studio}.lnk"
+    DLNK="$(desktop_dir)/${STUDIO_APP_NAME:-MOTIF}.lnk"
     if [ ! -e "$DLNK" ]; then warn "تطبيق سطح المكتب غير موجود"
     else
       LA="$(LNK="$(cygpath -w "$DLNK")" "${SYSTEMROOT:+$SYSTEMROOT/System32/WindowsPowerShell/v1.0/}powershell.exe" -NoProfile -NonInteractive -Command "[Console]::OutputEncoding=[Text.UTF8Encoding]::new(\$false); try { (New-Object -ComObject Shell.Application).NameSpace([IO.Path]::GetDirectoryName(\$env:LNK)).ParseName([IO.Path]::GetFileName(\$env:LNK)).GetLink.Arguments } catch {}" </dev/null 2>/dev/null | tr -d '\r' | tr '\\A-Z' '/a-z')"
@@ -303,7 +303,7 @@ if installed && [ -n "$NODE" ]; then
       esac
     fi
   else
-  [ -e "$(desktop_dir)/${STUDIO_APP_NAME:-B Studio}.$DESK_EXT" ] && ok "تطبيق سطح المكتب موجود" || warn "تطبيق سطح المكتب غير موجود"
+  [ -e "$(desktop_dir)/${STUDIO_APP_NAME:-MOTIF}.$DESK_EXT" ] && ok "تطبيق سطح المكتب موجود" || warn "تطبيق سطح المكتب غير موجود"
   fi
 elif installed; then
   warn "الاستوديو مثبّت، وفحص ملفاته يحتاج Node أولاً"
@@ -313,7 +313,7 @@ fi
 
 # مهارة المونتاج
 if [ -f "$HOME/.claude/skills/video-edit/SKILL.md" ]; then ok "مهارة المونتاج: ~/.claude/skills/video-edit"
-else warn "مهارة المونتاج ليست في ~/.claude/skills (تنركّب من ملف «B Studio»: الخطوة 0ب)"; fi
+else warn "مهارة المونتاج ليست في ~/.claude/skills (تنركّب من ملف «MOTIF»: الخطوة 0ب)"; fi
 
 # العدد بالعربي: nar <العدد> <واحد> <اثنان> <من 3 إلى 10> <11 فأكثر>
 nar(){ if [ "$1" -eq 1 ]; then echo "$2"; elif [ "$1" -eq 2 ]; then echo "$3"; elif [ "$1" -le 10 ]; then echo "$1 $4"; else echo "$1 $5"; fi; }

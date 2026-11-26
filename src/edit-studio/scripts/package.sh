@@ -1,8 +1,8 @@
 #!/bin/bash
-# package.sh — مجلد حزمة «B Studio» (اللي فيه «ملفات لكلود/install.sh») من الملف اللي يسمّيه المستخدم.
+# package.sh — مجلد حزمة «MOTIF» (اللي فيه «ملفات لكلود/install.sh») من الملف اللي يسمّيه المستخدم.
 #   bash package.sh "<الملف>"   ← المسار والخروج 0 · مو حزمة أو مو موجود ← «none» والخروج 14
 #   bash package.sh "<الملف>" --installer   ← مسار install.sh نفسه بدل المجلد (اسم «ملفات لكلود» ممكن يتخربط لما ينفك على ويندوز)
-#   bash package.sh --list   ← ملفات «B Studio» في التنزيلات وسطح المكتب، الأحدث أول، سطر لكل واحد: <المسار><تاب><تاريخه>
+#   bash package.sh --list   ← ملفات «MOTIF» في التنزيلات وسطح المكتب، الأحدث أول، سطر لكل واحد: <المسار><تاب><تاريخه>
 #                              (ما فيه شي ← «none» والخروج 14). كلود يعرضها على المستخدم ويسأله أي واحد.
 #   bash package.sh          ← ما ياخذ أي ملف من نفسه (مراجعة 1.0.19، S9: كان يركّب أحدث ملف بالتنزيلات، أياً كان): الخروج 2
 #   مجلد مفكوك يستخدمه كما هو، وملف zip يفكّه في مجلد مؤقت.
@@ -12,7 +12,7 @@ set -u
 INST=0; LIST=0; TARGET=""
 for a in "$@"; do case "$a" in --installer) INST=1 ;; --list) LIST=1 ;; *) [ -z "$TARGET" ] && TARGET="$a" ;; esac; done
 if [ $LIST -eq 0 ] && [ -z "$TARGET" ]; then
-  echo "سمّ الملف: bash \"$0\" \"<ملف B Studio>\". لعرض الملفات اللي بالتنزيلات وسطح المكتب: bash \"$0\" --list"
+  echo "سمّ الملف: bash \"$0\" \"<ملف MOTIF>\". لعرض الملفات اللي بالتنزيلات وسطح المكتب: bash \"$0\" --list"
   exit 2
 fi
 WIN=0; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WIN=1 ;; esac
@@ -84,7 +84,7 @@ N=0
 # [audit Astra 1.0.23, item 11] نجمع ملفات المجلدين قبل ترتيبها بالأحدث.
 CANDIDATES=()
 for d in "${DIRS[@]}"; do
-  for f in "$d"/*"B Studio"* "$d"/*"استوديو المونتاج"*; do
+  for f in "$d"/*"MOTIF"* "$d"/*"B Studio"* "$d"/*"استوديو المونتاج"*; do
     [ -d "$f" ] || { [ -f "$f" ] && [[ "$f" == *.zip ]]; } || continue
     CANDIDATES+=("$f")
   done

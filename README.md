@@ -1,4 +1,4 @@
-# B Studio
+# MOTIF
 
 مهارة مونتاج لكلود، مع استوديو تعدّل فيه مقطعك بيدك: الكابشن، الصور، الصوت، الألوان، وشكل الشاشة. وفيه «المساعد»: محادثة داخل الاستوديو بحساب Claude أو ChatGPT حقك (Codex)، تكتب له أو تحط ملاحظة بـM ويعدّل قدامك.
 
@@ -7,7 +7,7 @@
 ## التركيب
 افتح كلود على قسم Code، أو افتح Codex، واكتب له:
 
-> ركّب B Studio من https://github.com/bassam-pt95/edit-studio
+> ركّب MOTIF من https://github.com/bassam-pt95/edit-studio
 
 وهو يكمّل الباقي، ويقول لك لو احتاج منك شي. عندك نسخة قديمة؟ نفس الجملة: الجديدة تتركّب، والقديمة تروح لسلة المهملات، ومشاريعك ما تنلمس.
 
@@ -23,7 +23,7 @@
 - `ملفات لكلود/edit-studio`: مهارة الاستوديو.
 - `ملفات لكلود/video-edit`: مهارة المونتاج.
 - `ملفات لكلود/install.sh`: ملف التركيب.
-- `دليل B Studio.pdf`: الدليل.
+- `دليل B Studio.pdf`: الدليل المرفق (اسمه القديم).
 
 ## الرخصة
 [الرخصة](LICENSE.md) باختصار:
@@ -32,9 +32,9 @@
 - عندك اقتراح؟ اكتبه في Issues. ومبرمج وتبي تساعد؟ تواصل مع صاحب الاستوديو، والشغل بدعوة منه.
 
 ## English
-**B Studio** is a video-editing skill for Claude with a small studio you run on your own machine: captions, pictures, sound, colour and framing on a timeline, plus an assistant inside the studio that edits with you through your own Claude or ChatGPT (Codex) account. The interface is Arabic or English. It runs on Apple-silicon Macs and on Windows from Git Bash.
+**MOTIF** is a video-editing skill for Claude with a small studio you run on your own machine: captions, pictures, sound, colour and framing on a timeline, plus an assistant inside the studio that edits with you through your own Claude or ChatGPT (Codex) account. The interface is Arabic or English. It runs on Apple-silicon Macs and on Windows from Git Bash.
 
-- **Install:** open Claude on the Code tab, or open Codex, and write: *Install B Studio from https://github.com/bassam-pt95/edit-studio*. Claude does the rest.
+- **Install:** open Claude on the Code tab, or open Codex, and write: *Install MOTIF from https://github.com/bassam-pt95/edit-studio*. Claude does the rest.
 - **Update:** write *Update the studio*. Your projects are not touched, and an update waits for a running export or build instead of stopping it.
 - **Releases:** every release carries a `SHA256SUMS` file; the install line below and the update check the archive against it before running anything.
 - **Ideas and problems:** [Issues](https://github.com/bassam-pt95/edit-studio/issues).

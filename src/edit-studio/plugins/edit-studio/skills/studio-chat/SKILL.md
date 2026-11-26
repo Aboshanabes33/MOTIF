@@ -1,6 +1,6 @@
 ---
 name: studio-chat
-description: How a Claude chat edits the user's video through B Studio (once called «استوديو المونتاج» or Edit Studio): every change goes through the studio's own tools (project_summary first, then apply, draw, redraw, edit_graphic, openings, behind-the-person), lands live on the open timeline as one undo step, and the chat never writes project files or bakes the user's face into a graphic. Use when the user asks to edit, caption, cut, add a graphic, picture, sound, opening or move to the clip open in the studio, or says "افتح الاستوديو" / "عدّل في الاستوديو".
+description: How a Claude chat edits the user's video through MOTIF (once called «استوديو المونتاج» or Edit Studio): every change goes through the studio's own tools (project_summary first, then apply, draw, redraw, edit_graphic, openings, behind-the-person), lands live on the open timeline as one undo step, and the chat never writes project files or bakes the user's face into a graphic. Use when the user asks to edit, caption, cut, add a graphic, picture, sound, opening or move to the clip open in the studio, or says "افتح الاستوديو" / "عدّل في الاستوديو".
 ---
 
 # Editing a clip through the studio from a chat
