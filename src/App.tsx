@@ -334,7 +334,7 @@ export function App() {
       <TitleBar
         lang={lang}
         onToggleLang={toggleLang}
-        mcpToolCount={mcpStatus?.tools.length ?? 20}
+        mcpToolCount={mcpStatus?.tools.length ?? 22}
         connected={connected}
         standaloneRelease={standaloneRelease}
         onClickWordmark={() => {

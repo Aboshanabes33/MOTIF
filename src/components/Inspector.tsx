@@ -419,8 +419,8 @@ export function Inspector({
               {activeRender
                 ? activeRender.name
                 : lang === "ar"
-                  ? "الاستوديو جاهز للعمل"
-                  : "Studio Ready"}
+                  ? "MOTIF جاهز للعمل"
+                  : "MOTIF Ready"}
             </h2>
             <p className="inspector-body" style={{ marginTop: 8 }}>
               {activeRender

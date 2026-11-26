@@ -144,6 +144,39 @@ export interface McpPromptDef {
   arguments?: Array<{ name: string; description: string; required?: boolean }>;
 }
 
+export interface McpClientTarget {
+  id: string;
+  label: string;
+  kind: "json" | "toml";
+  configPath: string;
+  key: string;
+  installed: boolean;
+  configured: boolean;
+  upToDate: boolean;
+}
+
+export interface McpVerifyResult {
+  ok: boolean;
+  serverInfo?: { name: string };
+  toolCount?: number;
+  hasStack?: boolean;
+  elapsedMs?: number;
+  error?: string;
+}
+
+export interface McpInstallResult {
+  ok: boolean;
+  client: string;
+  label: string;
+  configPath: string;
+  backup: string | null;
+  alreadyConnected?: boolean;
+  removed?: boolean;
+  restartRequired?: boolean;
+  verify?: McpVerifyResult;
+  clients: McpClientTarget[];
+}
+
 export interface McpStatusPayload {
   server: { name: string; version: string };
   protocolVersion: string;
@@ -162,6 +195,7 @@ export interface McpStatusPayload {
     cursor: Record<string, unknown>;
     codexToml: string;
   };
+  clients?: McpClientTarget[];
 }
 
 export interface ReleaseArtifact {

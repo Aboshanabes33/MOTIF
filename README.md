@@ -15,17 +15,18 @@
    - Full **Arabic (RTL)** and **English (LTR)** support with responsive breakpoints (`1080px`, `900px`, `640px`).
 
 2. **Video Agent — the `video-edit` stack (`video-edit/`, `server/video-agent.mjs`, `src/views/VideoAgentView.tsx`)**
-   - The local agent runs on one declared stack: **`video-edit/SKILL.md` is the instruction set** and **`video-edit/stack.json` is the machine-readable manifest** (modes, 17 stages, commands, validators, red lines, data home).
+   - The local agent runs on one declared stack: **`video-edit/SKILL.md` is the instruction set** and **`video-edit/stack.json` is the machine-readable manifest** (modes, 17 stages, commands, validators, red lines, data home). The same stack is served *inside* MCP, so any external agent reads it instead of guessing.
    - Pipeline: silence cut (`01_cut_plan`) → word-timed transcript (`01b_transcribe`) → Arabic captions (`02_captions`) → cut+zoom (`03_cut_zoom`) → scenes (`Scenes.tsx` + Remotion) → SFX → render → verify (`22_preflight`) → SRT.
    - Three depths (`quick` · `light` · `full`), published as `mode.json` in the clip folder; frames `tall` 9:16 / `wide` 16:9 / `square`.
    - Data home follows the skill rule: `VEB_HOME` → `~/Documents/video-edit` (`C:\EditStudio` on risky Windows paths); identity in `profile.json`, history in `mechanisms.json`/`LEDGER.md`.
-   - Exposed over MCP (`video_edit_status`, `video_edit_plan`, `video_edit_stage`, `video_edit_run`, `motif://video/stack`, `motif://video/projects`, prompt `video_agent`) and in the app as the **Video Agent** view (`5`).
+   - Exposed over MCP (`video_stack`, `video_stack_doc`, `video_edit_status`, `video_edit_plan`, `video_edit_stage`, `video_edit_run`, `motif://video/{stack,skill,bundle,projects,docs/*}`, prompts `video_agent` + `video_stack_brief`) and in the app as the **Video Agent** view (`5`).
 
 3. **MCP Server for AI Agents (`mcp/motif-mcp.mjs`)**
    - Standard JSON-RPC 2.0 stdio MCP server (`protocolVersion: 2025-03-26`).
-   - **20 Tools**: `motif_status`, `list_brands`, `get_brand`, `get_brand_guidelines`, `create_brand`, `update_brand`, `delete_brand`, `list_projects`, `get_project`, `create_project`, `update_project`, `list_footage`, `add_footage`, `list_voice_notes`, `create_voice_note`, `search_workspace`, `video_edit_status`, `video_edit_plan`, `video_edit_stage`, `video_edit_run`.
-   - **8 Resources**: `motif://workspace/summary`, `motif://brands`, `motif://brands/{id}`, `motif://projects`, `motif://footage`, `motif://voice-notes`, `motif://video/stack`, `motif://video/projects`.
-   - **3 Prompts**: `brand_brief`, `workspace_review`, `video_agent`.
+   - **22 Tools**: `motif_status`, `list_brands`, `get_brand`, `get_brand_guidelines`, `create_brand`, `update_brand`, `delete_brand`, `list_projects`, `get_project`, `create_project`, `update_project`, `list_footage`, `add_footage`, `list_voice_notes`, `create_voice_note`, `search_workspace`, `video_stack`, `video_stack_doc`, `video_edit_status`, `video_edit_plan`, `video_edit_stage`, `video_edit_run`.
+   - **18 base Resources** (+ one per brand): `motif://workspace/summary`, `motif://brands`, `motif://brands/{id}`, `motif://projects`, `motif://footage`, `motif://voice-notes`, `motif://video/stack`, `motif://video/projects`, `motif://video/skill`, `motif://video/bundle`, `motif://video/docs/{onboarding,rules,scenes,sfx,generated-images,light-engine,ideas,simple,collage}`.
+   - **4 Prompts**: `brand_brief`, `workspace_review`, `video_agent`, `video_stack_brief`.
+   - **One-click "Add MCP"**: the MCP view writes MOTIF into Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, or Codex — backup kept, other servers untouched (`POST /api/mcp/install`, `/api/mcp/uninstall`).
    - Reads/writes the canonical `prefs.json` (`brands` array) and notifies the running MOTIF app live via SSE.
 
 4. **Electron Windows Packaging (`electron/`, `electron-builder.yml`)**
@@ -85,6 +86,7 @@ Or open the **MCP Agent** tab (`5`) inside MOTIF for one-click client configs (C
 
 - `video-edit/` — the agent's video-editing stack (`SKILL.md` + `stack.json` + `references/` + `scripts/` + `styles/` + Remotion template)
 - `server/video-agent.mjs` — stack reader, editing-home resolver, clip plans, gated stage runner
+- `server/mcp-install.mjs` — one-click "Add MCP": writes MOTIF into Claude Desktop / Claude Code / Cursor / Windsurf / VS Code / Codex configs (backup kept)
 - `src/` — React 19 + TypeScript application (`components/`, `views/`, `styles/`, `api/`, `i18n.ts`)
 - `server/` — Shared atomic `prefs.json` & workspace store (`store.mjs`), HTTP/SSE server (`motif-server.mjs`), release sync (`releases.mjs`)
 - `mcp/` — Model Context Protocol stdio server (`motif-mcp.mjs`) & tool/resource registry (`tools.mjs`)

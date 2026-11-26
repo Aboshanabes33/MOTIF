@@ -1668,3 +1668,20 @@ code,
     grid-template-columns: 1fr;
   }
 }
+
+.spin {
+  animation: motif-spin 0.9s linear infinite;
+}
+
+@keyframes motif-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.btn--sm {
+  height: 30px;
+  padding: 0 11px;
+  font-size: 12.5px;
+  border-radius: 9px;
+}

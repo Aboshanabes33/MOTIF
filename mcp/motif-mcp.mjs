@@ -93,8 +93,19 @@ async function handleMessage(msg) {
               prompts: { listChanged: false },
             },
             serverInfo: MCP_SERVER_INFO,
-            instructions:
-              "You are connected to MOTIF Studio. Call list_brands or get_brand_guidelines to inspect saved Brand identities (colors, voice, audience, channels, notes), list_projects to see active video projects, and list_voice_notes to read creative direction.",
+            instructions: [
+              "You are connected to MOTIF (Brand workspace + the video-edit agent stack).",
+              "",
+              "Brands & workspace: list_brands, get_brand_guidelines, list_projects, list_voice_notes, search_workspace.",
+              "",
+              "The video stack: MOTIF's local video agent runs on exactly one stack, published here. Read it before editing any clip —",
+              "  • prompt video_agent → the stack brief (pipeline, clip state, brand, red lines)",
+              "  • resource motif://video/stack → modes (quick/light/full), 17 stages with commands + validators, frames, styles, red lines",
+              "  • resource motif://video/skill → the full SKILL.md instruction set the agent executes",
+              "  • resource motif://video/projects → clip folders with their real on-disk artifacts",
+              "  • tools video_edit_status / video_edit_plan / video_edit_stage / video_edit_run → readiness, ordered plan, one stage's commands+doc, and gated execution.",
+              "Never render past a validator exit 3, and never write inside the skill folder.",
+            ].join("\n"),
           });
         }
         return;

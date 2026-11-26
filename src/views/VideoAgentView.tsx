@@ -566,6 +566,10 @@ export function VideoAgentView({ lang, onToast }: VideoAgentViewProps) {
             {stackMeta?.stages.length || 0} stages · {(stackMeta?.styles || []).length} styles ·{" "}
             {Object.keys(stackMeta?.modes || {}).length} modes
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--ink-muted)" }}>
+            <BookOpen size={12} />
+            {translate(lang, "agent.overMcp")}
+          </div>
         </div>
       </div>
     </div>
