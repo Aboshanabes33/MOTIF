@@ -206,7 +206,7 @@ function makeStarterData() {
   const brands = [
     {
       id: "b_qafila01",
-      name: "Qafila Studio · قافلة",
+      name: "Qafila · قافلة",
       tagline: "Cinematic Arabic tech & storytelling",
       logo: "",
       colors: ["#2f7268", "#9fd8cd", "#f2b880", "#0c2729"],
@@ -323,7 +323,7 @@ function makeStarterData() {
   const footage = [
     {
       id: "ft_a01",
-      name: "A-Roll_Studio_Desk_4K_Log.mov",
+      name: "A-Roll_Desk_4K_Log.mov",
       kind: "video",
       durationSec: 148,
       resolution: "3840×2160",
@@ -427,7 +427,7 @@ function makeStarterData() {
       id: "act_03",
       source: "user",
       type: "voice_note",
-      title: "Recorded voice note for Qafila Studio",
+      title: "Recorded voice note for Qafila",
       detail: "Opening hook timing — MOTIF 2.0 (0:18)",
       timestamp: iso(42),
     },
@@ -501,7 +501,7 @@ export function createMotifStore(opts = {}) {
           fps: Array.isArray(pj.fps) ? pj.fps[0] : 30,
           accentFrom: "#21574f",
           accentTo: "#0c2729",
-          summary: "Imported Edit Studio project from local projects folder.",
+          summary: "Imported editing project from the local projects folder.",
           notes: "",
           diskBacked: true,
           createdAt: stat.birthtime.toISOString(),

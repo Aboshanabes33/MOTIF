@@ -54,7 +54,7 @@ export const CURRENT_RELEASE = {
       kind: "portable",
       recommended: true,
       url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
-      note: "Standalone single-file Windows 10/11 x64 executable with bundled Node.js 24 LTS, MOTIF icon, React Studio, and MCP server — double-click and run immediately.",
+      note: "Standalone single-file Windows 10/11 x64 executable with bundled Node.js 24 LTS, MOTIF icon, React UI, and MCP server — double-click and run immediately.",
     },
     {
       id: "win-nsis",
