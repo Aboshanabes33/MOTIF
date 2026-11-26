@@ -1,5 +1,6 @@
+import {TranscriptionSettings} from './transcription-settings.js';
 import {importAgentVideo} from './agent-import.js';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain,safeStorage } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -19,8 +20,12 @@ app.enableSandbox();
 void app.whenReady().then(async () => {
 if(process.platform==='win32')app.setAppUserModelId('local.motif.desktop');
 const media=new MediaWorkspace();
+const transcription=new TranscriptionSettings(path.join(app.getPath('userData'),'motif-secrets'),{available:()=>safeStorage.isEncryptionAvailable()&&(process.platform!=='linux'||!['basic_text','unknown'].includes(safeStorage.getSelectedStorageBackend())),encrypt:s=>safeStorage.encryptString(s),decrypt:b=>safeStorage.decryptString(b)});
 let approvingJob=false;
-const runMedia=async(sourceId:string,kind:'render'|'transcribe'|'captions')=>{if(approvingJob)throw new Error('A job approval is already open');approvingJob=true;try{const approval=await dialog.showMessageBox(window,{type:'question',buttons:['Cancel','Run local job'],defaultId:0,cancelId:0,message:`Run ${kind} on this imported source?`,detail:'Only the selected project source ID is allowed. Outputs stay inside .motif/outputs. No provider request. Render is capped at 60 seconds of video. Transcription uses cached large-v3-q5_0 via whisper.cpp in bounded chunks; no download. Captions use the uncorrected transcript.'});if(approval.response!==1)throw new Error('Job not approved');return media.run(sourceId,kind,{ffmpeg:await findMediaExecutable('ffmpeg'),whisper:await findMediaExecutable('whisper-cli'),hyperframes:await findMediaExecutable('hyperframes')});}finally{approvingJob=false;}};
+const runMedia=async(sourceId:string,kind:'render'|'transcribe'|'captions')=>{
+ if(approvingJob)throw Error('A job approval is already open');approvingJob=true;
+ try{const settings=await transcription.status();const groq=kind==='transcribe'&&settings.provider==='groq';const approval=await dialog.showMessageBox(window,{type:'question',buttons:['Cancel',groq?'Upload audio to Groq':'Run local job'],defaultId:0,cancelId:0,message:`Run ${kind} on this imported source?`,detail:groq?'First 60 seconds only. Audio leaves this device and is sent directly to Groq using whisper-large-v3 and your API key. Free-tier quotas/rate limits apply; your Groq account controls billing. No automatic retries or paid-plan upgrade. Transcript stays in the project.':'Local processing only. Render/transcription capped at 60 seconds. Local transcription needs cached large-v3-q5_0 and whisper.cpp. Captions use the uncorrected transcript.'});if(approval.response!==1)throw Error('Job not approved');return await media.run(sourceId,kind,{ffmpeg:await findMediaExecutable('ffmpeg'),whisper:groq?undefined:await findMediaExecutable('whisper-cli'),hyperframes:await findMediaExecutable('hyperframes')},groq?{key:await transcription.key()}:undefined);}finally{approvingJob=false;}
+};
 let approvingImport=false;
 const service = await startService({state:()=>media.state(),run:runMedia,cancel:()=>media.cancel(),importVideo:async file=>{if(approvingImport)throw Error('Import approval already open');const project=media.state().project;if(!project)throw Error('Choose a project folder in MOTIF once before agent imports');approvingImport=true;try{return await importAgentVideo(file,async(file,bytes)=>{const answer=await dialog.showMessageBox(window,{type:'question',buttons:['Cancel','Copy video'],defaultId:0,cancelId:0,message:'Allow your agent to import this video?',detail:`${file}\n${bytes} bytes\nProject: ${project}\nA copy goes into the selected project. Original stays unchanged.`});return answer.response===1;},file=>{if(media.state().project!==project)throw Error('Project changed during approval; retry import');return media.importSource(file);});}finally{approvingImport=false;}}});
 const brands=new BrandStore(path.join(app.getPath('userData'),'motif-data'));
@@ -39,7 +44,10 @@ let pairing = false;
 let installing = false;
 ipcMain.handle('motif:request', async (event, raw: unknown) => {
   if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== pageURL) throw new Error('Untrusted sender');
-  const request = Request.parse(raw);
+  let request:Request;try{request=Request.parse(raw);}catch{throw Error('Invalid app request');}
+  if(request.kind==='transcription-settings')return Reply.parse({kind:'transcription-settings',settings:await transcription.status()});
+  if(request.kind==='transcription-save')return Reply.parse({kind:'transcription-settings',settings:await transcription.save(request.provider,request.key)});
+  if(request.kind==='transcription-key-remove')return Reply.parse({kind:'transcription-settings',settings:await transcription.remove()});
   if(request.kind==='media-state')return Reply.parse({kind:'media',state:media.state()});
   if(request.kind==='project-select'){const answer=await dialog.showOpenDialog(window,{title:'Choose project folder. MOTIF will create .motif storage inside it.',properties:['openDirectory','createDirectory']});if(answer.canceled)throw new Error('Cancelled');return Reply.parse({kind:'media',state:await media.select(answer.filePaths[0])});}
   if(request.kind==='source-import'){const answer=await dialog.showOpenDialog(window,{title:'Copy a source video into project storage (up to 2 GiB)',properties:['openFile'],filters:[{name:'Video',extensions:['mp4','mov','mkv','webm']}]});if(answer.canceled)throw new Error('Cancelled');return Reply.parse({kind:'media',state:await media.importSource(answer.filePaths[0])});}
@@ -54,7 +62,7 @@ ipcMain.handle('motif:request', async (event, raw: unknown) => {
   if (request.kind === 'install') {
     if(installing) throw new Error('Setup already active'); installing=true;
     try {
-    const approval=await dialog.showMessageBox(window,{type:'question',buttons:['Cancel','Add MCP'],defaultId:0,cancelId:0,message:`Add MOTIF to ${request.agent}?`,detail:'Close the agent before continuing. This adds a local project connector with native approval for media jobs, preserves other settings and saves a backup. Restart the agent afterward. It does not connect AI models.'});
+    const approval=await dialog.showMessageBox(window,{type:'question',buttons:['Cancel','Add MCP'],defaultId:0,cancelId:0,message:`Add MOTIF to ${request.agent}?`,detail:'Close the agent before continuing. This adds a local project connector with native approval for media jobs (Groq transcription uploads audio), preserves other settings and saves a backup. Restart the agent afterward. It does not connect AI models.'});
     if(approval.response!==1) throw new Error('Setup cancelled');
     const connection=path.join(app.getPath('userData'),'motif-session.json');
     const credential=service.approveClient('desktop-registration');
@@ -117,6 +125,10 @@ if (process.env.MOTIF_SMOKE === '1') {
   await new Promise(resolve=>setTimeout(resolve,350));
   const colored=(await brands.list())[0];if(!colored.colors.includes('#2563eb')||!colored.colors.includes('#ffffff')||!colored.colors.includes('#21574f'))throw Error('Color picker did not preserve/save swatches');
   console.log('COLOR_PICKER_SMOKE',JSON.stringify({saved:true,colors:colored.colors}));
+  await window.webContents.executeJavaScript("[...document.querySelectorAll('button')].find(b=>b.textContent==='Transcription settings').click()");
+  await new Promise(resolve=>setTimeout(resolve,200));
+  await writeFile('/tmp/motif-groq-settings.png',(await window.webContents.capturePage()).toPNG());
+  await window.webContents.executeJavaScript("[...document.querySelectorAll('.transcription-panel button')].find(b=>b.textContent==='Close').click()");
 
   const project=mkdtempSync(path.join(os.tmpdir(),'motif-media-ui-'));const source=path.join(project,'verification.mp4');execFileSync('/usr/bin/ffmpeg',['-v','error','-f','lavfi','-i','color=c=teal:s=160x120:d=0.5','-c:v','libx264','-threads','1',source]);await media.select(project);const imported=await media.importSource(source);await media.run(imported.sources[0].id,'render',{ffmpeg:'/usr/bin/ffmpeg'});
   await window.webContents.executeJavaScript("document.querySelectorAll('.sidebar nav button')[0].click()");await new Promise(resolve=>setTimeout(resolve,2200));await writeFile('/tmp/motif-media-real.png',(await window.webContents.capturePage()).toPNG());
