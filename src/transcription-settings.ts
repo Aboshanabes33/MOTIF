@@ -1,13 +1,13 @@
-import {readFile,writeFile,rename,mkdir,unlink,lstat} from 'node:fs/promises';import path from 'node:path';import {randomUUID} from 'node:crypto';
+import {readFile,writeFile,rename,mkdir,unlink,lstat,open} from 'node:fs/promises';import {constants} from 'node:fs';import path from 'node:path';import {randomUUID} from 'node:crypto';import {parseEnv} from 'node:util';
 export type Provider='groq'|'local';
-export type CryptoStore={available:()=>boolean;encrypt:(s:string)=>Buffer;decrypt:(b:Buffer)=>string};
+export function backendEnvName(platform:NodeJS.Platform=process.platform){return platform==='win32'?'.env.windows':platform==='darwin'?'.env.macos':'.env.linux';}
+// Read only this one fixed backend file. Never export its contents to process.env or child tools.
+export async function readBackendKey(file:string){let handle:Awaited<ReturnType<typeof open>>|undefined;try{const st=await lstat(file);if(!st.isFile()||st.isSymbolicLink()||st.size>16384)throw Error();handle=await open(file,constants.O_RDONLY|(constants.O_NOFOLLOW??0));const actual=await handle.stat();if(!actual.isFile()||actual.size>16384)throw Error();const body=await handle.readFile('utf8');if(Buffer.byteLength(body)>16384)throw Error();const key=parseEnv(body).GROQ_API_KEY;if(!key||!/^[\x21-\x7e]{10,512}$/.test(key))throw Error();return key;}catch{throw Error('Groq backend key unavailable or invalid. Set GROQ_API_KEY in the platform backend env file.');}finally{await handle?.close();}}
 export class TranscriptionSettings{
  private provider:Provider='groq';private loaded=false;
- constructor(private dir:string,private crypto:CryptoStore){}
+ constructor(private dir:string,private envFile:string){}
  private async load(){if(this.loaded)return;try{const p=JSON.parse(await readFile(path.join(this.dir,'transcription.json'),'utf8'));if(p.provider==='local')this.provider='local';}catch(e:any){if(e.code!=='ENOENT')throw Error('Transcription settings unreadable');}this.loaded=true;}
- async status(){await this.load();let hasKey=false;try{const st=await lstat(path.join(this.dir,'groq-key.enc'));hasKey=st.isFile()&&!st.isSymbolicLink();}catch{}return {provider:this.provider,hasKey,secureStorage:this.crypto.available()};}
- private async atomic(file:string,body:Buffer|string){await mkdir(this.dir,{recursive:true,mode:0o700});if((await lstat(this.dir)).isSymbolicLink())throw Error('Linked secure storage unsupported');const temp=path.join(this.dir,file+'.'+randomUUID());try{await writeFile(temp,body,{flag:'wx',mode:0o600});await rename(temp,path.join(this.dir,file));}finally{await unlink(temp).catch(()=>{});}}
- async save(provider:Provider,key?:string){await this.load();if(key!==undefined){if(!this.crypto.available())throw Error('OS secure storage unavailable. Key not saved.');if(!/^[\x21-\x7e]{10,512}$/.test(key))throw Error('Invalid API key format');try{await this.atomic('groq-key.enc',this.crypto.encrypt(key));}catch{throw Error('Could not securely save API key');}}await this.atomic('transcription.json',JSON.stringify({provider}));this.provider=provider;return this.status();}
- async remove(){await unlink(path.join(this.dir,'groq-key.enc')).catch((e:any)=>{if(e.code!=='ENOENT')throw Error('Could not remove API key');});return this.status();}
- async key(){if(!this.crypto.available())throw Error('OS secure storage unavailable. Use local transcription or unlock secure storage.');try{const file=path.join(this.dir,'groq-key.enc');const st=await lstat(file);if(!st.isFile()||st.isSymbolicLink()||st.size>16384)throw Error();return this.crypto.decrypt(await readFile(file));}catch{throw Error('Groq API key unavailable. Save it in Transcription settings.');}}
+ async status(){await this.load();let hasKey=false;try{await this.key();hasKey=true;}catch{}return {provider:this.provider,hasKey};}
+ async save(provider:Provider){await this.load();await mkdir(this.dir,{recursive:true,mode:0o700});if((await lstat(this.dir)).isSymbolicLink())throw Error('Linked settings storage unsupported');const temp=path.join(this.dir,'transcription.'+randomUUID());try{await writeFile(temp,JSON.stringify({provider}),{flag:'wx',mode:0o600});await rename(temp,path.join(this.dir,'transcription.json'));}finally{await unlink(temp).catch(()=>{});}this.provider=provider;return this.status();}
+ async key(){return readBackendKey(this.envFile);}
 }

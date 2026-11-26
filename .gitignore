@@ -7,3 +7,8 @@ dist-electron/
 /release-bundled/
 /vendor/
 /.whisper-windows-build/
+
+.env
+.env.*
+!.env.example
+/release-lite-test/
