@@ -1,3 +1,4 @@
+import {importAgentVideo} from './agent-import.js';
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
@@ -19,7 +20,8 @@ void app.whenReady().then(async () => {
 const media=new MediaWorkspace();
 let approvingJob=false;
 const runMedia=async(sourceId:string,kind:'render'|'transcribe'|'captions')=>{if(approvingJob)throw new Error('A job approval is already open');approvingJob=true;try{const approval=await dialog.showMessageBox(window,{type:'question',buttons:['Cancel','Run local job'],defaultId:0,cancelId:0,message:`Run ${kind} on this imported source?`,detail:'Only the selected project source ID is allowed. Outputs stay inside .motif/outputs. No provider request. Render is capped at 60 seconds of video. Transcription uses cached large-v3-q5_0 via whisper.cpp in bounded chunks; no download. Captions use the uncorrected transcript.'});if(approval.response!==1)throw new Error('Job not approved');return media.run(sourceId,kind,{ffmpeg:await findMediaExecutable('ffmpeg'),whisper:await findMediaExecutable('whisper-cli'),hyperframes:await findMediaExecutable('hyperframes')});}finally{approvingJob=false;}};
-const service = await startService({state:()=>media.state(),run:runMedia,cancel:()=>media.cancel()});
+let approvingImport=false;
+const service = await startService({state:()=>media.state(),run:runMedia,cancel:()=>media.cancel(),importVideo:async file=>{if(approvingImport)throw Error('Import approval already open');if(!media.state().project)throw Error('Choose a project folder in MOTIF once before agent imports');approvingImport=true;try{return await importAgentVideo(file,async(file,bytes)=>{const answer=await dialog.showMessageBox(window,{type:'question',buttons:['Cancel','Copy video'],defaultId:0,cancelId:0,message:'Allow your agent to import this video?',detail:`${file}\n${bytes} bytes\nA copy goes into the selected project. Original stays unchanged.`});return answer.response===1;},file=>media.importSource(file));}finally{approvingImport=false;}}});
 const brands=new BrandStore(path.join(app.getPath('userData'),'motif-data'));
 let capabilityCheck:Promise<unknown>|undefined;
 const page = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/index.html');
