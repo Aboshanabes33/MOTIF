@@ -3,7 +3,11 @@ import { BrandInput, Brand } from './brand-contract.js';
 export const AgentId = z.enum(['claude-desktop','codex','opencode']);
 const Agent = z.object({id:AgentId,name:z.string(),detected:z.boolean(),evidence:z.string(),config:z.string(),configDetected:z.boolean(),supported:z.boolean()}).strict();
 const Media=z.object({project:z.string().nullable(),sources:z.array(z.object({id:z.string().uuid(),name:z.string(),file:z.string().uuid()})),jobs:z.array(z.object({id:z.string().uuid(),sourceId:z.string().uuid(),kind:z.enum(['render','transcribe','captions']),state:z.enum(['running','succeeded','failed','cancelled']),startedAt:z.string(),finishedAt:z.string().optional(),output:z.string().optional(),error:z.string().optional()}))});
+export const TranscriptionState=z.object({provider:z.enum(['groq','local']),hasKey:z.boolean(),secureStorage:z.boolean()}).strict();
 export const Request = z.discriminatedUnion('kind', [
+ z.object({kind:z.literal('transcription-settings')}).strict(),
+ z.object({kind:z.literal('transcription-save'),provider:z.enum(['groq','local']),key:z.string().min(10).max(512).optional()}).strict(),
+ z.object({kind:z.literal('transcription-key-remove')}).strict(),
  z.object({kind:z.literal('project-select')}).strict(),
  z.object({kind:z.literal('source-import')}).strict(),
  z.object({kind:z.literal('media-state')}).strict(),
@@ -21,6 +25,7 @@ export const Request = z.discriminatedUnion('kind', [
 ]);
 export type Request = z.infer<typeof Request>;
 export const Reply = z.discriminatedUnion('kind', [
+ z.object({kind:z.literal('transcription-settings'),settings:TranscriptionState}).strict(),
  z.object({kind:z.literal('media'),state:Media}).strict(),
   z.object({kind:z.literal('brands'),brands:z.array(Brand)}).strict(),
   z.object({kind:z.literal('capabilities'),capabilities:z.array(z.object({id:z.string(),name:z.string(),available:z.boolean(),detail:z.string()}).strict())}).strict(),
