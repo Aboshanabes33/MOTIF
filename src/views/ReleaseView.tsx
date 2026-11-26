@@ -112,7 +112,7 @@ export function ReleaseView({
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="release-hero-actions">
             {standalone && onBackToStudio ? (
               <button type="button" className="glass glass-btn" onClick={onBackToStudio}>
                 {translate(lang, "releases.openStudio")}

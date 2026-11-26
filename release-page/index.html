@@ -2,68 +2,99 @@
 <html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0c2729" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#16403c" />
     <title>MOTIF Releases — Download for Windows</title>
     <link rel="icon" type="image/svg+xml" href="../public/icon.svg" />
     <style>
       :root {
         --ink: #ffffff;
-        --ink-2: rgba(255, 255, 255, 0.74);
-        --ink-3: rgba(255, 255, 255, 0.48);
+        --ink-2: rgba(255, 255, 255, 0.78);
+        --ink-3: rgba(255, 255, 255, 0.52);
         --accent: #9fd8cd;
-        --card: rgba(7, 24, 25, 0.72);
-        --border: rgba(255, 255, 255, 0.09);
+        --card: rgba(7, 24, 25, 0.74);
+        --border: rgba(255, 255, 255, 0.10);
         --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 100%);
         --font-display: Georgia, "Times New Roman", serif;
         --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
         --font-mono: "Cascadia Code", ui-monospace, SFMono-Regular, Consolas, monospace;
       }
-      * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; min-height: 100%; }
+      *, *::before, *::after { box-sizing: border-box; }
+      html {
+        margin: 0;
+        padding: 0;
+        min-height: 100%;
+        overflow-x: clip;
+        -webkit-text-size-adjust: 100%;
+      }
       body {
+        margin: 0;
+        padding: 0;
+        min-height: 100dvh;
         font-family: var(--font-ui);
         color: var(--ink);
+        background-color: #0c2729;
+        line-height: 1.5;
+        overflow-x: clip;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .canvas-bg {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
         background:
           radial-gradient(90% 55% at 85% -10%, rgba(126, 200, 186, 0.32), transparent 55%),
           linear-gradient(180deg, #2f7268 0%, #21574f 34%, #16403c 62%, #0c2729 100%);
-        background-attachment: fixed;
-        line-height: 1.5;
       }
       .mountains {
         position: fixed;
         inset: auto 0 0 0;
         height: 42vh;
         pointer-events: none;
-        z-index: 0;
+        z-index: 1;
       }
       .mountains svg { width: 100%; height: 100%; display: block; }
       .wrap {
         position: relative;
         z-index: 2;
+        width: 100%;
         max-width: 1020px;
         margin: 0 auto;
-        padding: 28px 20px 64px;
+        padding: calc(20px + env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) calc(56px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
         display: flex;
         flex-direction: column;
-        gap: 20px;
+        gap: 18px;
       }
       .topbar {
+        position: sticky;
+        top: max(10px, env(safe-area-inset-top));
+        z-index: 20;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: 999px;
+      }
+      .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
       }
       .wordmark {
         font-family: var(--font-display);
-        font-size: 18px;
+        font-size: 16px;
         letter-spacing: 0.16em;
         font-weight: 600;
         text-decoration: none;
         color: var(--ink);
         display: inline-flex;
         align-items: center;
-        gap: 10px;
+        gap: 9px;
+        padding-inline-start: 4px;
+        flex-shrink: 0;
       }
       .glass {
         background: var(--glass-bg);
@@ -77,61 +108,73 @@
         border: 1px solid var(--border);
         border-radius: 20px;
         padding: 22px 24px;
+        min-width: 0;
       }
       .hero { display: flex; flex-direction: column; gap: 18px; }
-      .hero-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+      .hero-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
       .badge {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 3px 10px;
+        padding: 4px 10px;
         border-radius: 999px;
         font-size: 12px;
         font-weight: 600;
         background: rgba(10, 36, 35, 0.85);
         color: var(--accent);
         border: 1px solid rgba(159, 216, 205, 0.35);
+        max-width: 100%;
       }
       h1 {
-        margin: 10px 0 4px;
+        margin: 10px 0 6px;
         font-family: var(--font-display);
-        font-size: clamp(26px, 4vw, 34px);
+        font-size: clamp(24px, 6vw, 34px);
         font-weight: 500;
         line-height: 1.15;
       }
       .sub { margin: 0; color: var(--ink-2); font-size: 14.5px; }
       .dl-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
         gap: 14px;
       }
       .dl-box {
-        background: rgba(5, 18, 19, 0.72);
+        background: rgba(5, 18, 19, 0.76);
         border: 1px solid rgba(255, 255, 255, 0.10);
         border-radius: 16px;
         padding: 18px;
         display: flex;
         flex-direction: column;
         gap: 10px;
+        min-width: 0;
       }
-      .dl-box.primary { border-color: rgba(159, 216, 205, 0.36); }
+      .dl-box.primary { border-color: rgba(159, 216, 205, 0.38); }
       .btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 8px;
-        height: 40px;
-        padding: 0 16px;
+        min-height: 44px;
+        padding: 9px 16px;
         border-radius: 12px;
         border: 1px solid rgba(255, 255, 255, 0.16);
         background: rgba(255, 255, 255, 0.08);
         color: var(--ink);
+        font-family: inherit;
         font-size: 13.5px;
         font-weight: 600;
         text-decoration: none;
+        text-align: center;
         cursor: pointer;
+        touch-action: manipulation;
       }
       .btn:hover { background: rgba(255, 255, 255, 0.16); }
+      .btn-pill {
+        min-height: 36px;
+        padding: 0 13px;
+        border-radius: 999px;
+        font-size: 13px;
+      }
       .btn-primary {
         background: var(--accent);
         color: #072223;
@@ -140,27 +183,59 @@
       .btn-primary:hover { background: #b5e6dc; }
       .grid-2 {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
         gap: 16px;
       }
       pre {
         margin: 0;
-        padding: 14px;
+        width: 100%;
+        max-width: 100%;
+        padding: 13px 14px;
         border-radius: 14px;
-        background: rgba(3, 12, 13, 0.88);
+        background: rgba(3, 12, 13, 0.90);
         border: 1px solid rgba(255, 255, 255, 0.08);
         font-family: var(--font-mono);
         font-size: 12px;
         color: #d8f2ec;
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
       }
-      .mono { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+      .mono { font-family: var(--font-mono); font-size: 12px; color: var(--accent); overflow-wrap: anywhere; }
       .rel-list { display: flex; flex-direction: column; gap: 12px; }
+      .rel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+      .rel-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
       ul { margin: 8px 0 0; padding-inline-start: 18px; color: var(--ink-2); }
       li { margin-bottom: 6px; }
+
+      @media (max-width: 640px) {
+        .wrap {
+          padding: calc(10px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) calc(44px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+          gap: 14px;
+        }
+        .topbar {
+          border-radius: 18px;
+          padding: 7px 10px;
+        }
+        .wordmark { font-size: 14.5px; }
+        .card {
+          padding: 16px 14px;
+          border-radius: 16px;
+        }
+        .dl-grid, .grid-2 {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+        .dl-box { padding: 15px 14px; }
+        .dl-box > .btn, .rel-actions .btn {
+          width: 100%;
+          min-height: 46px;
+        }
+        pre { font-size: 11px; padding: 11px 12px; }
+      }
     </style>
   </head>
   <body>
+    <div class="canvas-bg" aria-hidden="true"></div>
     <div class="mountains" aria-hidden="true">
       <svg viewBox="0 0 1440 420" preserveAspectRatio="none">
         <path d="M0,210 C180,140 320,175 490,120 C670,62 840,152 1030,108 C1195,70 1320,125 1440,92 L1440,420 L0,420 Z" fill="#12403c" fill-opacity="0.70"/>
@@ -170,19 +245,19 @@
     </div>
 
     <main class="wrap">
-      <header class="topbar">
-        <a class="wordmark" href="https://github.com/Aboshanabes33/MOTIF">
+      <header class="topbar glass">
+        <a class="wordmark" href="https://getmotif.vercel.app">
           <span>MOTIF</span>
         </a>
-        <div style="display:flex;gap:8px;">
-          <button id="langBtn" class="btn glass" style="height:34px;border-radius:999px;">العربية</button>
-          <a class="btn glass" style="height:34px;border-radius:999px;" href="https://github.com/Aboshanabes33/MOTIF/releases" target="_blank" rel="noreferrer">GitHub Releases</a>
+        <div class="topbar-actions">
+          <button id="langBtn" class="btn btn-pill glass">العربية</button>
+          <a class="btn btn-pill glass" href="https://github.com/Aboshanabes33/MOTIF/releases" target="_blank" rel="noreferrer">GitHub</a>
         </div>
       </header>
 
       <section class="card hero">
         <div class="hero-head">
-          <div>
+          <div style="min-width:0;">
             <span class="badge">v2.0.0 · Windows 10 / 11 (x64) · React + Electron + MCP</span>
             <h1 id="heroTitle">MOTIF Desktop for Windows</h1>
             <p id="heroSub" class="sub">Liquid Glass creative studio with saved Brand Identities and built-in Model Context Protocol (MCP) for Claude, Cursor, and Codex.</p>
@@ -212,7 +287,7 @@
             <li>Complete React 19 + TypeScript rebuild matching the MOTIF Liquid Glass Design Spec</li>
             <li>Built-in MCP server (20 tools, 8 resources, 3 prompts) so AI agents read and edit your Brands, Projects, Footage, Voice Notes — and run the video-edit pipeline</li>
             <li>Frameless Electron Windows desktop shell with custom title bar and official MOTIF icon</li>
-            <li>Full Arabic (RTL) and English (LTR) support with keyboard shortcuts</li>
+            <li>Full Arabic (RTL) and English (LTR) support with mobile-responsive Releases page</li>
           </ul>
         </section>
 
@@ -231,7 +306,7 @@
       </div>
 
       <section class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div class="rel-head">
           <strong style="font-size:16px;">GitHub Release History (Aboshanabes33/MOTIF)</strong>
           <span id="syncNote" class="sub" style="font-size:12px;">Loading live releases…</span>
         </div>
@@ -267,7 +342,7 @@
               <strong>${r.name || r.tag_name}</strong>
               <span class="badge">${r.tag_name}</span>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+            <div class="rel-actions">
               ${exes.map((a) => `<a class="btn" href="${a.browser_download_url}" target="_blank" rel="noreferrer">${a.name} (${fmtSize(a.size)})</a>`).join("")}
               <a class="btn" href="${r.html_url}" target="_blank" rel="noreferrer">Release Notes</a>
             </div>
