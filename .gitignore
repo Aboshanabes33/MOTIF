@@ -7,3 +7,5 @@ dist-electron/
 /release-bundled/
 /vendor/
 /.whisper-windows-build/
+
+/release-lite-test/
