@@ -7,7 +7,7 @@ export class TranscriptionSettings{
  private provider:Provider='groq';private loaded=false;
  constructor(private dir:string,private envFile:string){}
  private async load(){if(this.loaded)return;try{const p=JSON.parse(await readFile(path.join(this.dir,'transcription.json'),'utf8'));if(p.provider==='local')this.provider='local';}catch(e:any){if(e.code!=='ENOENT')throw Error('Transcription settings unreadable');}this.loaded=true;}
- async status(){await this.load();let hasKey=false;try{await this.key();hasKey=true;}catch{}return {provider:this.provider,hasKey};}
+ async status(){await this.load();let hasKey=false;try{await this.key();hasKey=true;}catch{}return {provider:this.provider,hasKey,envPath:this.envFile};}
  async save(provider:Provider){await this.load();await mkdir(this.dir,{recursive:true,mode:0o700});if((await lstat(this.dir)).isSymbolicLink())throw Error('Linked settings storage unsupported');const temp=path.join(this.dir,'transcription.'+randomUUID());try{await writeFile(temp,JSON.stringify({provider}),{flag:'wx',mode:0o600});await rename(temp,path.join(this.dir,'transcription.json'));}finally{await unlink(temp).catch(()=>{});}this.provider=provider;return this.status();}
  async key(){return readBackendKey(this.envFile);}
 }

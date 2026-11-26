@@ -3,7 +3,7 @@ import { BrandInput, Brand } from './brand-contract.js';
 export const AgentId = z.enum(['claude-desktop','codex','opencode']);
 const Agent = z.object({id:AgentId,name:z.string(),detected:z.boolean(),evidence:z.string(),config:z.string(),configDetected:z.boolean(),supported:z.boolean()}).strict();
 const Media=z.object({project:z.string().nullable(),sources:z.array(z.object({id:z.string().uuid(),name:z.string(),file:z.string().uuid()})),jobs:z.array(z.object({id:z.string().uuid(),sourceId:z.string().uuid(),kind:z.enum(['render','transcribe','captions']),state:z.enum(['running','succeeded','failed','cancelled']),startedAt:z.string(),finishedAt:z.string().optional(),output:z.string().optional(),error:z.string().optional()}))});
-export const TranscriptionState=z.object({provider:z.enum(['groq','local']),hasKey:z.boolean()}).strict();
+export const TranscriptionState=z.object({provider:z.enum(['groq','local']),hasKey:z.boolean(),envPath:z.string()}).strict();
 export const Request = z.discriminatedUnion('kind', [
  z.object({kind:z.literal('transcription-settings')}).strict(),
  z.object({kind:z.literal('transcription-save'),provider:z.enum(['groq','local'])}).strict(),
