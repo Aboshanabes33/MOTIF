@@ -58,6 +58,10 @@ const DEFAULT_ARGS: Record<string, string> = {
     2,
   ),
   search_workspace: JSON.stringify({ query: "Qafila" }, null, 2),
+  video_edit_status: "{}",
+  video_edit_plan: JSON.stringify({ name: "Launch Reel", mode: "full" }, null, 2),
+  video_edit_stage: JSON.stringify({ stage: "cut", work: "/Users/me/Documents/video-edit/projects/Launch Reel" }, null, 2),
+  video_edit_run: JSON.stringify({ stage: "cut", work: "/Users/me/Documents/video-edit/projects/Launch Reel" }, null, 2),
 };
 
 export function McpView({

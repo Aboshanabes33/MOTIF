@@ -28,6 +28,7 @@ import { BrandsView } from "./views/BrandsView";
 import { VoiceNoteView } from "./views/VoiceNoteView";
 import { SearchView } from "./views/SearchView";
 import { McpView } from "./views/McpView";
+import { VideoAgentView } from "./views/VideoAgentView";
 import { ReleaseView } from "./views/ReleaseView";
 
 function isStandaloneReleaseLocation(): boolean {
@@ -189,8 +190,9 @@ export function App() {
         "2": "brands",
         "3": "voice",
         "4": "search",
-        "5": "mcp",
-        "6": "releases",
+        "5": "agent",
+        "6": "mcp",
+        "7": "releases",
       };
       if (keyMap[e.key]) {
         e.preventDefault();
@@ -310,6 +312,7 @@ export function App() {
     brands: "brands.title",
     voice: "voice.title",
     search: "search.title",
+    agent: "agent.title",
     mcp: "mcp.title",
     releases: "releases.title",
   };
@@ -319,6 +322,7 @@ export function App() {
     brands: "brands.subtitle",
     voice: "voice.subtitle",
     search: "search.subtitle",
+    agent: "agent.subtitle",
     mcp: "mcp.subtitle",
     releases: "releases.subtitle",
   };
@@ -330,7 +334,7 @@ export function App() {
       <TitleBar
         lang={lang}
         onToggleLang={toggleLang}
-        mcpToolCount={mcpStatus?.tools.length ?? 16}
+        mcpToolCount={mcpStatus?.tools.length ?? 20}
         connected={connected}
         standaloneRelease={standaloneRelease}
         onClickWordmark={() => {
@@ -459,6 +463,8 @@ export function App() {
                   onSelect={setSelected}
                 />
               )}
+
+              {view === "agent" && <VideoAgentView lang={lang} onToast={pushToast} />}
 
               {view === "mcp" && (
                 <McpView

@@ -22,6 +22,17 @@ import {
   readResource,
   executeTool,
 } from "../mcp/tools.mjs";
+import {
+  editingStatus,
+  clipPlan,
+  stagePlan,
+  runStage,
+  agentBrief,
+  writeClipMode,
+  readStack,
+  SKILL_DIR,
+  STACK_FILE,
+} from "./video-agent.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -546,6 +557,50 @@ export async function startMotifServer(opts = {}) {
         });
         broadcast("workspace", { reason: "mcp_external", at: Date.now() });
         return sendJson(res, 200, { ok: true });
+      }
+
+      // --- Video Agent (the video-edit stack is what the local agent runs on) ---
+      if (method === "GET" && pathname === "/api/video/edit/status") {
+        return sendJson(res, 200, editingStatus());
+      }
+
+      if (method === "GET" && pathname === "/api/video/edit/stack") {
+        return sendJson(res, 200, {
+          stack: readStack(),
+          skillDir: SKILL_DIR,
+          stackFile: STACK_FILE,
+          brief: agentBrief({}),
+        });
+      }
+
+      if (method === "POST" && pathname === "/api/video/edit/plan") {
+        const body = await readJsonBody(req);
+        return sendJson(res, 200, { ok: true, ...clipPlan(body) });
+      }
+
+      if (method === "POST" && pathname === "/api/video/edit/mode") {
+        const body = await readJsonBody(req);
+        return sendJson(res, 200, writeClipMode(body));
+      }
+
+      if (method === "POST" && pathname === "/api/video/edit/stage") {
+        const body = await readJsonBody(req);
+        return sendJson(res, 200, {
+          ok: true,
+          ...stagePlan({ stageId: body.stage, mode: body.mode || "full", work: body.work, name: body.name }),
+        });
+      }
+
+      if (method === "POST" && pathname === "/api/video/edit/run") {
+        const body = await readJsonBody(req);
+        const result = await runStage({
+          stageId: body.stage,
+          work: body.work,
+          name: body.name,
+          mode: body.mode || "full",
+        });
+        broadcast("video", { stage: body.stage, gate: result.gate, at: Date.now() });
+        return sendJson(res, 200, { ok: result.gate === "ok", ...result });
       }
 
       // --- Releases Page API ---

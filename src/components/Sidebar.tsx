@@ -5,6 +5,7 @@ import {
   Search,
   Cpu,
   Download,
+  Clapperboard,
 } from "lucide-react";
 import type { Lang, NavView } from "../types";
 import { translate, type MessageKey } from "../i18n";
@@ -24,11 +25,12 @@ const PRIMARY_ITEMS: Array<{ id: NavView; labelKey: MessageKey; kbd: string; ico
   { id: "brands", labelKey: "nav.brands", kbd: "2", icon: Palette },
   { id: "voice", labelKey: "nav.voice", kbd: "3", icon: Mic },
   { id: "search", labelKey: "nav.search", kbd: "4", icon: Search },
+  { id: "agent", labelKey: "nav.agent", kbd: "5", icon: Clapperboard },
 ];
 
 const SYSTEM_ITEMS: Array<{ id: NavView; labelKey: MessageKey; kbd: string; icon: typeof Cpu }> = [
-  { id: "mcp", labelKey: "nav.mcp", kbd: "5", icon: Cpu },
-  { id: "releases", labelKey: "nav.releases", kbd: "6", icon: Download },
+  { id: "mcp", labelKey: "nav.mcp", kbd: "6", icon: Cpu },
+  { id: "releases", labelKey: "nav.releases", kbd: "7", icon: Download },
 ];
 
 export function Sidebar({

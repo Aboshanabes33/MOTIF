@@ -3,6 +3,15 @@
  * Shared between stdio MCP server (mcp/motif-mcp.mjs) and HTTP inspector (/api/mcp/*).
  */
 
+import {
+  editingStatus,
+  clipPlan,
+  stagePlan,
+  runStage,
+  agentBrief,
+  readStack,
+} from "../server/video-agent.mjs";
+
 export const MCP_SERVER_INFO = {
   name: "motif",
   version: "2.0.0",
@@ -267,6 +276,67 @@ export const MCP_TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: "video_edit_status",
+    description:
+      "The MOTIF video agent stack (video-edit skill): readiness of the editing home, saved identity (colors/font/style), motion engine, and every clip folder with what each one already has (source, cut, caps, scenes, render, srt). Call this first for any video-editing request.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "video_edit_plan",
+    description:
+      "Ordered pipeline for one clip from the video-edit stack: stages, the exact commands to run (with the real work folder), the validators, and the doc to read per stage. Modes: quick (cut+captions), light (+zoom+sfx), full (+scenes).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Clip name — becomes ~/Documents/video-edit/projects/<name>." },
+        mode: { type: "string", enum: ["quick", "light", "full"], description: "Editing depth. Default full." },
+        frame: { type: "string", enum: ["tall", "wide", "square"], description: "Output frame. Default tall (9:16)." },
+        source: { type: "string", description: "Optional source video path to copy into the work folder." },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "video_edit_stage",
+    description:
+      "Commands and validators for one pipeline stage (setup, start, source, cut, transcribe, captions, script_review, cutzoom, scenes, sfx, render, master, srt, verify, deliver, ledger_board, studio), filled with the clip's real work folder.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        stage: {
+          type: "string",
+          description: "Stage id, e.g. cut, transcribe, captions, scenes, sfx, render, verify.",
+        },
+        work: { type: "string", description: "Absolute work folder (…/projects/<name>)." },
+        name: { type: "string", description: "Optional clip name for delivery/ledger commands." },
+        mode: { type: "string", enum: ["quick", "light", "full"] },
+      },
+      required: ["stage", "work"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "video_edit_run",
+    description:
+      "Run one gated editing step in the clip's work folder and return its full output and exit status (setup/cut/transcribe/captions/cut-zoom/sfx/audit/preflight). Exit 3 from an auditor means the pipeline is refused — fix before rendering.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        stage: { type: "string", enum: ["setup", "cut", "transcribe", "captions", "cutzoom", "sfx", "render"] },
+        work: { type: "string", description: "Absolute work folder (…/projects/<name>)." },
+        name: { type: "string" },
+        mode: { type: "string", enum: ["quick", "light", "full"] },
+      },
+      required: ["stage", "work"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 export const MCP_PROMPTS = [
@@ -290,6 +360,15 @@ export const MCP_PROMPTS = [
     name: "workspace_review",
     description: "Review all active MOTIF projects, brands, and recent voice notes and propose next edits.",
     arguments: [],
+  },
+  {
+    name: "video_agent",
+    description:
+      "Hand the agent the video-edit stack brief: the pipeline, the clip's current state, the active brand, and the red lines. Run before editing any clip.",
+    arguments: [
+      { name: "project", description: "Clip folder name from video_edit_status", required: false },
+      { name: "brand", description: "Brand id or name for the identity", required: false },
+    ],
   },
 ];
 
@@ -332,6 +411,19 @@ export function listResources(store) {
       uri: "motif://voice-notes",
       name: "All MOTIF Voice Notes",
       description: "Recorded creative memos and transcripts.",
+      mimeType: "application/json",
+    },
+    {
+      uri: "motif://video/stack",
+      name: "Video Agent Stack (video-edit)",
+      description:
+        "The stack the local MOTIF agent runs on: modes, stages, commands, validators, red lines and where identity/projects/engine live.",
+      mimeType: "application/json",
+    },
+    {
+      uri: "motif://video/projects",
+      name: "Video Editing Clips",
+      description: "Every clip folder in the editing home with its real on-disk artifacts.",
       mimeType: "application/json",
     },
   ];
@@ -414,6 +506,23 @@ export function readResource(store, uri) {
       text: JSON.stringify(store.listVoiceNotes(), null, 2),
     };
   }
+  if (uri === "motif://video/stack") {
+    const stack = readStack();
+    const status = editingStatus();
+    return {
+      uri,
+      mimeType: "application/json",
+      text: JSON.stringify({ stack, home: status.home, engine: status.engine, identityReady: status.profileReady }, null, 2),
+    };
+  }
+  if (uri === "motif://video/projects") {
+    const status = editingStatus();
+    return {
+      uri,
+      mimeType: "application/json",
+      text: JSON.stringify({ home: status.home, projects: status.projects }, null, 2),
+    };
+  }
   throw Object.assign(new Error(`Unknown resource URI: ${uri}`), { code: -32002 });
 }
 
@@ -450,6 +559,26 @@ export function getPrompt(store, name, args = {}) {
           content: {
             type: "text",
             text: `Review the current MOTIF workspace and suggest prioritized next actions.\n\nBrands (${brands.length}):\n${JSON.stringify(brands, null, 2)}\n\nProjects (${projects.length}):\n${JSON.stringify(projects, null, 2)}\n\nVoice Notes (${voiceNotes.length}):\n${JSON.stringify(voiceNotes, null, 2)}`,
+          },
+        },
+      ],
+    };
+  }
+
+  if (name === "video_agent") {
+    const status = editingStatus();
+    const project = args.project
+      ? status.projects.find((p) => p.name === args.project || p.dir === args.project) || null
+      : status.projects[0] || null;
+    const brand = args.brand ? store.getBrand(args.brand) : null;
+    return {
+      description: `Video agent brief${project ? ` — ${project.name}` : ""}`,
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: agentBrief({ project, brand }),
           },
         },
       ],
@@ -598,6 +727,33 @@ export function executeTool(store, name, args = {}, { source = "mcp" } = {}) {
         ...res,
         brands: res.brands.map((b) => stripBrandLogo(b, false)),
       };
+    }
+
+    case "video_edit_status": {
+      return editingStatus();
+    }
+
+    case "video_edit_plan": {
+      const plan = clipPlan({
+        name: String(safeArgs.name || "").trim(),
+        mode: safeArgs.mode || "full",
+        frame: safeArgs.frame || "tall",
+        source: safeArgs.source || undefined,
+      });
+      return { ok: true, ...plan, brief: agentBrief({}) };
+    }
+
+    case "video_edit_stage": {
+      return { ok: true, ...stagePlan({ stageId: safeArgs.stage, mode: safeArgs.mode || "full", work: safeArgs.work, name: safeArgs.name }) };
+    }
+
+    case "video_edit_run": {
+      return runStage({
+        stageId: safeArgs.stage,
+        work: safeArgs.work,
+        name: safeArgs.name,
+        mode: safeArgs.mode || "full",
+      });
     }
 
     default:
