@@ -16,6 +16,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/*.ts", "src/*.tsx", "src/api/**/*", "src/components/**/*", "src/views/**/*"],
-  "exclude": ["src/edit-studio", "src/video-edit"]
+  "include": ["src"]
 }
