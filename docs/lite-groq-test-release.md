@@ -1,0 +1,11 @@
+# MOTIF0.1.2 Lite test with Groq
+
+Separate Windows x64 portable pre-release from main eddb28df including merged PR128. Prior releases unchanged. Unsigned, not run on real Windows. No installer wizard. No CI or paid API request.
+
+Groq settings are now included: open Transcription settings in the workspace sidebar, enter your own key and save. Key encrypted at rest via Electron safeStorage; no plaintext fallback. Saving stores the key, it does NOT verify it against Groq. Select a project and import a video to run transcription with native approval. Audio leaves your device and goes directly to Groq. Default whisper-large-v3. Existing first60seconds cap,10second chunks. Free-tier quotas apply; account controls billing. Arabic quality and real Groq call not tested without a key. API error/rate-limit/cancel logic tested using mocked HTTP only.
+
+IMPORTANT: this Lite excludes FFmpeg. Groq transcription STILL REQUIRES ffmpeg.exe installed separately on the app process PATH to extract audio. Restart app after PATH changes. Groq does NOT need local Whisper or a model. Local fallback separately requires whisper-cli.exe and ggml-large-v3-q5_0.bin in HOME (if set) or USERPROFILE/.cache/whisper. Render needs FFmpeg; captions need a real compatible hyperframes.exe entrypoint on PATH, its supported Node/browser and FFmpeg/FFprobe. npm .cmd shim alone is not recognized by current lookup. No bundling of media tools,model,Node or Chromium in this Lite.
+
+Includes earlier agent local-file import, licensed SVG icons, executable icon and named/visual Brand color picker. Chat attachment must expose/export a readable local path; no hidden attachment interception. Backend env-file experiment129 is CLOSED, not included. UI key field remains.
+
+Validation:26local tests/check/build; actual Electron screen inspected with Groq settings and API-key field. This Linux test environment has no OS key store so input is disabled here as intended; Windows DPAPI behavior not tested. Packaged ASAR checked for Groq client/settings and Lite mode. Back up app/project metadata before testing, app user data may be shared with other MOTIF versions. No claim of working Windows upload before your test.

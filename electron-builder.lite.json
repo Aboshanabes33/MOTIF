@@ -1,0 +1,10 @@
+{
+  "extends": "./electron-builder.json",
+  "directories": {
+    "output": "release-lite-groq"
+  },
+  "compression": "normal",
+  "win": {
+    "artifactName": "MOTIF-0.1.2-lite-test-x64.exe"
+  }
+}
