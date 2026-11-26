@@ -359,7 +359,7 @@
     {
       "id": "studio",
       "n": 16,
-      "title": { "ar": "الاستوديو (لو مثبّت)", "en": "Studio handoff (if installed)" },
+      "title": { "ar": "التسليم لواجهة MOTIF (لو مثبّت)", "en": "Handoff to the MOTIF app (if installed)" },
       "modes": ["quick", "light", "full"],
       "optional": true,
       "artifacts": [],
@@ -367,8 +367,8 @@
       "checks": [],
       "doc": "SKILL.md",
       "note": {
-        "ar": "لو مهارة edit-studio موجودة: سؤال واحد بعد أول نسخة «أفتحه لك في الاستوديو ونعدّل؟». مو مثبّت؟ لا تذكر الاستوديو.",
-        "en": "If the edit-studio skill exists: one question after the first cut — 'open it in the Studio and adjust?'. Not installed? Never mention it."
+        "ar": "لو نسخة MOTIF مثبّتة على الجهاز: سؤال واحد بعد أول نسخة «أفتحه لك في MOTIF ونعدّل؟». مو مثبّت؟ لا تذكر التطبيق.",
+        "en": "If the MOTIF app is installed: one question after the first cut — 'open it in MOTIF and adjust?'. Not installed? Never mention the app."
       }
     }
   ],

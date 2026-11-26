@@ -24,6 +24,7 @@ export const SKILL_FILE = path.join(SKILL_DIR, "SKILL.md");
 const SCRIPTS_DIR = path.join(SKILL_DIR, "scripts");
 
 let cachedStack = null;
+const docCache = new Map();
 
 /** The manifest as published in the repo (read-only — the skill folder is never written). */
 export function readStack() {
@@ -31,6 +32,74 @@ export function readStack() {
   const raw = fs.readFileSync(STACK_FILE, "utf8").replace(/^\uFEFF/, "");
   cachedStack = JSON.parse(raw);
   return cachedStack;
+}
+
+/** Every doc in the stack folder the manifest points at (references + styles). */
+export function stackDocs() {
+  const stack = readStack();
+  const docs = [];
+  for (const ref of stack.references || []) {
+    docs.push({ id: ref.id, kind: "reference", path: ref.path, title: { ar: ref.ar, en: ref.en } });
+  }
+  for (const style of stack.styles || []) {
+    docs.push({
+      id: style.id,
+      kind: "style",
+      path: style.doc,
+      title: { ar: style.ar, en: style.en },
+    });
+  }
+  return docs;
+}
+
+/** SKILL.md — the instruction set itself, served over MCP so agents never guess. */
+export function readSkill() {
+  return fs.readFileSync(SKILL_FILE, "utf8").replace(/^\uFEFF/, "");
+}
+
+/** One reference/style doc by id or relative path (read-only, inside the skill folder). */
+export function readStackDoc(idOrPath) {
+  const key = String(idOrPath || "").trim();
+  if (!key) throw Object.assign(new Error("doc is required"), { status: 400 });
+  if (key === "SKILL.md" || key === "skill" || key === "skill.md") {
+    return {
+      id: "SKILL.md",
+      kind: "skill",
+      path: "SKILL.md",
+      title: { ar: "تعليمات المونتاج كاملة", en: "The full editing instruction set" },
+      abs: SKILL_FILE,
+      text: readSkill(),
+    };
+  }
+  const doc = stackDocs().find((d) => d.id === key || d.path === key);
+  if (!doc) {
+    throw Object.assign(
+      new Error(`Unknown stack doc: ${key}. Available: ${stackDocs().map((d) => d.id).join(", ")}`),
+      { status: 404, code: "UNKNOWN_DOC" },
+    );
+  }
+  const abs = path.resolve(SKILL_DIR, doc.path);
+  if (!abs.startsWith(path.resolve(SKILL_DIR) + path.sep)) {
+    throw Object.assign(new Error("Doc escapes the skill folder"), { status: 403 });
+  }
+  if (!docCache.has(abs)) docCache.set(abs, fs.readFileSync(abs, "utf8").replace(/^\uFEFF/, ""));
+  return { ...doc, abs, text: docCache.get(abs) };
+}
+
+/** The whole stack in one payload: manifest + SKILL.md + every doc it points at by default.
+ *  `includeDocs: false` keeps the index with each doc's size (`chars`) but drops the bodies. */
+export function stackBundle({ includeDocs = true } = {}) {
+  const stack = readStack();
+  const entry = readSkill();
+  return {
+    stack,
+    skillDir: SKILL_DIR,
+    entrypoint: { path: SKILL_FILE, chars: entry.length, text: entry },
+    docs: stackDocs().map((d) => {
+      const text = readStackDoc(d.id).text;
+      return { ...d, chars: text.length, text: includeDocs ? text : undefined };
+    }),
+  };
 }
 
 /** The user's editing data home — same rule as video-edit/scripts/_paths.py and _paths.js. */
@@ -357,7 +426,7 @@ export function agentBrief({ project, brand } = {}) {
   const rules = stack.redLines.map((r) => `- ${r.en} / ${r.ar}`).join("\n");
   return [
     `MOTIF Video Agent brief — stack "${stack.name}" v${stack.version} (${stack.entrypoint}).`,
-    `You are the assistant inside MOTIF Studio. The video-edit skill is the ONLY pipeline you run on.`,
+    `You are the assistant inside MOTIF. The video-edit skill is the ONLY pipeline you run on.`,
     project
       ? `Current clip: ${project.name} — folder ${project.dir} — mode ${project.mode} — ${project.durationSec ?? "?"}s.`
       : "No clip selected — call video_edit_status and list the projects first.",

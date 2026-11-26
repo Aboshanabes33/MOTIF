@@ -9,7 +9,8 @@ Contents:
   2. Spec-compliant SFX ZIP archive (offset-adjusted) bundling:
      - runtime/node.exe (Node.js 24 LTS Windows x64)
      - dist-web/** (compiled React 19 Liquid Glass app + fonts + icons)
-     - server/**, mcp/**, launcher/start-motif.mjs, build/icon.{ico,png}, package.json
+     - server/**, mcp/** (incl. one-click agent installer), video-edit/** (the agent stack),
+       launcher/start-motif.mjs, build/icon.{ico,png}, package.json
 
 Also cross-verifies PE headers, Win32 resources, DLL imports, `unzip -t`,
 and runs a native-compiled miniz extractor test verifying SHA-256 byte-for-byte match
@@ -172,7 +173,8 @@ def collect_bundle_files(node_exe: Path) -> list[tuple[str, Path]]:
     entries.append(("build/icon.ico", REPO_ROOT / "build" / "icon.ico"))
     entries.append(("build/icon.png", REPO_ROOT / "build" / "icon.png"))
 
-    for folder in ("dist-web", "server", "mcp"):
+    # video-edit/ is the agent's stack: SKILL.md + stack.json + references/styles/scripts.
+    for folder in ("dist-web", "server", "mcp", "video-edit"):
         root = REPO_ROOT / folder
         if not root.exists():
             raise RuntimeError(f"Missing required directory: {root}")

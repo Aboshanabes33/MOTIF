@@ -20,7 +20,7 @@ const EN = {
   "status.projectsCount": "{n} projects",
 
   "today.title": "Today",
-  "today.subtitle": "Your studio feed, active renders, and footage",
+  "today.subtitle": "Your MOTIF feed, active renders, and footage",
   "today.seg.all": "All",
   "today.seg.videos": "Videos",
   "today.seg.footage": "Footage",
@@ -151,6 +151,23 @@ const EN = {
   "mcp.quickTestBrands": "Test: list_brands",
   "mcp.quickTestStatus": "Test: motif_status",
   "mcp.quickTestProjects": "Test: list_projects",
+  "mcp.connectTitle": "Connect in one click",
+  "mcp.connectSub": "Pick the agent you use — MOTIF writes itself into that app's own MCP config (backup kept), stack included.",
+  "mcp.addMcp": "Add MCP",
+  "mcp.removeMcp": "Remove",
+  "mcp.connected": "Added",
+  "mcp.detected": "Installed",
+  "mcp.notFound": "Not installed on this machine",
+  "mcp.restart": "Restart {name} to load MOTIF.",
+  "mcp.addedToast": "MOTIF added to {name}",
+  "mcp.removedToast": "MOTIF removed from {name}",
+  "mcp.installFailed": "Could not write the config",
+  "mcp.stackTitle": "The stack inside MCP",
+  "mcp.stackSub": "Agents read the same stack the local agent runs on: SKILL.md, 17 stages, validators, red lines — served as resources and a prompt.",
+  "mcp.stackSkill": "SKILL.md",
+  "mcp.stackBundle": "Full bundle",
+  "mcp.stackPrompt": "Stack brief prompt",
+  "mcp.manual": "Manual config (advanced)",
 
   "releases.title": "MOTIF Releases",
   "releases.subtitle": "Download MOTIF Desktop for Windows (Electron + React + Built-in MCP Server)",
@@ -166,7 +183,7 @@ const EN = {
   "releases.viewOnGithub": "View on GitHub",
   "releases.copySha": "Copy SHA-256",
   "releases.standaloneLink": "Open Standalone Release Page",
-  "releases.openStudio": "Open MOTIF Studio",
+  "releases.openStudio": "Open MOTIF",
   "releases.buildCmdTitle": "Build Windows Installer Locally",
 
   "agent.title": "Video Agent",
@@ -212,6 +229,7 @@ const EN = {
   "agent.gateRule": "Exit 3 from any validator stops the line.",
   "agent.modes": "Modes",
   "agent.noCommands": "This step is composed by the agent from its reference doc — no fixed command.",
+  "agent.overMcp": "The same stack is served over MCP: motif://video/skill, motif://video/bundle, and the video_stack_brief prompt.",
 } as const;
 
 const AR: Record<keyof typeof EN, string> = {
@@ -365,6 +383,23 @@ const AR: Record<keyof typeof EN, string> = {
   "mcp.quickTestBrands": "تجربة: list_brands",
   "mcp.quickTestStatus": "تجربة: motif_status",
   "mcp.quickTestProjects": "تجربة: list_projects",
+  "mcp.connectTitle": "الربط بضغطة وحدة",
+  "mcp.connectSub": "اختر الوكيل اللي تستخدمه — MOTIF يكتب نفسه في إعداد MCP حق ذاك التطبيق (مع نسخة احتياطية)، والستاك كامل معه.",
+  "mcp.addMcp": "إضافة MCP",
+  "mcp.removeMcp": "إزالة",
+  "mcp.connected": "مضاف",
+  "mcp.detected": "منزّل",
+  "mcp.notFound": "مو منزّل على هذا الجهاز",
+  "mcp.restart": "أعد تشغيل {name} عشان يحمّل MOTIF.",
+  "mcp.addedToast": "انضاف MOTIF عند {name}",
+  "mcp.removedToast": "انشال MOTIF من {name}",
+  "mcp.installFailed": "تعذّر كتابة الإعداد",
+  "mcp.stackTitle": "الستاك داخل MCP",
+  "mcp.stackSub": "الوكيل يقرأ نفس الستاك اللي يمشي عليه الوكيل المحلي: SKILL.md و17 مرحلة والفواحص والخطوط الحمراء — موارد وبرومبت جاهزة.",
+  "mcp.stackSkill": "SKILL.md",
+  "mcp.stackBundle": "الحزمة كاملة",
+  "mcp.stackPrompt": "برومبت الستاك",
+  "mcp.manual": "الإعداد اليدوي (متقدم)",
 
   "releases.title": "إصدارات MOTIF",
   "releases.subtitle": "حمّل MOTIF لنظام ويندوز (Electron + React + خادم MCP مدمج)",
@@ -380,7 +415,7 @@ const AR: Record<keyof typeof EN, string> = {
   "releases.viewOnGithub": "عرض على GitHub",
   "releases.copySha": "نسخ SHA-256",
   "releases.standaloneLink": "فتح صفحة الإصدارات المستقلة",
-  "releases.openStudio": "فتح استوديو MOTIF",
+  "releases.openStudio": "فتح MOTIF",
   "releases.buildCmdTitle": "بناء مثبّت ويندوز محلياً",
 
   "agent.title": "وكيل الفيديو",
@@ -426,6 +461,7 @@ const AR: Record<keyof typeof EN, string> = {
   "agent.gateRule": "خروج 3 من أي فاحص يوقف الخط.",
   "agent.modes": "الأنماط",
   "agent.noCommands": "هذي الخطوة يبنيها الوكيل من مرجعها — ما لها أمر ثابت.",
+  "agent.overMcp": "نفس الستاك متاح داخل MCP: motif://video/skill وmotif://video/bundle وبرومبت video_stack_brief.",
 };
 
 export type MessageKey = keyof typeof EN;

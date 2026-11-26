@@ -2,6 +2,7 @@ import type {
   AppInfo,
   Brand,
   FootageItem,
+  McpInstallResult,
   McpStatusPayload,
   Project,
   ReleasesPayload,
@@ -103,6 +104,24 @@ export const api = {
     requestJson<{ ok: boolean; tool: string; elapsedMs: number; result: unknown }>("/api/mcp/invoke", {
       method: "POST",
       body: JSON.stringify({ tool, arguments: args }),
+    }),
+  installMcpClient: (client: string) =>
+    requestJson<McpInstallResult>("/api/mcp/install", {
+      method: "POST",
+      body: JSON.stringify({ client }),
+    }),
+  removeMcpClient: (client: string) =>
+    requestJson<McpInstallResult>("/api/mcp/uninstall", {
+      method: "POST",
+      body: JSON.stringify({ client }),
+    }),
+  getMcpPrompt: (name: string, args: Record<string, unknown> = {}) =>
+    requestJson<{
+      description?: string;
+      messages: Array<{ role: string; content: { type: string; text: string } }>;
+    }>("/api/mcp/prompt", {
+      method: "POST",
+      body: JSON.stringify({ name, arguments: args }),
     }),
   readMcpResource: (uri: string) =>
     requestJson<{ ok: boolean; content: { uri: string; mimeType: string; text: string } }>(

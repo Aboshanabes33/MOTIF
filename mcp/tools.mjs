@@ -10,6 +10,10 @@ import {
   runStage,
   agentBrief,
   readStack,
+  readSkill,
+  readStackDoc,
+  stackDocs,
+  stackBundle,
 } from "../server/video-agent.mjs";
 
 export const MCP_SERVER_INFO = {
@@ -322,6 +326,34 @@ export const MCP_TOOLS = [
     },
   },
   {
+    name: "video_stack",
+    description:
+      "The whole video-edit stack the local agent runs on, served from inside MOTIF: the manifest (modes, 17 stages with commands/validators, frames, styles, red lines), SKILL.md, and every reference/style doc. Call this with includeDocs=false first, then video_stack_doc for the doc a stage needs.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        includeDocs: {
+          type: "boolean",
+          description: "Include the full text of every reference/style doc (larger payload). Default false = manifest + SKILL.md + the doc index.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "video_stack_doc",
+    description:
+      "Read one doc from the stack: SKILL.md, or a reference/style id from the manifest (onboarding, rules, scenes, sfx, generated-images, light-engine, ideas, simple, collage).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        doc: { type: "string", description: "Doc id or relative path, e.g. rules, scenes, simple, styles/collage/STYLE.md." },
+      },
+      required: ["doc"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "video_edit_run",
     description:
       "Run one gated editing step in the clip's work folder and return its full output and exit status (setup/cut/transcribe/captions/cut-zoom/sfx/audit/preflight). Exit 3 from an auditor means the pipeline is refused — fix before rendering.",
@@ -360,6 +392,12 @@ export const MCP_PROMPTS = [
     name: "workspace_review",
     description: "Review all active MOTIF projects, brands, and recent voice notes and propose next edits.",
     arguments: [],
+  },
+  {
+    name: "video_stack_brief",
+    description:
+      "Give any agent the stack itself: the manifest summary, the stage order per mode, the command list, the validators, the red lines and where each doc lives — then the agent calls video_stack_doc for details.",
+    arguments: [{ name: "mode", description: "quick | light | full (default full)", required: false }],
   },
   {
     name: "video_agent",
@@ -426,6 +464,29 @@ export function listResources(store) {
       description: "Every clip folder in the editing home with its real on-disk artifacts.",
       mimeType: "application/json",
     },
+    {
+      uri: "motif://video/skill",
+      name: "Video Stack — SKILL.md",
+      description:
+        "The full instruction set the local agent executes, exactly as shipped in video-edit/SKILL.md.",
+      mimeType: "text/markdown",
+    },
+    {
+      uri: "motif://video/bundle",
+      name: "Video Stack — full bundle",
+      description:
+        "Everything at once: manifest + SKILL.md + every reference/style doc, so an agent can carry the whole stack in one read.",
+      mimeType: "application/json",
+    },
+    ...stackDocs().map((doc) => ({
+      uri: `motif://video/docs/${doc.id}`,
+      name: `Video Stack — ${doc.id}`,
+      description:
+        doc.kind === "style"
+          ? `Style doc listed by the stack manifest: ${doc.path}`
+          : `Reference the stack manifest points at: ${doc.path}`,
+      mimeType: "text/markdown",
+    })),
   ];
   for (const b of brands) {
     base.push({
@@ -523,6 +584,20 @@ export function readResource(store, uri) {
       text: JSON.stringify({ home: status.home, projects: status.projects }, null, 2),
     };
   }
+  if (uri === "motif://video/skill") {
+    return { uri, mimeType: "text/markdown", text: readSkill() };
+  }
+  if (uri === "motif://video/bundle") {
+    return {
+      uri,
+      mimeType: "application/json",
+      text: JSON.stringify(stackBundle({ includeDocs: true }), null, 2),
+    };
+  }
+  if (uri.startsWith("motif://video/docs/")) {
+    const doc = readStackDoc(uri.slice("motif://video/docs/".length));
+    return { uri, mimeType: "text/markdown", text: doc.text };
+  }
   throw Object.assign(new Error(`Unknown resource URI: ${uri}`), { code: -32002 });
 }
 
@@ -540,7 +615,7 @@ export function getPrompt(store, name, args = {}) {
           role: "user",
           content: {
             type: "text",
-            text: `You are working inside MOTIF Studio. Use the following official Brand identity from MOTIF to craft an on-brand video concept, visual palette plan, hook, and caption style:${topicLine}\n\n${guide.summary}\n\nRecent Projects:\n${JSON.stringify(guide.recentProjects, null, 2)}\n\nRecent Voice Notes:\n${JSON.stringify(guide.recentVoiceNotes, null, 2)}`,
+            text: `You are working inside MOTIF. Use the following official Brand identity from MOTIF to craft an on-brand video concept, visual palette plan, hook, and caption style:${topicLine}\n\n${guide.summary}\n\nRecent Projects:\n${JSON.stringify(guide.recentProjects, null, 2)}\n\nRecent Voice Notes:\n${JSON.stringify(guide.recentVoiceNotes, null, 2)}`,
           },
         },
       ],
@@ -559,6 +634,46 @@ export function getPrompt(store, name, args = {}) {
           content: {
             type: "text",
             text: `Review the current MOTIF workspace and suggest prioritized next actions.\n\nBrands (${brands.length}):\n${JSON.stringify(brands, null, 2)}\n\nProjects (${projects.length}):\n${JSON.stringify(projects, null, 2)}\n\nVoice Notes (${voiceNotes.length}):\n${JSON.stringify(voiceNotes, null, 2)}`,
+          },
+        },
+      ],
+    };
+  }
+
+  if (name === "video_stack_brief") {
+    const stack = readStack();
+    const mode = stack.modes[args.mode] ? args.mode : "full";
+    const stageLines = stack.stages
+      .map((st) => {
+        const on = stack.modes[mode].stages.includes(st.id) ? "✓" : " ";
+        return `${on} ${String(st.n).padStart(2, "0")} ${st.id} — ${st.title.en} — doc: ${st.doc}`;
+      })
+      .join("\n");
+    const docIndex = stackDocs()
+      .map((d) => `- ${d.id} (${d.kind}) → ${d.path}`)
+      .join("\n");
+    return {
+      description: `video-edit stack brief (${mode})`,
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: [
+              `MOTIF ships its video agent stack over MCP. Stack "${stack.name}" v${stack.version}; entrypoint ${stack.entrypoint} (read it with video_stack_doc({doc:"SKILL.md"}) or resource motif://video/skill).`,
+              `Mode: ${mode} — ${stack.modes[mode].stages.length} stages.`,
+              "",
+              "Stages (✓ = in this mode):",
+              stageLines,
+              "",
+              "Docs (read the one your stage names, before running it):",
+              docIndex,
+              "",
+              "Red lines:",
+              ...stack.redLines.map((r) => `- ${r.en}`),
+              "",
+              "Tools: video_edit_status → video_edit_plan → video_edit_stage → video_edit_run (gated, exit 3 = refused). The skill folder is read-only; user data lives in the editing home.",
+            ].join("\n"),
           },
         },
       ],
@@ -727,6 +842,31 @@ export function executeTool(store, name, args = {}, { source = "mcp" } = {}) {
         ...res,
         brands: res.brands.map((b) => stripBrandLogo(b, false)),
       };
+    }
+
+    case "video_stack": {
+      const includeDocs = Boolean(safeArgs.includeDocs);
+      const bundle = stackBundle({ includeDocs });
+      return {
+        ok: true,
+        stack: bundle.stack,
+        skillDir: bundle.skillDir,
+        entrypoint: bundle.entrypoint,
+        docs: bundle.docs.map((d) => ({
+          id: d.id,
+          kind: d.kind,
+          path: d.path,
+          title: d.title,
+          chars: d.chars,
+          text: d.text,
+        })),
+        use: "video_stack_doc({ doc }) for one doc, video_edit_status for readiness, video_edit_plan for the ordered stages of a clip.",
+      };
+    }
+
+    case "video_stack_doc": {
+      const doc = readStackDoc(safeArgs.doc);
+      return { ok: true, doc: { id: doc.id, kind: doc.kind, path: doc.path, title: doc.title }, text: doc.text };
     }
 
     case "video_edit_status": {

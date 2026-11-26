@@ -21,7 +21,9 @@ import {
   listResources,
   readResource,
   executeTool,
+  getPrompt,
 } from "../mcp/tools.mjs";
+import { detectClients, installClient, removeClient, clientDefs, verifyMcpServer } from "./mcp-install.mjs";
 import {
   editingStatus,
   clipPlan,
@@ -498,6 +500,12 @@ export async function startMotifServer(opts = {}) {
 
       // --- MCP Hub API ---
       if (method === "GET" && pathname === "/api/mcp/status") {
+        let clients = [];
+        try {
+          clients = detectClients({ mcpScriptPath, dataDir: store.paths.dataDir });
+        } catch {
+          clients = clientDefs();
+        }
         return sendJson(res, 200, {
           server: MCP_SERVER_INFO,
           protocolVersion: "2025-03-26",
@@ -508,6 +516,47 @@ export async function startMotifServer(opts = {}) {
           resources: listResources(store),
           prompts: MCP_PROMPTS,
           configs: buildMcpClientConfigs(mcpScriptPath, store.paths.dataDir),
+          clients,
+        });
+      }
+
+      // One-click "Add MCP": write MOTIF into the chosen agent's own config file.
+      if (method === "POST" && pathname === "/api/mcp/install") {
+        const body = await readJsonBody(req);
+        const client = String(body.client || "");
+        const result = installClient({ client, mcpScriptPath, dataDir: store.paths.dataDir });
+        store.recordActivity({
+          source: "mcp",
+          type: "mcp_installed",
+          title: `MOTIF added to ${result.label} via one click`,
+          detail: result.configPath,
+          meta: { client },
+        });
+        broadcast("mcp", { client, type: "mcp_installed", detail: result.label, at: Date.now() });
+        const verify = await verifyMcpServer({ mcpScriptPath, dataDir: store.paths.dataDir });
+        return sendJson(res, 200, {
+          ...result,
+          verify,
+          clients: detectClients({ mcpScriptPath, dataDir: store.paths.dataDir }),
+        });
+      }
+
+      if (method === "POST" && pathname === "/api/mcp/uninstall") {
+        const body = await readJsonBody(req);
+        const client = String(body.client || "");
+        const result = removeClient({ client });
+        if (result.removed) {
+          store.recordActivity({
+            source: "mcp",
+            type: "mcp_removed",
+            title: `MOTIF removed from ${result.label}`,
+            detail: result.configPath,
+            meta: { client },
+          });
+        }
+        return sendJson(res, 200, {
+          ...result,
+          clients: detectClients({ mcpScriptPath, dataDir: store.paths.dataDir }),
         });
       }
 
@@ -536,6 +585,13 @@ export async function startMotifServer(opts = {}) {
           elapsedMs,
           result,
         });
+      }
+
+      if (method === "POST" && pathname === "/api/mcp/prompt") {
+        const body = await readJsonBody(req);
+        const prompt = getPrompt(store, String(body.name || ""), body.arguments || {});
+        lastMcpPing = new Date().toISOString();
+        return sendJson(res, 200, prompt);
       }
 
       if (method === "GET" && pathname === "/api/mcp/resource") {

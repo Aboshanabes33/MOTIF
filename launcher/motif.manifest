@@ -6,7 +6,7 @@
     name="MOTIF.Desktop"
     type="win32"
   />
-  <description>MOTIF Creative Studio &amp; MCP Agent Hub</description>
+  <description>MOTIF Creative &amp; MCP Agent Hub</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>

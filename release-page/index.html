@@ -210,7 +210,7 @@
           <strong style="font-size:16px;">What’s New in v2.0.0</strong>
           <ul>
             <li>Complete React 19 + TypeScript rebuild matching the MOTIF Liquid Glass Design Spec</li>
-            <li>Built-in MCP server (20 tools, 8 resources, 3 prompts) so AI agents read and edit your Brands, Projects, Footage, Voice Notes — and run the video-edit pipeline</li>
+            <li>Built-in MCP server (22 tools, 18 resources, 4 prompts) so AI agents read and edit your Brands, Projects, Footage, Voice Notes — and run the video-edit stack, installed with one click</li>
             <li>Frameless Electron Windows desktop shell with custom title bar and official MOTIF icon</li>
             <li>Full Arabic (RTL) and English (LTR) support with keyboard shortcuts</li>
           </ul>
@@ -218,7 +218,7 @@
 
         <section class="card">
           <strong style="font-size:16px;">Connect Claude / Cursor / Codex via MCP</strong>
-          <p class="sub" style="font-size:13px;margin:6px 0 10px;">Add MOTIF to your MCP config so your AI model sees saved Brands &amp; Projects:</p>
+          <p class="sub" style="font-size:13px;margin:6px 0 10px;">Open MOTIF → <strong>MCP</strong> → <strong>Add MCP</strong> and pick your agent: MOTIF writes itself into that app's own config (backup kept). It ships its whole video-edit stack over MCP, so the agent reads <code>motif://video/skill</code> instead of guessing. Prefer manual? Paste this:</p>
           <pre dir="ltr">{
   "mcpServers": {
     "motif": {

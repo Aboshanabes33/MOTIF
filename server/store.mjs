@@ -420,7 +420,7 @@ function makeStarterData() {
       source: "mcp",
       type: "mcp_ready",
       title: "MCP Server ready for AI agents",
-      detail: "20 tools & 8 resources registered (Brands, Projects, Footage, Voice Notes, Video Agent)",
+      detail: "22 tools & 18 resources registered (Brands, Projects, Footage, Voice Notes, Video Agent stack)",
       timestamp: iso(18),
     },
     {

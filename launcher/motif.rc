@@ -17,7 +17,7 @@ BEGIN
     BLOCK "040904B0"
     BEGIN
       VALUE "CompanyName",      "MOTIF"
-      VALUE "FileDescription",  "MOTIF Desktop Studio & MCP Agent Hub"
+      VALUE "FileDescription",  "MOTIF Desktop & MCP Agent Hub"
       VALUE "FileVersion",      "2.0.0.0"
       VALUE "InternalName",     "MOTIF"
       VALUE "LegalCopyright",   "Copyright (C) 2026 MOTIF"

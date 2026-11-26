@@ -16,7 +16,7 @@ import os
 if os.name == 'nt':   # تحذير symlinks الانجليزي باول تنزيل للنموذج: لازم قبل استيراد huggingface_hub (يقراه وقت الاستيراد)
     os.environ.setdefault('HF_HUB_DISABLE_SYMLINKS_WARNING', '1')
 
-# ── one copy: B Studio tools/np/fw_device.py = the montage skill's scripts/_whisper.py (sync-whisper.mjs writes it) ──
+# ── one copy: MOTIF tools/np/fw_device.py = the montage skill's scripts/_whisper.py (sync-whisper.mjs writes it) ──
 import os, subprocess, sys
 
 THREADS = min(8, max(4, (os.cpu_count() or 8) // 2))   # half the cores, 4 to 8 (measured on 16: 8 a little faster than 4, 16 slower)
