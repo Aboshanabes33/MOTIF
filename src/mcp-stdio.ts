@@ -16,7 +16,7 @@ async function main(){
   await client.connect(new StreamableHTTPClientTransport(url,{requestInit:{headers:{Authorization:`Bearer ${descriptor.token}`}}}));
   // Fixed allowlist only. No dynamic arbitrary tool forwarding.
   for(const kind of ['motif_status','motif_workspace','motif_cancel'] as const)server.registerTool(kind,{description:kind==='motif_cancel'?'Cancel active MOTIF project job':`Read ${kind} from the owner-selected MOTIF workspace`,inputSchema:{}},async()=>await client.callTool({name:kind,arguments:{}}) as any);
-  for(const kind of ['motif_render','motif_transcribe','motif_captions'] as const)server.registerTool(kind,{description:`Request ${kind} of an imported source ID. Owner native confirmation required. No arbitrary paths, shell or downloads.`,inputSchema:{sourceId:z.string().uuid()}},async(args)=>await client.callTool({name:kind,arguments:args}) as any);
+  for(const kind of ['motif_render','motif_transcribe','motif_captions'] as const)server.registerTool(kind,{description:`Request ${kind} of an imported source ID. Owner native confirmation required. Transcription uses selected provider: default Groq uploads audio off-device, local Whisper optional. No arbitrary paths or shell.`,inputSchema:{sourceId:z.string().uuid()}},async(args)=>await client.callTool({name:kind,arguments:args}) as any);
   server.registerTool('motif_import_video',{description:'Import exact agent-accessible local absolute video path. Never guess cloud attachment paths. Owner confirmation required; MOTIF must be running with project selected.',inputSchema:{filePath:z.string().min(1).max(4096)}},async args=>await client.callTool({name:'motif_import_video',arguments:args}) as any);
   process.stdin.once('end',()=>{void client.close();});
  }
