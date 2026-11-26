@@ -1,0 +1,47 @@
+{
+  "files": 5816,
+  "bytes": 1822901716,
+  "manifestSha256": "6c98bcde7060613175943b332f69b8022f9f4ad5bce8794684190ef9584b0cfe",
+  "components": {
+    "chrome": {
+      "bytes": 470514394,
+      "files": 305
+    },
+    "ffmpeg": {
+      "bytes": 52052992,
+      "files": 2
+    },
+    "hyperframes": {
+      "bytes": 111677066,
+      "files": 5479
+    },
+    "licenses": {
+      "bytes": 5677394,
+      "files": 12
+    },
+    "models": {
+      "bytes": 1081140203,
+      "files": 1
+    },
+    "node": {
+      "bytes": 87337265,
+      "files": 14
+    },
+    "SOURCE-MANIFEST.json": {
+      "bytes": 2033,
+      "files": 1
+    },
+    "sources": {
+      "bytes": 10060750,
+      "files": 1
+    },
+    "THIRD_PARTY_NOTICES.txt": {
+      "bytes": 1091,
+      "files": 1
+    },
+    "whisper": {
+      "bytes": 4438528,
+      "files": 1
+    }
+  }
+}

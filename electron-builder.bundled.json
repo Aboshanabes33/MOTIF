@@ -1,0 +1,1 @@
+{"extends":"./electron-builder.json","beforePack":"./scripts/bundle-gate.cjs","extraResources":[{"from":"vendor/win32-x64","to":"motif-tools","filter":["**/*"]}],"directories":{"output":"release-bundled"}}
