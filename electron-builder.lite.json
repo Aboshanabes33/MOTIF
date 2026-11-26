@@ -6,5 +6,15 @@
   "compression": "normal",
   "win": {
     "artifactName": "MOTIF-0.1.2-lite-test-x64.exe"
-  }
+  },
+  "extraResources": [
+    {
+      "from": "vendor/win32-x64/ffmpeg/ffmpeg.exe",
+      "to": "motif-lite-tools/ffmpeg.exe"
+    },
+    {
+      "from": "build/lite-ffmpeg-notices.txt",
+      "to": "motif-lite-tools/NOTICES.txt"
+    }
+  ]
 }

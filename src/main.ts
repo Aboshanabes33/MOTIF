@@ -16,7 +16,7 @@ import { startService } from './service.js';
 
 const liteRuntime=JSON.parse(readFileSync(path.join(app.getAppPath(),'package.json'),'utf8')).motifRuntime==='lite';
 if(app.isPackaged&&process.platform==='win32'&&!liteRuntime)process.env.MOTIF_BUNDLED_ROOT=path.join(process.resourcesPath,'motif-tools');
-if(liteRuntime)delete process.env.MOTIF_BUNDLED_ROOT;
+if(liteRuntime){delete process.env.MOTIF_BUNDLED_ROOT;if(app.isPackaged&&process.platform==='win32')process.env.MOTIF_LITE_FFMPEG=path.join(process.resourcesPath,'motif-lite-tools','ffmpeg.exe');}
 if(process.env.MOTIF_SMOKE==='1') app.setPath('userData',mkdtempSync(path.join(os.tmpdir(),'motif-electron-smoke-')));
 app.enableSandbox();
 void app.whenReady().then(async () => {
@@ -132,7 +132,7 @@ if (process.env.MOTIF_SMOKE === '1') {
   await writeFile('/tmp/motif-groq-settings.png',(await window.webContents.capturePage()).toPNG());
   await window.webContents.executeJavaScript("[...document.querySelectorAll('.transcription-panel button')].find(b=>b.textContent==='Close').click()");
 
-  const project=mkdtempSync(path.join(os.tmpdir(),'motif-media-ui-'));const source=path.join(project,'verification.mp4');execFileSync('/usr/bin/ffmpeg',['-v','error','-f','lavfi','-i','color=c=teal:s=160x120:d=0.5','-c:v','libx264','-threads','1',source]);await media.select(project);const imported=await media.importSource(source);await media.run(imported.sources[0].id,'render',{ffmpeg:'/usr/bin/ffmpeg'});
+  const project=mkdtempSync(path.join(os.tmpdir(),'motif-media-ui-'));const source=path.join(project,'verification.mp4');execFileSync('/usr/bin/ffmpeg',['-v','error','-f','lavfi','-i','color=c=teal:s=160x120:d=0.5','-c:v','libx264','-threads','1',source]);await media.select(project);const imported=await media.importSource(source);const smokeFfmpeg=await findMediaExecutable('ffmpeg');if(!smokeFfmpeg)throw Error('App could not discover FFmpeg');await media.run(imported.sources[0].id,'render',{ffmpeg:smokeFfmpeg});console.log('FFMPEG_APP_SMOKE',JSON.stringify({discovered:smokeFfmpeg,succeeded:media.state().jobs.at(-1)?.state==='succeeded'}));
   await window.webContents.executeJavaScript("document.querySelectorAll('.sidebar nav button')[0].click()");await new Promise(resolve=>setTimeout(resolve,2200));await writeFile('/tmp/motif-media-real.png',(await window.webContents.capturePage()).toPNG());
   app.quit();
 }

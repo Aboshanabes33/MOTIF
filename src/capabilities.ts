@@ -7,7 +7,7 @@ export async function checkCapabilities(env:NodeJS.ProcessEnv=process.env):Promi
  const definitions=[{id:'ffmpeg',name:'FFmpeg',args:['-version']},{id:'ffprobe',name:'FFprobe',args:['-version']},{id:'whisper-cli',name:'Whisper.cpp',args:['--help']},{id:'hyperframes',name:'HyperFrames',args:['--version']}];
  return Promise.all(definitions.map(async tool=>{
   let executable=bundledExecutable(tool.id)??'';
-  if(!bundledRoot())for(const dir of (env.PATH??'').split(path.delimiter).filter(Boolean)){
+  if(!executable&&!bundledRoot())for(const dir of (env.PATH??'').split(path.delimiter).filter(Boolean)){
    const candidate=path.join(dir,tool.id+(process.platform==='win32'?'.exe':''));
    try{await access(candidate,process.platform==='win32'?constants.F_OK:constants.X_OK);if((await stat(candidate)).isFile()){executable=candidate;break;}}catch{}
   }
@@ -17,4 +17,4 @@ export async function checkCapabilities(env:NodeJS.ProcessEnv=process.env):Promi
  }));
 }
 
-export async function findMediaExecutable(id:'ffmpeg'|'whisper-cli'|'hyperframes'):Promise<string|undefined>{if(bundledRoot())return bundledExecutable(id);for(const dir of (process.env.PATH??'').split(path.delimiter).filter(Boolean)){const file=path.join(dir,id+(process.platform==='win32'?'.exe':''));try{await access(file,process.platform==='win32'?constants.F_OK:constants.X_OK);if((await stat(file)).isFile())return file;}catch{}}}
+export async function findMediaExecutable(id:'ffmpeg'|'whisper-cli'|'hyperframes'):Promise<string|undefined>{const included=bundledExecutable(id);if(included||bundledRoot())return included;for(const dir of (process.env.PATH??'').split(path.delimiter).filter(Boolean)){const file=path.join(dir,id+(process.platform==='win32'?'.exe':''));try{await access(file,process.platform==='win32'?constants.F_OK:constants.X_OK);if((await stat(file)).isFile())return file;}catch{}}}
