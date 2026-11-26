@@ -1,6 +1,6 @@
 {
   "name": "motif-phase0",
-  "version": "0.1.0",
+  "version": "0.1.1-lite-test",
   "private": true,
   "type": "module",
   "engines": {
@@ -36,5 +36,6 @@
   },
   "main": "dist-electron/main.js",
   "description": "MOTIF experimental local video workspace",
-  "author": "MOTIF"
+  "author": "MOTIF",
+  "motifRuntime": "lite"
 }

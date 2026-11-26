@@ -3,7 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync,readFileSync } from 'node:fs';
 import os from 'node:os';
 import { writeFile,rename }  from 'node:fs/promises';
 import { Request, Reply } from './contract.js';
@@ -13,7 +13,9 @@ import { checkCapabilities,findMediaExecutable } from './capabilities.js';
 import { detectAgents, installMcp } from './agents.js';
 import { startService } from './service.js';
 
-if(app.isPackaged&&process.platform==='win32')process.env.MOTIF_BUNDLED_ROOT=path.join(process.resourcesPath,'motif-tools');
+const liteRuntime=JSON.parse(readFileSync(path.join(app.getAppPath(),'package.json'),'utf8')).motifRuntime==='lite';
+if(app.isPackaged&&process.platform==='win32'&&!liteRuntime)process.env.MOTIF_BUNDLED_ROOT=path.join(process.resourcesPath,'motif-tools');
+if(liteRuntime)delete process.env.MOTIF_BUNDLED_ROOT;
 if(process.env.MOTIF_SMOKE==='1') app.setPath('userData',mkdtempSync(path.join(os.tmpdir(),'motif-electron-smoke-')));
 app.enableSandbox();
 void app.whenReady().then(async () => {

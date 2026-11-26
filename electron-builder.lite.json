@@ -1,0 +1,10 @@
+{
+  "extends": "./electron-builder.json",
+  "directories": {
+    "output": "release-lite-test"
+  },
+  "compression": "maximum",
+  "win": {
+    "artifactName": "MOTIF-0.1.1-lite-test-x64.exe"
+  }
+}
