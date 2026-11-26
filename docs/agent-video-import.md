@@ -1,7 +1,0 @@
-# Import a video from the agent conversation
-
-The new `motif_import_video` MCP tool accepts an exact absolute local video path and copies it into the currently selected MOTIF project after owner approval. The source stays unchanged. The authenticated HTTP MCP service and fixed-allowlist stdio connector both expose it. Path/extension/regular-file/size checks reject URLs, UNC paths, traversal, links and empty/oversize files. Approval displays full path and byte size, default Cancel. No arbitrary shell or network fetch.
-
-Real boundary: MOTIF does not receive chat messages or scrape Claude/Codex attachments. If the agent client exposes the attached video as a local readable path, it can call the tool. If the attachment is cloud-only or hidden in the client's sandbox, uploading it to chat alone is not enough. The agent must export/save it through supported client tools or ask for a local file. Never invent a path. No claim that every Claude Desktop video attachment is exposed to MCP. No generic inbox subscription.
-
-MOTIF must be running, MCP registered and a project selected once. A native confirmation still appears, so this removes manual file-picker import, not every app interaction. Closed-app background import and fresh-project creation from chat are not implemented. Existing token expiry/restart limitations remain. Tests cover real backing copy and MCP SDK path; native client upload interoperability and Windows dialog behavior are not verified. Hostile filesystem races remain inherited limitations, not sandbox proof.

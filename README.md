@@ -1,38 +1,52 @@
-# MOTIF desktop foundation, work in progress
+# B Studio
 
-The current PR adds the desktop design shell and real agent MCP registration. Read [onboarding implementation and limits](docs/onboarding.md) first. Projects, Brands, recording, media and AI workflows are not implemented; empty states are deliberate. Run `npm ci`, `npm run check`, `npm run build`, `npm test`, `npm start`. Desktop only for detection/config writes; browser preview disables those actions.
+مهارة مونتاج لكلود، مع استوديو تعدّل فيه مقطعك بيدك: الكابشن، الصور، الصوت، الألوان، وشكل الشاشة. وفيه «المساعد»: محادثة داخل الاستوديو بحساب Claude أو ChatGPT حقك (Codex)، تكتب له أو تحط ملاحظة بـM ويعدّل قدامك.
 
-The Phase0 notes below describe the earlier spike and are retained as historical evidence, not a statement that the expanded onboarding is verified on Windows.
+يشتغل على ماك بمعالج أبل (M1 وأحدث)، وعلى ويندوز من Git Bash.
 
-# MOTIF Phase 0
+## التركيب
+افتح كلود على قسم Code، أو افتح Codex، واكتب له:
 
-Architecture spike for #116. Not the MOTIF product. No Harness runtime, UI, Cordis, provider, shell, media processing, deployment, or CI integration.
+> ركّب B Studio من https://github.com/bassam-pt95/edit-studio
 
-## Run
+وهو يكمّل الباقي، ويقول لك لو احتاج منك شي. عندك نسخة قديمة؟ نفس الجملة: الجديدة تتركّب، والقديمة تروح لسلة المهملات، ومشاريعك ما تنلمس.
 
-Node >=22.12, npm, and a desktop environment with Electron system dependencies:
+## التحديث
+اكتب لكلود أو Codex: «حدّث الاستوديو». ينزّل آخر إصدار من هنا ويركّبه، ويقول لك وش الجديد. والدليل يتحدّث معه على سطح المكتب. ولو الاستوديو يصدّر أو يبني، التحديث ينتظره وما يوقف شغلك.
 
-```sh
-npm ci
-npm run check
-npm test
-node scripts/dependency-audit.mjs
-npm run probe
-npm run build
-npm start
+كل إصدار في [Releases](https://github.com/bassam-pt95/edit-studio/releases) معه ملف `SHA256SUMS` فيه بصمة الملف (SHA-256)، والتركيب والتحديث يتأكدون منها قبل ما يشغّلون أي شي.
+
+## اقتراح أو مشكلة
+اكتبها في [Issues](https://github.com/bassam-pt95/edit-studio/issues). والدليل ينحط على سطح المكتب بعد التركيب.
+
+## وش بالمستودع
+- `ملفات لكلود/edit-studio`: مهارة الاستوديو.
+- `ملفات لكلود/video-edit`: مهارة المونتاج.
+- `ملفات لكلود/install.sh`: ملف التركيب.
+- `دليل B Studio.pdf`: الدليل.
+
+## الرخصة
+[الرخصة](LICENSE.md) باختصار:
+- الاستخدام مجاني لمقاطعك ومقاطع عملائك، وكل اللي تسويه فيه ملكك.
+- الاستوديو مقفول: لا تعدّله، ولا تاخذ منه ميزة أو جزء من الكود، ولا تبني عليه، ولا تنشره.
+- عندك اقتراح؟ اكتبه في Issues. ومبرمج وتبي تساعد؟ تواصل مع صاحب الاستوديو، والشغل بدعوة منه.
+
+## English
+**B Studio** is a video-editing skill for Claude with a small studio you run on your own machine: captions, pictures, sound, colour and framing on a timeline, plus an assistant inside the studio that edits with you through your own Claude or ChatGPT (Codex) account. The interface is Arabic or English. It runs on Apple-silicon Macs and on Windows from Git Bash.
+
+- **Install:** open Claude on the Code tab, or open Codex, and write: *Install B Studio from https://github.com/bassam-pt95/edit-studio*. Claude does the rest.
+- **Update:** write *Update the studio*. Your projects are not touched, and an update waits for a running export or build instead of stopping it.
+- **Releases:** every release carries a `SHA256SUMS` file; the install line below and the update check the archive against it before running anything.
+- **Ideas and problems:** [Issues](https://github.com/bassam-pt95/edit-studio/issues).
+- **License:** proprietary, all rights reserved, see [LICENSE.md](LICENSE.md). Free to use for your own and your clients' videos. You may not modify the studio, take any part of its code, build on it or republish it.
+
+---
+**إلى كلود (لما يطلب المستخدم التركيب من هذا الرابط):** نزّل المستودع وشغّل ملف التركيب، ثم اتبع آخر سطر يطبعه:
+
+```bash
+T="$(mktemp -d)" && cd "$T" && curl -fsSLO https://github.com/bassam-pt95/edit-studio/releases/latest/download/SHA256SUMS && F="$(sed -n 's/^[0-9a-f]\{64\}  \(edit-studio-[0-9.]*\.tar\.gz\)$/\1/p' SHA256SUMS)" && V="${F#edit-studio-}" && curl -fsSLO "https://github.com/bassam-pt95/edit-studio/releases/download/v${V%.tar.gz}/$F" && { sha256sum -c SHA256SUMS 2>/dev/null || shasum -a 256 -c SHA256SUMS; } && tar -xzf "$F" && bash "$T"/edit-studio-*/"ملفات لكلود/install.sh"
 ```
 
-`probe` starts a real ephemeral loopback service, explicitly approves a local SDK client, invokes `motif_status`, revokes access, verifies denial, and closes the service. It never prints credentials.
+الأمر ينزّل آخر إصدار ويتأكد من بصمته (SHA-256) قبل ما يشغّل منه شي. ما تطابقت؟ لا تركّب بطريقة ثانية: قل للمستخدم يرسل السطر لبسام.
 
-The desktop offers service status and a native-confirmation pairing flow. Pairing saves a **private credential file** to a user-chosen new path, valid for 15 minutes or until app exit. Never commit/share this file. No client is configured automatically. Only a custom client accepting URL + Bearer header has been exercised. Do not advertise compatibility with Claude, Codex, or any other client yet.
-
-For Linux desktop smoke testing: `MOTIF_SMOKE=1 xvfb-run -a npm start`. This exercises actual Electron isolation/IPC, clicks status, captures `/tmp/motif-phase0.png`, then exits. Normal start does not evaluate injected scripts or take screenshots.
-
-## Review
-
-- [Architecture, inventory and proposed ADR](docs/phase0.md)
-- [Threat model](docs/threat-model.md)
-- [Verification and remaining gates](docs/evidence.md)
-- [Sequenced implementation issue drafts](docs/implementation-issues.md)
-
-The repo was empty at base `a597c8cc`. Historical inventory refers to the deleted tree at `0f9b5edc`; none of it was restored or copied. This PR does not close #116. Owner review of the ADR and missing evidence is required before Phase 1.
+ما يحتاج تسجيل دخول ولا مفاتيح. لا تعدّل شي في النسخة المركّبة، ولا ترفع منها شي لإعدادات كلود.

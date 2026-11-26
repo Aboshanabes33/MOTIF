@@ -1,9 +1,1 @@
-node_modules/
-dist/
-dist-electron/
-*.log
-
-/release/
-/release-bundled/
-/vendor/
-/.whisper-windows-build/
+.DS_Store

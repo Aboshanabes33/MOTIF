@@ -1,4 +1,0 @@
-// Rebuild raster assets with: node scripts/generate-icons.mjs && convert -background none build/icon.svg -resize 1024x1024 build/icon.png && convert build/icon.png -define icon:auto-resize=256,128,64,48,32,16 build/icon.ico
-import React from 'react';import {renderToStaticMarkup} from 'react-dom/server';import {Aperture} from 'lucide-react';import {writeFileSync} from 'node:fs';
-const mark=renderToStaticMarkup(React.createElement(Aperture,{color:'#eef5f3',strokeWidth:1.7})).replace(/<svg[^>]*>/,'<g transform="translate(128 128) scale(32)" fill="none" stroke="#eef5f3" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">').replace('</svg>','</g>');
-writeFileSync('build/icon.svg',`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="220" fill="#21574f"/>${mark}</svg>\n`);
