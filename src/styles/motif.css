@@ -1119,8 +1119,14 @@ code,
 
 .release-dl-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: 12px;
+}
+
+.release-hero-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .release-dl-card {
@@ -1131,6 +1137,7 @@ code,
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
 .release-dl-card.is-primary {
@@ -1547,6 +1554,66 @@ code,
 
   .statusbar-shortcuts {
     display: none;
+  }
+
+  .standalone-release-wrap {
+    padding: 12px 12px calc(36px + env(safe-area-inset-bottom));
+  }
+
+  .release-hero {
+    padding: 16px 14px;
+    gap: 14px;
+  }
+
+  .release-icon-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .release-app-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+  }
+
+  .release-hero-actions {
+    width: 100%;
+  }
+
+  .release-hero-actions .btn,
+  .release-hero-actions .glass-btn {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .release-dl-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .release-dl-card {
+    padding: 14px;
+  }
+
+  .release-dl-card .btn {
+    min-height: 46px;
+  }
+
+  .content-card {
+    min-width: 0;
+  }
+
+  .code-block {
+    max-width: 100%;
+    font-size: 11px;
+    padding: 11px 12px;
+  }
+
+  .input,
+  .textarea,
+  .select {
+    font-size: 16px;
+    min-height: 44px;
   }
 }
 
