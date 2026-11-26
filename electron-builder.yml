@@ -13,6 +13,7 @@ files:
   - electron/**
   - server/**
   - mcp/**
+  - video-edit/**
   - build/icon.ico
   - build/icon.png
   - package.json

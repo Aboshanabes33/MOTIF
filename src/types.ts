@@ -1,6 +1,6 @@
 export type Lang = "en" | "ar";
 
-export type NavView = "today" | "brands" | "voice" | "search" | "mcp" | "releases";
+export type NavView = "today" | "brands" | "voice" | "search" | "mcp" | "releases" | "agent";
 
 export type TodaySegment = "all" | "videos" | "footage";
 
@@ -224,6 +224,105 @@ export interface ReleasesPayload {
   current: CurrentRelease;
   githubReleases: GithubReleaseItem[];
   syncedFromGithub: boolean;
+}
+
+/* ── Video agent: the video-edit stack is what the local agent runs on ── */
+
+export type VideoMode = "quick" | "light" | "full";
+
+export interface VideoStageRef {
+  id: string;
+  n: number;
+  title: { ar: string; en: string };
+  doc: string;
+  note?: { ar: string; en: string };
+  optional?: boolean;
+}
+
+export interface VideoEditIdentity {
+  handle: string;
+  bg: string;
+  ink: string;
+  acc: string;
+  font: string;
+  style: string;
+  numerals: string;
+}
+
+export interface VideoClipProject {
+  name: string;
+  dir: string;
+  mode: string;
+  durationSec: number | null;
+  wordCards: number;
+  scenes: number;
+  frame: string;
+  style: string;
+  files: Record<string, boolean>;
+  delivered: boolean;
+  updatedAt: string | null;
+  srtFiles: string[];
+  deliverFiles: string[];
+}
+
+export interface VideoEditStatus {
+  stack: { name: string; version: string; entrypoint: string; updated: string };
+  skillDir: string;
+  home: string;
+  homeReady: boolean;
+  profileReady: boolean;
+  identity: VideoEditIdentity | null;
+  engine: { remotionReady: boolean; sharedDir: string };
+  sounds: number;
+  projects: VideoClipProject[];
+  stageCount: number;
+  modes: string[];
+  redLines: number;
+}
+
+export interface VideoEditStack {
+  stack: {
+    name: string;
+    version: string;
+    title: { ar: string; en: string };
+    summary: { ar: string; en: string };
+    modes: Record<VideoMode, { ar: string; en: string; writeModeFile: boolean; stages: string[] }>;
+    frames: Record<string, { size: number[]; ar: string; en: string }>;
+    aspectToFrame: Record<string, string>;
+    styles: Array<{ id: string; doc: string; ar: string; en: string }>;
+    redLines: Array<{ ar: string; en: string }>;
+    stages: VideoStageRef[];
+    checks: Record<string, { ar: string; en: string; command: string }>;
+  };
+  skillDir: string;
+  stackFile: string;
+  brief: string;
+}
+
+export interface VideoPlanStep {
+  id: string;
+  n: number;
+  title: { ar: string; en: string };
+  commands: string[];
+  checks: string[];
+}
+
+export interface VideoPlan {
+  mode: VideoMode;
+  name: string;
+  frame: string;
+  source: string;
+  work: string;
+  steps: VideoPlanStep[];
+}
+
+export interface VideoRunResult {
+  ok: boolean;
+  command: string;
+  exitCode: number;
+  gate: "ok" | "refused" | "error";
+  elapsedMs: number;
+  output: string;
 }
 
 export type SelectedItem =

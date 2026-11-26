@@ -22,7 +22,7 @@ export const CURRENT_RELEASE = {
   releaseUrl: `https://github.com/${GITHUB_REPO}/releases`,
   highlights: [
     "Complete React 19 + TypeScript desktop rebuild faithful to the MOTIF Liquid Glass Design Spec",
-    "Built-in Model Context Protocol (MCP) server with 16 tools, 5 resources & 2 prompts for Claude, Cursor, and Codex",
+    "Built-in Model Context Protocol (MCP) server with 20 tools, 8 resources & 3 prompts for Claude, Cursor, and Codex — including the video-edit agent stack",
     "AI agents can inspect and edit saved Brands (colors, logo, audience, tone of voice, channels, notes), Projects, Footage, and Voice Notes in real time",
     "Frameless Windows Electron shell with native window controls, embedded local server, and custom MOTIF icon",
     "Full Arabic (RTL) and English (LTR) interface with keyboard shortcuts (1–6, /, Escape)",
