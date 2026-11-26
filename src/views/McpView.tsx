@@ -74,7 +74,7 @@ const DEFAULT_ARGS: Record<string, string> = {
   create_voice_note: JSON.stringify(
     {
       title: "Agent Brief Note",
-      transcript: "Match Qafila Studio's mint palette and keep intro under 3 seconds.",
+      transcript: "Match Qafila's mint palette and keep the intro under 3 seconds.",
       brandId: "b_qafila01",
     },
     null,
