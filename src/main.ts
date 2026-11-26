@@ -17,6 +17,7 @@ if(app.isPackaged&&process.platform==='win32')process.env.MOTIF_BUNDLED_ROOT=pat
 if(process.env.MOTIF_SMOKE==='1') app.setPath('userData',mkdtempSync(path.join(os.tmpdir(),'motif-electron-smoke-')));
 app.enableSandbox();
 void app.whenReady().then(async () => {
+if(process.platform==='win32')app.setAppUserModelId('local.motif.desktop');
 const media=new MediaWorkspace();
 let approvingJob=false;
 const runMedia=async(sourceId:string,kind:'render'|'transcribe'|'captions')=>{if(approvingJob)throw new Error('A job approval is already open');approvingJob=true;try{const approval=await dialog.showMessageBox(window,{type:'question',buttons:['Cancel','Run local job'],defaultId:0,cancelId:0,message:`Run ${kind} on this imported source?`,detail:'Only the selected project source ID is allowed. Outputs stay inside .motif/outputs. No provider request. Render is capped at 60 seconds of video. Transcription uses cached large-v3-q5_0 via whisper.cpp in bounded chunks; no download. Captions use the uncorrected transcript.'});if(approval.response!==1)throw new Error('Job not approved');return media.run(sourceId,kind,{ffmpeg:await findMediaExecutable('ffmpeg'),whisper:await findMediaExecutable('whisper-cli'),hyperframes:await findMediaExecutable('hyperframes')});}finally{approvingJob=false;}};
@@ -26,7 +27,7 @@ const brands=new BrandStore(path.join(app.getPath('userData'),'motif-data'));
 let capabilityCheck:Promise<unknown>|undefined;
 const page = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/index.html');
 const pageURL = pathToFileURL(page).href;
-const window = new BrowserWindow({ width: 1440, height: 900, minWidth: 760, minHeight: 620, frame: false, webPreferences: {
+const window = new BrowserWindow({ width: 1440, height: 900, minWidth: 760, minHeight: 620, frame: false, icon: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../build/icon.png'), webPreferences: {
   preload: path.join(path.dirname(fileURLToPath(import.meta.url)), 'preload.cjs'),
   nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true,
 } });
@@ -105,6 +106,18 @@ if (process.env.MOTIF_SMOKE === '1') {
   await writeFile('/tmp/motif-brand-saved.png',(await window.webContents.capturePage()).toPNG());
   const restored=await brands.list();if(restored.length!==1)throw new Error('Brand reload failed');
   console.log('BRAND_SMOKE',JSON.stringify({saved:true,reloaded:true,id:restored[0].id}));
+  await window.webContents.executeJavaScript("document.querySelector('.brand-card button').click()");
+  await new Promise(resolve=>setTimeout(resolve,150));
+  await window.webContents.executeJavaScript("document.querySelector('[aria-label=Blue]').click()");
+  await new Promise(resolve=>setTimeout(resolve,150));
+  await window.webContents.executeJavaScript("document.querySelector('[aria-label=White]').click()");
+  await new Promise(resolve=>setTimeout(resolve,150));
+  await writeFile('/tmp/motif-brand-picker.png',(await window.webContents.capturePage()).toPNG());
+  await window.webContents.executeJavaScript("document.querySelector('.brand-form button.primary').click()");
+  await new Promise(resolve=>setTimeout(resolve,350));
+  const colored=(await brands.list())[0];if(!colored.colors.includes('#2563eb')||!colored.colors.includes('#ffffff')||!colored.colors.includes('#21574f'))throw Error('Color picker did not preserve/save swatches');
+  console.log('COLOR_PICKER_SMOKE',JSON.stringify({saved:true,colors:colored.colors}));
+
   const project=mkdtempSync(path.join(os.tmpdir(),'motif-media-ui-'));const source=path.join(project,'verification.mp4');execFileSync('/usr/bin/ffmpeg',['-v','error','-f','lavfi','-i','color=c=teal:s=160x120:d=0.5','-c:v','libx264','-threads','1',source]);await media.select(project);const imported=await media.importSource(source);await media.run(imported.sources[0].id,'render',{ffmpeg:'/usr/bin/ffmpeg'});
   await window.webContents.executeJavaScript("document.querySelectorAll('.sidebar nav button')[0].click()");await new Promise(resolve=>setTimeout(resolve,2200));await writeFile('/tmp/motif-media-real.png',(await window.webContents.capturePage()).toPNG());
   app.quit();
