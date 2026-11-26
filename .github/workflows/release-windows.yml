@@ -1,0 +1,73 @@
+name: Build & Release MOTIF for Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional GitHub Release tag (e.g. v2.0.0). Leave empty for artifact-only build."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run automated test suite (Backend + MCP + Store)
+        run: npm test
+
+      - name: Typecheck & build React production bundle
+        run: npm run build
+
+      - name: Package Windows Installer (NSIS) & Portable EXE
+        run: npx electron-builder --win nsis portable --x64 --publish never
+
+      - name: Generate SHA-256 Checksums
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path release -Filter "*.exe"
+          $lines = @()
+          foreach ($f in $files) {
+            $hash = (Get-FileHash -Algorithm SHA256 -Path $f.FullName).Hash.ToLower()
+            $lines += "$hash  $($f.Name)"
+          }
+          $lines | Out-File -FilePath release\SHA256SUMS.txt -Encoding utf8
+          Get-Content release\SHA256SUMS.txt
+
+      - name: Upload Windows Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: motif-windows-x64
+          path: |
+            release/MOTIF-Setup-*.exe
+            release/MOTIF-Portable-*.exe
+            release/SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: MOTIF ${{ github.event.inputs.release_tag || github.ref_name }} — Windows x64
+          generate_release_notes: true
+          files: |
+            release/MOTIF-Setup-*.exe
+            release/MOTIF-Portable-*.exe
+            release/SHA256SUMS.txt
