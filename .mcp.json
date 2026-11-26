@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "motif": {
+      "command": "node",
+      "args": ["./mcp/motif-mcp.mjs"]
+    }
+  }
+}

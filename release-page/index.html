@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c2729" />
+    <title>MOTIF Releases — Download for Windows</title>
+    <link rel="icon" type="image/svg+xml" href="../public/icon.svg" />
+    <style>
+      :root {
+        --ink: #ffffff;
+        --ink-2: rgba(255, 255, 255, 0.74);
+        --ink-3: rgba(255, 255, 255, 0.48);
+        --accent: #9fd8cd;
+        --card: rgba(7, 24, 25, 0.72);
+        --border: rgba(255, 255, 255, 0.09);
+        --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 100%);
+        --font-display: Georgia, "Times New Roman", serif;
+        --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+        --font-mono: "Cascadia Code", ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; min-height: 100%; }
+      body {
+        font-family: var(--font-ui);
+        color: var(--ink);
+        background:
+          radial-gradient(90% 55% at 85% -10%, rgba(126, 200, 186, 0.32), transparent 55%),
+          linear-gradient(180deg, #2f7268 0%, #21574f 34%, #16403c 62%, #0c2729 100%);
+        background-attachment: fixed;
+        line-height: 1.5;
+      }
+      .mountains {
+        position: fixed;
+        inset: auto 0 0 0;
+        height: 42vh;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .mountains svg { width: 100%; height: 100%; display: block; }
+      .wrap {
+        position: relative;
+        z-index: 2;
+        max-width: 1020px;
+        margin: 0 auto;
+        padding: 28px 20px 64px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .wordmark {
+        font-family: var(--font-display);
+        font-size: 18px;
+        letter-spacing: 0.16em;
+        font-weight: 600;
+        text-decoration: none;
+        color: var(--ink);
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .glass {
+        background: var(--glass-bg);
+        -webkit-backdrop-filter: blur(28px) saturate(160%);
+        backdrop-filter: blur(28px) saturate(160%);
+        border: 1px solid rgba(255, 255, 255, 0.20);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 12px 36px rgba(0, 0, 0, 0.26);
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 22px 24px;
+      }
+      .hero { display: flex; flex-direction: column; gap: 18px; }
+      .hero-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        background: rgba(10, 36, 35, 0.85);
+        color: var(--accent);
+        border: 1px solid rgba(159, 216, 205, 0.35);
+      }
+      h1 {
+        margin: 10px 0 4px;
+        font-family: var(--font-display);
+        font-size: clamp(26px, 4vw, 34px);
+        font-weight: 500;
+        line-height: 1.15;
+      }
+      .sub { margin: 0; color: var(--ink-2); font-size: 14.5px; }
+      .dl-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 14px;
+      }
+      .dl-box {
+        background: rgba(5, 18, 19, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 16px;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .dl-box.primary { border-color: rgba(159, 216, 205, 0.36); }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--ink);
+        font-size: 13.5px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .btn:hover { background: rgba(255, 255, 255, 0.16); }
+      .btn-primary {
+        background: var(--accent);
+        color: #072223;
+        border-color: var(--accent);
+      }
+      .btn-primary:hover { background: #b5e6dc; }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 16px;
+      }
+      pre {
+        margin: 0;
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(3, 12, 13, 0.88);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: #d8f2ec;
+        overflow-x: auto;
+      }
+      .mono { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+      .rel-list { display: flex; flex-direction: column; gap: 12px; }
+      ul { margin: 8px 0 0; padding-inline-start: 18px; color: var(--ink-2); }
+      li { margin-bottom: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="mountains" aria-hidden="true">
+      <svg viewBox="0 0 1440 420" preserveAspectRatio="none">
+        <path d="M0,210 C180,140 320,175 490,120 C670,62 840,152 1030,108 C1195,70 1320,125 1440,92 L1440,420 L0,420 Z" fill="#12403c" fill-opacity="0.70"/>
+        <path d="M0,275 C210,205 400,255 620,192 C820,136 990,224 1210,176 C1320,152 1385,175 1440,165 L1440,420 L0,420 Z" fill="#0d302e" fill-opacity="0.90"/>
+        <path d="M0,335 C250,278 460,322 720,276 C960,234 1180,295 1440,248 L1440,420 L0,420 Z" fill="#082321"/>
+      </svg>
+    </div>
+
+    <main class="wrap">
+      <header class="topbar">
+        <a class="wordmark" href="https://github.com/Aboshanabes33/MOTIF">
+          <span>MOTIF</span>
+        </a>
+        <div style="display:flex;gap:8px;">
+          <button id="langBtn" class="btn glass" style="height:34px;border-radius:999px;">العربية</button>
+          <a class="btn glass" style="height:34px;border-radius:999px;" href="https://github.com/Aboshanabes33/MOTIF/releases" target="_blank" rel="noreferrer">GitHub Releases</a>
+        </div>
+      </header>
+
+      <section class="card hero">
+        <div class="hero-head">
+          <div>
+            <span class="badge">v2.0.0 · Windows 10 / 11 (x64) · React + Electron + MCP</span>
+            <h1 id="heroTitle">MOTIF Desktop for Windows</h1>
+            <p id="heroSub" class="sub">Liquid Glass creative studio with saved Brand Identities and built-in Model Context Protocol (MCP) for Claude, Cursor, and Codex.</p>
+          </div>
+        </div>
+
+        <div class="dl-grid">
+          <div class="dl-box primary">
+            <strong>Windows Installer (NSIS Setup)</strong>
+            <span class="mono">MOTIF-Setup-2.0.0-x64.exe</span>
+            <p class="sub" style="font-size:13px;">Recommended for Windows 10/11 — Start Menu shortcut, local workspace, and unpacked MCP server ready for AI agents.</p>
+            <a class="btn btn-primary" href="https://github.com/Aboshanabes33/MOTIF/releases/latest" target="_blank" rel="noreferrer">Download Installer (.exe)</a>
+          </div>
+          <div class="dl-box">
+            <strong>Windows Portable Executable</strong>
+            <span class="mono">MOTIF-Portable-2.0.0-x64.exe</span>
+            <p class="sub" style="font-size:13px;">Single standalone Windows x64 executable with zero installation wizard required.</p>
+            <a class="btn" href="https://github.com/Aboshanabes33/MOTIF/releases/latest" target="_blank" rel="noreferrer">Download Portable (.exe)</a>
+          </div>
+        </div>
+      </section>
+
+      <div class="grid-2">
+        <section class="card">
+          <strong style="font-size:16px;">What’s New in v2.0.0</strong>
+          <ul>
+            <li>Complete React 19 + TypeScript rebuild matching the MOTIF Liquid Glass Design Spec</li>
+            <li>Built-in MCP server (16 tools, 5 resources, 2 prompts) so AI agents read and edit your Brands, Projects, Footage, and Voice Notes</li>
+            <li>Frameless Electron Windows desktop shell with custom title bar and official MOTIF icon</li>
+            <li>Full Arabic (RTL) and English (LTR) support with keyboard shortcuts</li>
+          </ul>
+        </section>
+
+        <section class="card">
+          <strong style="font-size:16px;">Connect Claude / Cursor / Codex via MCP</strong>
+          <p class="sub" style="font-size:13px;margin:6px 0 10px;">Add MOTIF to your MCP config so your AI model sees saved Brands &amp; Projects:</p>
+          <pre dir="ltr">{
+  "mcpServers": {
+    "motif": {
+      "command": "node",
+      "args": ["C:\\Program Files\\MOTIF\\resources\\app.asar.unpacked\\mcp\\motif-mcp.mjs"]
+    }
+  }
+}</pre>
+        </section>
+      </div>
+
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <strong style="font-size:16px;">GitHub Release History (Aboshanabes33/MOTIF)</strong>
+          <span id="syncNote" class="sub" style="font-size:12px;">Loading live releases…</span>
+        </div>
+        <div id="releaseList" class="rel-list"></div>
+      </section>
+    </main>
+
+    <script>
+      const langBtn = document.getElementById("langBtn");
+      let lang = "en";
+      langBtn.addEventListener("click", () => {
+        lang = lang === "en" ? "ar" : "en";
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+        langBtn.textContent = lang === "en" ? "العربية" : "EN";
+        document.getElementById("heroTitle").textContent =
+          lang === "ar" ? "MOTIF لنظام ويندوز" : "MOTIF Desktop for Windows";
+        document.getElementById("heroSub").textContent =
+          lang === "ar"
+            ? "استوديو إبداعي بتصميم Liquid Glass مع إدارة البراندات وخادم MCP مدمج لربط Claude وCursor وCodex."
+            : "Liquid Glass creative studio with saved Brand Identities and built-in Model Context Protocol (MCP) for Claude, Cursor, and Codex.";
+      });
+
+      const listEl = document.getElementById("releaseList");
+      const syncEl = document.getElementById("syncNote");
+      const fmtSize = (b) => b >= 1e9 ? (b / 1073741824).toFixed(2) + " GB" : (b / 1048576).toFixed(1) + " MB";
+
+      function renderReleases(items) {
+        listEl.innerHTML = items.map((r) => {
+          const exes = (r.assets || []).filter((a) => /\.exe$/i.test(a.name));
+          return `<div class="dl-box">
+            <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;">
+              <strong>${r.name || r.tag_name}</strong>
+              <span class="badge">${r.tag_name}</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+              ${exes.map((a) => `<a class="btn" href="${a.browser_download_url}" target="_blank" rel="noreferrer">${a.name} (${fmtSize(a.size)})</a>`).join("")}
+              <a class="btn" href="${r.html_url}" target="_blank" rel="noreferrer">Release Notes</a>
+            </div>
+          </div>`;
+        }).join("");
+      }
+
+      fetch("https://api.github.com/repos/Aboshanabes33/MOTIF/releases?per_page=8")
+        .then((r) => r.ok ? r.json() : Promise.reject())
+        .then((data) => {
+          syncEl.textContent = `${data.length} releases synced`;
+          renderReleases(data);
+        })
+        .catch(() => {
+          syncEl.textContent = "Offline fallback catalog";
+          renderReleases([
+            {
+              tag_name: "v0.1.2-lite-test",
+              name: "MOTIF 0.1.2 Lite test, Groq plus bundled FFmpeg",
+              html_url: "https://github.com/Aboshanabes33/MOTIF/releases/tag/v0.1.2-lite-test",
+              assets: [{ name: "MOTIF-0.1.2-lite-test-x64.exe", size: 149420354, browser_download_url: "https://github.com/Aboshanabes33/MOTIF/releases/download/v0.1.2-lite-test/MOTIF-0.1.2-lite-test-x64.exe" }],
+            },
+            {
+              tag_name: "v0.1.0",
+              name: "MOTIF 0.1.0, bundled Windows x64",
+              html_url: "https://github.com/Aboshanabes33/MOTIF/releases/tag/v0.1.0",
+              assets: [{ name: "MOTIF-0.1.0-bundled-x64.exe", size: 1419558058, browser_download_url: "https://github.com/Aboshanabes33/MOTIF/releases/download/v0.1.0/MOTIF-0.1.0-bundled-x64.exe" }],
+            },
+          ]);
+        });
+    </script>
+  </body>
+</html>

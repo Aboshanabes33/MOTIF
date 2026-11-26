@@ -1,0 +1,42 @@
+appId: studio.motif.desktop
+productName: MOTIF
+copyright: Copyright © 2026 MOTIF
+directories:
+  output: release
+  buildResources: build
+asar: true
+asarUnpack:
+  - mcp/**
+  - server/**
+files:
+  - dist-web/**
+  - electron/**
+  - server/**
+  - mcp/**
+  - build/icon.ico
+  - build/icon.png
+  - package.json
+win:
+  icon: build/icon.ico
+  requestedExecutionLevel: asInvoker
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MOTIF
+  artifactName: MOTIF-Setup-${version}-${arch}.${ext}
+portable:
+  artifactName: MOTIF-Portable-${version}-${arch}.${ext}
+publish:
+  provider: github
+  owner: Aboshanabes33
+  repo: MOTIF

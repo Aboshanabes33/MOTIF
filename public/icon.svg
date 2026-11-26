@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="256" y1="32" x2="256" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2f7268"/>
+      <stop offset="35%" stop-color="#21574f"/>
+      <stop offset="68%" stop-color="#16403c"/>
+      <stop offset="100%" stop-color="#0b2426"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="78%" cy="14%" r="60%">
+      <stop offset="0%" stop-color="#7ec8ba" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#7ec8ba" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="monogram" x1="256" y1="130" x2="256" y2="375" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f6fdfb"/>
+      <stop offset="100%" stop-color="#9fd8cd"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="256" y1="32" x2="256" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#9fd8cd" stop-opacity="0.14"/>
+    </linearGradient>
+    <clipPath id="squircle">
+      <rect x="32" y="32" width="448" height="448" rx="108"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#squircle)">
+    <rect x="32" y="32" width="448" height="448" fill="url(#bg)"/>
+    <rect x="32" y="32" width="448" height="448" fill="url(#glow)"/>
+    <path d="M32 374 Q148 332 264 366 T480 356 L480 480 L32 480 Z" fill="#0e302e" opacity="0.72"/>
+    <path d="M32 414 Q180 384 320 408 T480 398 L480 480 L32 480 Z" fill="#082120" opacity="0.92"/>
+    <path d="M144 344 V170 L256 270 L368 170 V344" stroke="url(#monogram)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="256" cy="340" r="18" fill="#9fd8cd"/>
+  </g>
+  <rect x="35" y="35" width="442" height="442" rx="105" stroke="url(#rim)" stroke-width="6"/>
+</svg>
