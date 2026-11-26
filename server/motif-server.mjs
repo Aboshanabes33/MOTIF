@@ -172,8 +172,54 @@ export async function startMotifServer(opts = {}) {
         }, 120);
       }
     });
+    watcher.unref?.();
   } catch {
     // ignore fs.watch unavailability
+  }
+
+  const releaseDir = opts.releaseDir || path.join(REPO_ROOT, "release");
+
+  function serveDownloadFile(req, res, pathname) {
+    const match = /^\/downloads\/([^/]+)$/.exec(pathname);
+    if (!match) return false;
+    const rawName = match[1];
+    if (!rawName || path.basename(rawName) !== rawName) {
+      sendJson(res, 403, { error: "Forbidden" });
+      return true;
+    }
+    if (!/^[A-Za-z0-9._-]+(\.exe|\.txt|\.zip|\.msi)$/i.test(rawName)) {
+      sendJson(res, 404, { error: "Download artifact not found" });
+      return true;
+    }
+    const target = path.resolve(releaseDir, rawName);
+    if (!target.startsWith(path.resolve(releaseDir) + path.sep) || !fs.existsSync(target)) {
+      sendJson(res, 404, { error: "Download artifact not found" });
+      return true;
+    }
+    const stat = fs.statSync(target);
+    if (!stat.isFile()) {
+      sendJson(res, 404, { error: "Download artifact not found" });
+      return true;
+    }
+    const ext = path.extname(rawName).toLowerCase();
+    const contentType =
+      ext === ".exe"
+        ? "application/vnd.microsoft.portable-executable"
+        : ext === ".txt"
+          ? "text/plain; charset=utf-8"
+          : "application/octet-stream";
+    res.writeHead(200, {
+      "content-type": contentType,
+      "content-length": stat.size,
+      "content-disposition": `attachment; filename="${rawName}"`,
+      "cache-control": "no-cache",
+    });
+    if (req.method === "HEAD") {
+      res.end();
+      return true;
+    }
+    fs.createReadStream(target).pipe(res);
+    return true;
   }
 
   function serveStaticFile(req, res, pathname) {
@@ -504,8 +550,13 @@ export async function startMotifServer(opts = {}) {
 
       // --- Releases Page API ---
       if (method === "GET" && pathname === "/api/releases") {
-        const payload = await fetchReleasesPayload();
+        const payload = await fetchReleasesPayload({ releaseDir });
         return sendJson(res, 200, payload);
+      }
+
+      // --- Built Windows release downloads (/downloads/*.exe, SHA256SUMS.txt) ---
+      if ((method === "GET" || method === "HEAD") && pathname.startsWith("/downloads/")) {
+        if (serveDownloadFile(req, res, pathname)) return;
       }
 
       // --- Static built React app ---
@@ -542,12 +593,14 @@ export async function startMotifServer(opts = {}) {
 
   const close = () =>
     new Promise((resolve) => {
+      clearTimeout(prefsWatchTimer);
       if (watcher) {
         try {
           watcher.close();
         } catch {
           // ignore
         }
+        watcher = null;
       }
       for (const client of sseClients) {
         try {
@@ -558,6 +611,7 @@ export async function startMotifServer(opts = {}) {
       }
       sseClients.clear();
       server.close(() => resolve());
+      server.closeAllConnections?.();
     });
 
   return {

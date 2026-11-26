@@ -1,6 +1,14 @@
 /**
- * MOTIF Release Catalog + GitHub Releases live sync (with offline fallback).
+ * MOTIF Release Catalog + Local Built Windows Artifacts + GitHub Releases live sync.
  */
+
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(__dirname, "..");
 
 const GITHUB_REPO = "Aboshanabes33/MOTIF";
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -12,112 +20,141 @@ export const CURRENT_RELEASE = {
   version: "2.0.0",
   tag: "v2.0.0",
   name: "MOTIF 2.0 — Liquid Glass Desktop & MCP Agent Hub",
-  publishedAt: "2026-11-26T18:00:00Z",
+  publishedAt: "2026-11-26T20:00:00Z",
   channel: "stable",
   prerelease: false,
   platform: "Windows 10 / 11 (x64)",
   electronVersion: "35.2.0",
   reactVersion: "19.1.0",
   mcpProtocol: "2025-03-26",
-  releaseUrl: `https://github.com/${GITHUB_REPO}/releases`,
+  releaseUrl: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
   highlights: [
     "Complete React 19 + TypeScript desktop rebuild faithful to the MOTIF Liquid Glass Design Spec",
     "Built-in Model Context Protocol (MCP) server with 16 tools, 5 resources & 2 prompts for Claude, Cursor, and Codex",
     "AI agents can inspect and edit saved Brands (colors, logo, audience, tone of voice, channels, notes), Projects, Footage, and Voice Notes in real time",
-    "Frameless Windows Electron shell with native window controls, embedded local server, and custom MOTIF icon",
+    "Self-contained Windows x64 Portable executable (.exe) with official MOTIF icon, bundled Node.js 24 LTS runtime, and zero external prerequisites",
     "Full Arabic (RTL) and English (LTR) interface with keyboard shortcuts (1–6, /, Escape)",
-    "Dedicated Windows NSIS Installer (.exe) & Portable (.exe) packaging via electron-builder + GitHub Actions",
+    "Electron NSIS Installer + Portable workflow ready in .github/workflows/release-windows.yml",
   ],
   highlightsAr: [
     "إعادة بناء كاملة لتطبيق MOTIF باستخدام React 19 وTypeScript وفق تصميم Liquid Glass",
     "خادم MCP مدمج يضم ١٦ أداة و٥ موارد لربط Claude وCursor وCodex بالتطبيق مباشرة",
     "تمكين الوكيل الذكي من رؤية وتعديل البراندات (الألوان، الشعار، الجمهور، نبرة الصوت، القنوات) والمشاريع والملاحظات الصوتية لحظياً",
-    "تغليف Electron لنظام ويندوز بإطار مخصص وخادم محلي مدمج وأيقونة MOTIF الرسمية",
+    "ملف Windows x64 تنفيذي مستقل (.exe) بأيقونة MOTIF الرسمية وبيئة Node.js 24 مدمجة دون أي متطلبات مسبقة",
     "دعم كامل للغتين العربية (RTL) والإنجليزية (LTR) مع اختصارات لوحة المفاتيح",
-    "حزمة تثبيت Windows Installer (.exe) ونسخة محمولة Portable (.exe) مع أتمتة الإصدارات عبر GitHub Actions",
+    "دعم بناء مثبّت Electron NSIS وPortable عبر .github/workflows/release-windows.yml",
   ],
   artifacts: [
     {
-      id: "win-nsis",
-      label: "Windows Installer (NSIS Setup)",
-      labelAr: "مثبّت ويندوز (NSIS Setup)",
-      fileName: "MOTIF-Setup-2.0.0-x64.exe",
-      arch: "x64",
-      kind: "installer",
-      recommended: true,
-      url: `https://github.com/${GITHUB_REPO}/releases/latest`,
-      note: "Recommended for Windows 10/11 — Start Menu shortcut, auto-registers local data folder & bundled MCP server.",
-    },
-    {
       id: "win-portable",
-      label: "Windows Portable Executable",
-      labelAr: "نسخة ويندوز المحمولة (Portable)",
+      label: "Windows Portable App (.exe)",
+      labelAr: "تطبيق ويندوز المحمول (.exe)",
       fileName: "MOTIF-Portable-2.0.0-x64.exe",
       arch: "x64",
       kind: "portable",
+      recommended: true,
+      url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
+      note: "Standalone single-file Windows 10/11 x64 executable with bundled Node.js 24 LTS, MOTIF icon, React Studio, and MCP server — double-click and run immediately.",
+    },
+    {
+      id: "win-nsis",
+      label: "Windows Electron Installer (NSIS Setup)",
+      labelAr: "مثبّت ويندوز Electron (NSIS Setup)",
+      fileName: "MOTIF-Setup-2.0.0-x64.exe",
+      arch: "x64",
+      kind: "installer",
       recommended: false,
-      url: `https://github.com/${GITHUB_REPO}/releases/latest`,
-      note: "Single standalone executable with no installation wizard required.",
+      url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
+      note: "Full Electron NSIS installer built via `npm run dist:win` or GitHub Actions Windows runner (Start Menu & Desktop shortcuts).",
     },
   ],
   requirements: {
     os: "Windows 10 (1903+) or Windows 11, 64-bit (x64)",
     cpu: "4-core x64 processor or newer",
     ram: "8 GB RAM minimum (16 GB recommended for 4K video)",
-    disk: "500 MB free space for app (+ project media storage)",
-    mcp: "Node.js 20+ (or bundled Electron runtime) for Claude Desktop / Cursor / Codex MCP",
+    disk: "200 MB free space for app (+ project media storage)",
+    mcp: "Bundled Node.js 24 LTS included inside the portable .exe for Claude Desktop / Cursor / Codex MCP",
   },
 };
 
 export const FALLBACK_GITHUB_RELEASES = [
   {
-    id: "v0.1.2-lite-test",
-    tag: "v0.1.2-lite-test",
-    name: "MOTIF 0.1.2 Lite test, Groq plus bundled FFmpeg",
-    publishedAt: "2026-11-26T12:51:03Z",
-    prerelease: true,
-    url: `https://github.com/${GITHUB_REPO}/releases/tag/v0.1.2-lite-test`,
-    summary: "Windows x64 portable pre-release with Groq Whisper transcription, bundled FFmpeg, SVG icons, and Brand color picker.",
-    assets: [
-      {
-        name: "MOTIF-0.1.2-lite-test-x64.exe",
-        size: 149420354,
-        downloadUrl: `https://github.com/${GITHUB_REPO}/releases/download/v0.1.2-lite-test/MOTIF-0.1.2-lite-test-x64.exe`,
-      },
-    ],
-    sha256: "8e9cd7020bc763e86ff009de1f795f7b0681be877a2482344f6491114f087bae",
-  },
-  {
-    id: "v0.1.0",
-    tag: "v0.1.0",
-    name: "MOTIF 0.1.0, bundled Windows x64",
-    publishedAt: "2026-11-25T17:30:22Z",
+    id: "v2.0.0",
+    tag: "v2.0.0",
+    name: "MOTIF v2.0.0 — Windows x64 (React + Liquid Glass + MCP)",
+    publishedAt: "2026-11-26T20:00:00Z",
     prerelease: false,
-    url: `https://github.com/${GITHUB_REPO}/releases/tag/v0.1.0`,
-    summary: "Self-extracting Windows x64 bundle with FFmpeg, static whisper.cpp + large-v3-q5_0 model, Node, and HyperFrames.",
-    assets: [
-      {
-        name: "MOTIF-0.1.0-bundled-x64.exe",
-        size: 1419558058,
-        downloadUrl: `https://github.com/${GITHUB_REPO}/releases/download/v0.1.0/MOTIF-0.1.0-bundled-x64.exe`,
-      },
-    ],
-    sha256: "8cdd4a0d5f69d58109f8285ec35ef291accc412885d01797dada4904ddd1222c",
+    url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
+    summary: "Complete React 19 + Liquid Glass desktop rebuild with built-in 16-tool MCP server and Windows x64 executable packaging.",
+    assets: [],
+    sha256: "",
   },
 ];
 
 function extractSha256(body) {
   if (typeof body !== "string") return "";
-  const m = /SHA256[:\s`]*([0-9a-f]{64})/i.exec(body);
+  const m = /SHA[- ]?256[:\s`]*([0-9a-f]{64})/i.exec(body);
   return m ? m[1].toLowerCase() : "";
 }
 
-export async function fetchReleasesPayload() {
+function readLocalChecksumMap(releaseDir) {
+  const map = new Map();
+  const sumsPath = path.join(releaseDir, "SHA256SUMS.txt");
+  if (fs.existsSync(sumsPath)) {
+    try {
+      const lines = fs.readFileSync(sumsPath, "utf8").split(/\r?\n/);
+      for (const line of lines) {
+        const m = /^([0-9a-f]{64})\s+(.+)$/i.exec(line.trim());
+        if (m) map.set(m[2].trim(), m[1].toLowerCase());
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return map;
+}
+
+function enrichCurrentReleaseWithLocalBuilds(releaseDir) {
+  const checksumMap = readLocalChecksumMap(releaseDir);
+  const artifacts = CURRENT_RELEASE.artifacts.map((art) => {
+    const localPath = path.join(releaseDir, art.fileName);
+    if (fs.existsSync(localPath)) {
+      const stat = fs.statSync(localPath);
+      if (stat.isFile()) {
+        let sha256 = checksumMap.get(art.fileName) || "";
+        if (!sha256) {
+          sha256 = crypto.createHash("sha256").update(fs.readFileSync(localPath)).digest("hex");
+        }
+        return {
+          ...art,
+          url: `/downloads/${encodeURIComponent(art.fileName)}`,
+          directDownload: true,
+          ready: true,
+          size: stat.size,
+          sha256,
+        };
+      }
+    }
+    return { ...art };
+  });
+
+  const hasLocalSums = fs.existsSync(path.join(releaseDir, "SHA256SUMS.txt"));
+  return {
+    ...CURRENT_RELEASE,
+    artifacts,
+    checksumsUrl: hasLocalSums ? "/downloads/SHA256SUMS.txt" : undefined,
+  };
+}
+
+export async function fetchReleasesPayload(opts = {}) {
+  const releaseDir = opts.releaseDir || path.join(REPO_ROOT, "release");
+  const current = enrichCurrentReleaseWithLocalBuilds(releaseDir);
+
   const now = Date.now();
   if (cachedGithubReleases && now - cachedAt < CACHE_TTL_MS) {
     return {
       repo: GITHUB_REPO,
-      current: CURRENT_RELEASE,
+      current,
       githubReleases: cachedGithubReleases,
       syncedFromGithub: true,
     };
@@ -141,7 +178,12 @@ export async function fetchReleasesPayload() {
           publishedAt: String(rel.published_at || rel.created_at || ""),
           prerelease: Boolean(rel.prerelease),
           url: String(rel.html_url || `https://github.com/${GITHUB_REPO}/releases`),
-          summary: String(rel.body || "").split(/\r?\n/).filter((l) => l.trim() && !l.startsWith("#")).slice(0, 2).join(" ").slice(0, 280),
+          summary: String(rel.body || "")
+            .split(/\r?\n/)
+            .filter((l) => l.trim() && !l.startsWith("#"))
+            .slice(0, 2)
+            .join(" ")
+            .slice(0, 280),
           sha256: extractSha256(rel.body),
           assets: Array.isArray(rel.assets)
             ? rel.assets.map((a) => ({
@@ -155,7 +197,7 @@ export async function fetchReleasesPayload() {
         cachedAt = now;
         return {
           repo: GITHUB_REPO,
-          current: CURRENT_RELEASE,
+          current,
           githubReleases: cachedGithubReleases,
           syncedFromGithub: true,
         };
@@ -167,7 +209,7 @@ export async function fetchReleasesPayload() {
 
   return {
     repo: GITHUB_REPO,
-    current: CURRENT_RELEASE,
+    current,
     githubReleases: FALLBACK_GITHUB_RELEASES,
     syncedFromGithub: false,
   };

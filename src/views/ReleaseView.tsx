@@ -132,42 +132,87 @@ export function ReleaseView({
           </div>
         </div>
 
-        {/* Windows Installer & Portable Download Targets */}
+        {/* Windows Portable & Installer Download Targets */}
         <div className="release-dl-grid">
           {current.artifacts.map((art) => (
             <div
               key={art.id}
               className={`release-dl-card ${art.recommended ? "is-primary" : ""}`}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <strong style={{ fontSize: 15 }}>
                   {lang === "ar" ? art.labelAr : art.label}
                 </strong>
-                {art.recommended && (
-                  <span className="pill-badge pill-badge--accent">
-                    {translate(lang, "releases.recommended")}
-                  </span>
-                )}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {art.ready && (
+                    <span className="pill-badge pill-badge--accent">
+                      {lang === "ar" ? "جاهز للتحميل" : "Ready to Download"}
+                    </span>
+                  )}
+                  {art.recommended && !art.ready && (
+                    <span className="pill-badge pill-badge--accent">
+                      {translate(lang, "releases.recommended")}
+                    </span>
+                  )}
+                </div>
               </div>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--accent)" }}>
-                {art.fileName} ({art.arch})
+                {art.fileName} ({art.arch}
+                {art.size ? ` · ${formatBytes(art.size)}` : ""})
               </div>
               <p className="inspector-body" style={{ margin: 0, flex: 1 }}>
                 {art.note}
               </p>
+              {art.sha256 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <code
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 10.5,
+                      color: "var(--ink-muted)",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    SHA-256: {art.sha256.slice(0, 24)}…
+                  </code>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    style={{ height: 24, padding: "0 8px", fontSize: 11 }}
+                    onClick={() => copyString(`sha-${art.id}`, art.sha256 || "")}
+                  >
+                    {copiedId === `sha-${art.id}` ? <Check size={11} /> : <Copy size={11} />}
+                    {translate(lang, copiedId === `sha-${art.id}` ? "mcp.copied" : "releases.copySha")}
+                  </button>
+                </div>
+              )}
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <button
-                  type="button"
-                  className={`btn ${art.recommended ? "btn--primary" : ""}`}
-                  style={{ flex: 1 }}
-                  onClick={() => openUrl(art.url)}
-                >
-                  <Download size={15} />
-                  {translate(
-                    lang,
-                    art.kind === "installer" ? "releases.downloadInstaller" : "releases.downloadPortable",
-                  )}
-                </button>
+                {art.directDownload ? (
+                  <a
+                    href={art.url}
+                    download={art.fileName}
+                    className={`btn ${art.recommended ? "btn--primary" : ""}`}
+                    style={{ flex: 1, textDecoration: "none" }}
+                  >
+                    <Download size={15} />
+                    {lang === "ar"
+                      ? `تحميل ${art.fileName}${art.size ? ` (${formatBytes(art.size)})` : ""}`
+                      : `Download .exe${art.size ? ` (${formatBytes(art.size)})` : ""}`}
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className={`btn ${art.recommended ? "btn--primary" : ""}`}
+                    style={{ flex: 1 }}
+                    onClick={() => openUrl(art.url)}
+                  >
+                    <Download size={15} />
+                    {translate(
+                      lang,
+                      art.kind === "installer" ? "releases.downloadInstaller" : "releases.downloadPortable",
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           ))}
