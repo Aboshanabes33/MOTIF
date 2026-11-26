@@ -34,7 +34,7 @@ export const CURRENT_RELEASE = {
     "AI agents can inspect and edit saved Brands (colors, logo, audience, tone of voice, channels, notes), Projects, Footage, and Voice Notes in real time",
     "Self-contained Windows x64 Portable executable (.exe) with official MOTIF icon, bundled Node.js 24 LTS runtime, and zero external prerequisites",
     "Full Arabic (RTL) and English (LTR) interface with keyboard shortcuts (1–6, /, Escape)",
-    "Electron NSIS Installer + Portable workflow ready in .github/workflows/release-windows.yml",
+    "Local Windows packaging via `npm run build:win-exe` (standalone portable .exe) and `npm run dist:win` (Electron NSIS installer)",
   ],
   highlightsAr: [
     "إعادة بناء كاملة لتطبيق MOTIF باستخدام React 19 وTypeScript وفق تصميم Liquid Glass",
@@ -42,7 +42,7 @@ export const CURRENT_RELEASE = {
     "تمكين الوكيل الذكي من رؤية وتعديل البراندات (الألوان، الشعار، الجمهور، نبرة الصوت، القنوات) والمشاريع والملاحظات الصوتية لحظياً",
     "ملف Windows x64 تنفيذي مستقل (.exe) بأيقونة MOTIF الرسمية وبيئة Node.js 24 مدمجة دون أي متطلبات مسبقة",
     "دعم كامل للغتين العربية (RTL) والإنجليزية (LTR) مع اختصارات لوحة المفاتيح",
-    "دعم بناء مثبّت Electron NSIS وPortable عبر .github/workflows/release-windows.yml",
+    "بناء مباشر لنسخة ويندوز المحمولة عبر `npm run build:win-exe` ومثبّت Electron عبر `npm run dist:win`",
   ],
   artifacts: [
     {
@@ -65,7 +65,7 @@ export const CURRENT_RELEASE = {
       kind: "installer",
       recommended: false,
       url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
-      note: "Full Electron NSIS installer built via `npm run dist:win` or GitHub Actions Windows runner (Start Menu & Desktop shortcuts).",
+      note: "Full Electron NSIS installer built locally via `npm run dist:win` (Start Menu & Desktop shortcuts).",
     },
   ],
   requirements: {
