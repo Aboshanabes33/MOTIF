@@ -8,7 +8,9 @@
     "dist/**/*",
     "dist-electron/**/*",
     "package.json",
-    "THIRD-PARTY-NOTICES.txt"
+    "THIRD-PARTY-NOTICES.txt",
+    "build/icon.png",
+    "build/icon.ico"
   ],
   "asar": true,
   "npmRebuild": false,
@@ -16,11 +18,18 @@
     "target": [
       "portable"
     ],
-    "signAndEditExecutable": false,
-    "artifactName": "MOTIF-${version}-${arch}.${ext}"
+    "signAndEditExecutable": true,
+    "artifactName": "MOTIF-${version}-${arch}.${ext}",
+    "icon": "build/icon.ico",
+    "signExecutable": false
   },
   "portable": {
     "requestExecutionLevel": "user"
   },
-  "compression": "normal"
+  "compression": "normal",
+  "nsis": {
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "installerHeaderIcon": "build/icon.ico"
+  }
 }
