@@ -1,1 +1,26 @@
-{"appId":"local.motif.desktop","productName":"MOTIF","directories":{"output":"release"},"files":["dist/**/*","dist-electron/**/*","package.json"],"asar":true,"npmRebuild":false,"win":{"target":["portable"],"signAndEditExecutable":false,"artifactName":"MOTIF-${version}-${arch}.${ext}"},"portable":{"requestExecutionLevel":"user"},"compression":"normal"}
+{
+  "appId": "local.motif.desktop",
+  "productName": "MOTIF",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*",
+    "package.json",
+    "THIRD-PARTY-NOTICES.txt"
+  ],
+  "asar": true,
+  "npmRebuild": false,
+  "win": {
+    "target": [
+      "portable"
+    ],
+    "signAndEditExecutable": false,
+    "artifactName": "MOTIF-${version}-${arch}.${ext}"
+  },
+  "portable": {
+    "requestExecutionLevel": "user"
+  },
+  "compression": "normal"
+}

@@ -1,0 +1,9 @@
+# Desktop SVG and design audit
+
+Uses pinned `lucide-react` library SVG assets, not Unicode approximations or hand-drawn substitute icons. Brands is Palette, Record is Mic, Today is Clapperboard, Search is Search, Agent setup is Settings2. Window controls use Minus/Square/X. Empty states, project selector and Add Brand also use SVGs. An Aperture library symbol sits next to the MOTIF wordmark as an app mark, not a commissioned exclusive logo or third-party brand logo.
+
+Lucide: https://lucide.dev/license . ISC permission allows distribution and bundling with notice; Feather-derived assets carry MIT notices. Full upstream license text is in THIRD-PARTY-NOTICES.txt and included in electron-builder file allowlist. Exact package version and integrity are locked in package-lock.json. No runtime CDN requests.
+
+Additional audit fixes: icon-only collapsed navigation gets accessible names and tooltips; active nav uses aria-current plus a visible edge; decorative SVGs are hidden from screen readers. Search explicitly says Brands because that is the implemented search scope, not all media. Keyboard Escape closes the brand editor as well as setup. Textareas receive keyboard focus treatment, small-width header stacks, card buttons retain 44px hit height. Fixed desktop chrome: long inspector content scrolls inside workspace instead of pushing Agent setup and status bar off screen.
+
+Validation: local TypeScript checks, production bundle, 17 existing tests, real Electron IPC smoke including saved/reloaded Brand and actual FFmpeg derivative. Screenshots inspected from the running Electron app. Brand shown in verification screenshot is explicitly test-created metadata in an isolated temporary user profile, not seeded production content. No release, merge or CI run. Native Windows appearance and assistive-technology behavior are not independently tested. This is a focused audit, not a claim of exhaustive design/accessibility compliance.
