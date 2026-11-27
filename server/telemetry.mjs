@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
 
+// PostHog project tokens are public client-side keys by design; env vars override.
+export const DEFAULT_POSTHOG_PUBLIC_KEY = "phc_zkpPuDN4BW22QtrcZ9Tp6sZhcpgDkxKv3NemR3RXj2qZ";
+export const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 const MAX_DIAGNOSTICS = 80;
 const anonymousSessionId = randomUUID();
 const diagnostics = [];

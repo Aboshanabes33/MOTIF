@@ -32,6 +32,10 @@ import { McpView } from "./views/McpView";
 import { VideoAgentView } from "./views/VideoAgentView";
 import { ReleaseView } from "./views/ReleaseView";
 import posthog, { isPostHogConfigured } from "./posthog";
+import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
+import { OnboardingModal } from "./components/OnboardingModal";
+const AgentVideoEditor = lazy(() => import("./components/AgentVideoEditor").then((module) => ({ default: module.AgentVideoEditor })));
+import { initializeClientTelemetry, captureAppEvent } from "./telemetry";
 
 function isStandaloneReleaseLocation(): boolean {
   if (typeof window === "undefined") return false;

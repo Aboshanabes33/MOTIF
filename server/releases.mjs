@@ -17,8 +17,8 @@ let cachedGithubReleases = null;
 let cachedAt = 0;
 
 export const CURRENT_RELEASE = {
-  version: "2.0.0",
-  tag: "v2.0.0",
+  version: "2.1.0",
+  tag: "v2.1.0",
   name: "MOTIF 2.0 — Liquid Glass Desktop & MCP Agent Hub",
   publishedAt: "2026-11-26T20:00:00Z",
   channel: "stable",
