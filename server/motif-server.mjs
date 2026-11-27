@@ -18,6 +18,7 @@ import { captureTranscription, shutdownPostHog } from "./posthog-ai.mjs";
 import {
   DEFAULT_POSTHOG_HOST,
   DEFAULT_POSTHOG_PUBLIC_KEY,
+  sentryDsn,
   captureTelemetryError,
   captureTelemetryEvent,
   getDiagnostics,
@@ -367,7 +368,7 @@ export async function startMotifServer(opts = {}) {
 
       if (method === "GET" && pathname === "/api/telemetry/config") {
         const cfg = telemetryConfig();
-        return sendJson(res, 200, { ...cfg, sentryDsn: process.env.SENTRY_DSN || "", posthogPublicKey: process.env.POSTHOG_PUBLIC_KEY || DEFAULT_POSTHOG_PUBLIC_KEY, posthogHost: process.env.POSTHOG_HOST || DEFAULT_POSTHOG_HOST });
+        return sendJson(res, 200, { ...cfg, sentryDsn: sentryDsn(), posthogPublicKey: process.env.POSTHOG_PUBLIC_KEY || DEFAULT_POSTHOG_PUBLIC_KEY, posthogHost: process.env.POSTHOG_HOST || DEFAULT_POSTHOG_HOST });
       }
       if (method === "GET" && pathname === "/api/telemetry/diagnostics") return sendJson(res, 200, getDiagnostics());
       if (method === "POST" && pathname === "/api/telemetry/event") {

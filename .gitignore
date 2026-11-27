@@ -15,4 +15,4 @@ coverage/
 .env.local
 *.tsbuildinfo
 .env.windows
-.env.macos
+.env.macosserver/build-config.json
