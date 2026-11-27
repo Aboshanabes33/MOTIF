@@ -13,5 +13,7 @@ contextBridge.exposeInMainWorld("motifDesktop", {
     return () => ipcRenderer.removeListener("motif:win:maximized", handler);
   },
   openExternal: (url) => ipcRenderer.invoke("motif:openExternal", String(url || "")),
+  getTelemetry: () => ipcRenderer.invoke("motif:telemetry:get"),
+  setTelemetry: (enabled) => ipcRenderer.invoke("motif:telemetry:set", enabled === true),
   getAppInfo: () => ipcRenderer.invoke("motif:appInfo"),
 });

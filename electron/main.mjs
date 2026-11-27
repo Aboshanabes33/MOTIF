@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { startMotifServer } from "../server/motif-server.mjs";
+import { createTelemetry } from "./telemetry.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, "..");
@@ -72,7 +73,7 @@ async function createMainWindow(targetUrl) {
   await mainWindow.loadURL(targetUrl);
 }
 
-function registerIpc(mcpScriptPath, dataDir) {
+function registerIpc(mcpScriptPath, dataDir, telemetry) {
   ipcMain.handle("motif:win:minimize", () => {
     mainWindow?.minimize();
   });
@@ -101,6 +102,9 @@ function registerIpc(mcpScriptPath, dataDir) {
     }
   });
 
+  ipcMain.handle("motif:telemetry:get", () => telemetry.status());
+  ipcMain.handle("motif:telemetry:set", (_event, enabled) => telemetry.setEnabled(enabled === true));
+
   ipcMain.handle("motif:appInfo", () => ({
     version: app.getVersion(),
     mcpPath: mcpScriptPath,
@@ -125,7 +129,14 @@ if (!gotLock) {
     const mcpScriptPath = resolveUnpackedPath("mcp", "motif-mcp.mjs");
     const staticDir = path.join(APP_ROOT, "dist-web");
 
-    registerIpc(mcpScriptPath, dataDir);
+    const telemetry = createTelemetry({
+      userDataDir: app.getPath("userData"),
+      version: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+    });
+    registerIpc(mcpScriptPath, dataDir, telemetry);
+    telemetry.start().catch(() => {});
 
     const devUrl = process.env.MOTIF_DEV_URL;
     if (devUrl) {

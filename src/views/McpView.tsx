@@ -135,6 +135,11 @@ export function McpView({
     setTimeout(() => setCopiedKey(""), 1800);
   };
 
+  const [telemetry, setTelemetry] = useState<{ available: boolean; enabled: boolean } | null>(null);
+  useEffect(() => {
+    window.motifDesktop?.getTelemetry?.().then(setTelemetry).catch(() => {});
+  }, []);
+
   const activeToolDef = mcpStatus?.tools.find((t) => t.name === selectedTool);
 
   return (
@@ -196,6 +201,22 @@ export function McpView({
           </div>
         )}
       </div>
+
+      {telemetry?.available && (
+        <div className="content-card" style={{ padding: "12px 18px" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={telemetry.enabled}
+              onChange={(e) => {
+                window.motifDesktop?.setTelemetry?.(e.target.checked).then(setTelemetry).catch(() => {});
+              }}
+            />
+            <span>{translate(lang, "telemetry.label")}</span>
+          </label>
+          <p className="inspector-body" style={{ margin: "6px 0 0" }}>{translate(lang, "telemetry.hint")}</p>
+        </div>
+      )}
 
       {/* Interactive Tool Explorer + Live Output */}
       <div className="two-col-grid">

@@ -242,6 +242,8 @@ export interface MotifDesktopBridge {
   close: () => Promise<void>;
   onMaximizeChange: (cb: (maximized: boolean) => void) => () => void;
   openExternal: (url: string) => Promise<void>;
+  getTelemetry: () => Promise<{ available: boolean; enabled: boolean }>;
+  setTelemetry: (enabled: boolean) => Promise<{ available: boolean; enabled: boolean }>;
   getAppInfo: () => Promise<{ version: string; mcpPath: string; dataDir: string; platform: string }>;
 }
 

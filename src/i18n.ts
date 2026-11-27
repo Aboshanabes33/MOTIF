@@ -136,6 +136,8 @@ const EN = {
   "new.addFootage": "Add Footage",
 
   "mcp.title": "MCP Agent Hub",
+  "telemetry.label": "Share anonymous usage and crash reports",
+  "telemetry.hint": "Off by default. Sends only app version, OS and crash type. Never files, project names, transcripts, keys or content.",
   "mcp.subtitle": "Connect Claude, Cursor, or Codex to MOTIF via Model Context Protocol so your AI sees Brands, Projects, Footage, and Voice Notes.",
   "mcp.statusLive": "MCP Server Ready · stdio JSON-RPC 2.0",
   "mcp.toolsHeading": "Live Tool Explorer",
@@ -305,6 +307,8 @@ const AR: Record<keyof typeof EN, string> = {
   "new.addFootage": "إضافة اللقطة",
 
   "mcp.title": "مركز وكيل MCP",
+  "telemetry.label": "مشاركة إحصاءات استخدام وتقارير أعطال مجهولة",
+  "telemetry.hint": "مطفأة افتراضيا. ترسل فقط إصدار التطبيق والنظام ونوع العطل. لا ترسل ملفات ولا أسماء مشاريع ولا نصوص ولا مفاتيح ولا أي محتوى.",
   "mcp.subtitle": "اربط Claude أو Cursor أو Codex بتطبيق MOTIF عبر بروتوكول MCP ليطّلع النموذج على البراندات والمشاريع واللقطات والملاحظات الصوتية.",
   "mcp.statusLive": "خادم MCP جاهز · stdio JSON-RPC 2.0",
   "mcp.toolsHeading": "مستكشف الأدوات المباشر",
