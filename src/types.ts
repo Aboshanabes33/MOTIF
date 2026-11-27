@@ -44,6 +44,14 @@ export interface Project {
   diskBacked?: boolean;
   createdAt: string;
   updatedAt: string;
+  aiEdit?: {
+    engine: "remotion" | "hyperframes";
+    agentSummary: string;
+    stats: { cuts: number; scenes: number; captions: number; motionGraphics: number };
+    actions: Array<{ at: number; title: string; detail: string }>;
+    scenes: Array<{ id: string; title: string; start: number; duration: number; motion: string }>;
+    captions: string[];
+  };
 }
 
 export interface FootageItem {
@@ -87,6 +95,9 @@ export interface ActivityEvent {
 export interface WorkspacePrefs {
   projectsRoot?: string;
   lang?: Lang;
+  onboardingCompleted?: boolean;
+  telemetryEnabled?: boolean;
+  selectedAgent?: string;
   brands: Brand[];
   [key: string]: unknown;
 }

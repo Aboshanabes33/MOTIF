@@ -48,6 +48,27 @@ test("one-click install writes MOTIF into each agent's own config without touchi
   const again = installClient({ ...opts, client: "cursor", mcpScriptPath: MCP_SCRIPT, dataDir });
   assert.equal(again.alreadyConnected, true);
 
+  // OpenCode v1 uses mcp.<name>; preserve unrelated settings and keep a backup.
+  const openCodeDir = path.join(home, ".config", "opencode");
+  fs.mkdirSync(openCodeDir, { recursive: true });
+  fs.writeFileSync(path.join(openCodeDir, "opencode.json"), JSON.stringify({ model: "test", mcp: { other: { type: "local", command: ["echo"] } } }, null, 2));
+  const openCodeResult = installClient({ ...opts, client: "opencode", mcpScriptPath: MCP_SCRIPT, dataDir });
+  assert.equal(openCodeResult.label, "OpenCode");
+  assert.ok(openCodeResult.backup);
+  const openCodeConfig = JSON.parse(fs.readFileSync(path.join(openCodeDir, "opencode.json"), "utf8"));
+  assert.deepEqual(openCodeConfig.mcp.motif.command, ["node", MCP_SCRIPT]);
+  assert.equal(openCodeConfig.mcp.motif.environment.MOTIF_DATA, dataDir);
+  assert.equal(openCodeConfig.mcp.other.command[0], "echo");
+  assert.equal(removeClient({ ...opts, client: "opencode" }).removed, true);
+
+  // OpenCode v2's servers map is written natively rather than creating a legacy entry.
+  fs.writeFileSync(path.join(openCodeDir, "opencode.json"), JSON.stringify({ mcp: { servers: { other: { type: "local", command: ["echo"] } } } }, null, 2));
+  installClient({ ...opts, client: "opencode", mcpScriptPath: MCP_SCRIPT, dataDir });
+  const openCodeV2 = JSON.parse(fs.readFileSync(path.join(openCodeDir, "opencode.json"), "utf8"));
+  assert.deepEqual(openCodeV2.mcp.servers.motif.command, ["node", MCP_SCRIPT]);
+  assert.equal(openCodeV2.mcp.motif, undefined);
+  removeClient({ ...opts, client: "opencode" });
+
   // Codex uses TOML and keeps its other tables.
   fs.mkdirSync(path.join(home, ".codex"), { recursive: true });
   fs.writeFileSync(path.join(home, ".codex", "config.toml"), 'model = "gpt-5-codex"\n');
@@ -88,7 +109,7 @@ test("install refuses to clobber an invalid config and detect reports state per 
   const detected = detectClients({ ...opts, mcpScriptPath: MCP_SCRIPT });
   assert.deepEqual(
     detected.map((d) => d.id),
-    ["claude-desktop", "claude-code", "cursor", "windsurf", "vscode", "codex"],
+    ["opencode", "claude-desktop", "claude-code", "cursor", "windsurf", "vscode", "codex"],
   );
   assert.equal(detected.find((d) => d.id === "cursor").configured, false);
 
@@ -104,6 +125,8 @@ test("agent config paths follow each OS convention", () => {
   assert.equal(get("codex"), "C:\\Users\\Me\\.codex\\config.toml");
   assert.equal(get("vscode"), "C:\\Users\\Me\\AppData\\Roaming\\Code\\User\\mcp.json");
 
+  const xdg = clientDefs({ platform: "linux", home: "/home/me", env: { XDG_CONFIG_HOME: "/tmp/xdg" } });
+  assert.equal(xdg.find((d) => d.id === "opencode").configPath, "/tmp/xdg/opencode/opencode.json");
   const mac = clientDefs({ platform: "darwin", home: "/Users/me", env: {} });
   assert.equal(
     mac.find((d) => d.id === "claude-desktop").configPath,
