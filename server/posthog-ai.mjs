@@ -1,16 +1,21 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { PostHog } from "posthog-node";
 
 const posthogKey = process.env.POSTHOG_API_KEY;
 const posthogHost = process.env.POSTHOG_HOST;
 const processSessionId = randomUUID();
 
-const posthog =
-  posthogKey && posthogHost
-    ? new PostHog(posthogKey, { host: posthogHost, privacyMode: false })
-    : null;
+// posthog-node is loaded only when configured, so the packaged app (no node_modules) still starts.
+let posthog = null;
+if (posthogKey && posthogHost) {
+  try {
+    const { PostHog } = await import("posthog-node");
+    posthog = new PostHog(posthogKey, { host: posthogHost, privacyMode: false });
+  } catch {
+    posthog = null;
+  }
+}
 
 if (!posthog && process.env.NODE_ENV !== "production") {
   const missingVariable = posthogKey ? "POSTHOG_HOST" : "POSTHOG_API_KEY";
