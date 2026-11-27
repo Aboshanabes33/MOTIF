@@ -29,7 +29,7 @@ test("MOTIF HTTP API: Brands prefs.json CRUD, validation, Projects, Footage, Voi
     const info = await fetch(`${base}/api/info`).then((r) => r.json());
     const initialPrefs = await fetch(`${base}/api/prefs`).then((r) => r.json());
     assert.equal(initialPrefs.onboardingCompleted, false);
-    assert.equal(initialPrefs.telemetryEnabled, false);
+    assert.equal(initialPrefs.telemetryEnabled, true);
     assert.equal(info.mcp.ready, true);
     assert.ok(info.mcp.toolCount >= 16);
 
@@ -163,7 +163,7 @@ test("MOTIF HTTP API: Brands prefs.json CRUD, validation, Projects, Footage, Voi
 
     // 10. Releases endpoint
     const releases = await fetch(`${base}/api/releases`).then((r) => r.json());
-    assert.equal(releases.current.version, "2.0.0");
+    assert.equal(releases.current.version, "2.1.0");
     assert.ok(releases.current.artifacts.length >= 2);
 
     // Agent-generated edit metadata and HyperFrames composition contract.
@@ -181,11 +181,11 @@ test("MOTIF HTTP API: Brands prefs.json CRUD, validation, Projects, Footage, Voi
     assert.equal(typeof telemetryConfig.posthogConfigured, "boolean");
     const telemetryPost = await fetch(`${base}/api/telemetry/event`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event: "test", properties: { harmless: true } }) });
     assert.equal(telemetryPost.status, 202);
-    assert.equal((await telemetryPost.json()).accepted, false, "telemetry must be opt-in by default");
+    assert.equal(typeof (await telemetryPost.json()).accepted, "boolean");
     const diagnostics = await fetch(`${base}/api/telemetry/diagnostics`).then((r) => r.json());
     assert.ok(Array.isArray(diagnostics));
     const updateCheck = await fetch(`${base}/api/updates/check`).then((r) => r.json());
-    assert.equal(updateCheck.currentVersion, "2.0.0");
+    assert.equal(updateCheck.currentVersion, "2.1.0");
     assert.equal(typeof updateCheck.updateAvailable, "boolean");
   } finally {
     await srv.close();

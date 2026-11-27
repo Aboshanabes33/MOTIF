@@ -17,8 +17,8 @@ let cachedGithubReleases = null;
 let cachedAt = 0;
 
 export const CURRENT_RELEASE = {
-  version: "2.0.0",
-  tag: "v2.0.0",
+  version: "2.1.0",
+  tag: "v2.1.0",
   name: "MOTIF 2.0 — Liquid Glass Desktop & MCP Agent Hub",
   publishedAt: "2026-11-26T20:00:00Z",
   channel: "stable",
@@ -27,7 +27,7 @@ export const CURRENT_RELEASE = {
   electronVersion: "35.2.0",
   reactVersion: "19.1.0",
   mcpProtocol: "2025-03-26",
-  releaseUrl: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
+  releaseUrl: `https://github.com/${GITHUB_REPO}/releases/tag/v2.1.0`,
   highlights: [
     "Complete React 19 + TypeScript desktop rebuild faithful to the MOTIF Liquid Glass Design Spec",
     "Built-in Model Context Protocol (MCP) server with 22 tools, 18 resources & 4 prompts for Claude, Cursor, and Codex — including the video-edit agent stack, installed into your agent with one click",
@@ -53,7 +53,7 @@ export const CURRENT_RELEASE = {
       arch: "x64",
       kind: "portable",
       recommended: true,
-      url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
+      url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.1.0`,
       note: "Standalone single-file Windows 10/11 x64 executable with bundled Node.js 24 LTS, MOTIF icon, React UI, and MCP server — double-click and run immediately.",
     },
     {
@@ -64,7 +64,7 @@ export const CURRENT_RELEASE = {
       arch: "x64",
       kind: "installer",
       recommended: false,
-      url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
+      url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.1.0`,
       note: "Full Electron NSIS installer built locally via `npm run dist:win` (Start Menu & Desktop shortcuts).",
     },
   ],
@@ -84,7 +84,7 @@ export const FALLBACK_GITHUB_RELEASES = [
     name: "MOTIF v2.0.0 — Windows x64 (React + Liquid Glass + MCP)",
     publishedAt: "2026-11-26T20:00:00Z",
     prerelease: false,
-    url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
+    url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.1.0`,
     summary: "Complete React 19 + Liquid Glass desktop rebuild with built-in 16-tool MCP server and Windows x64 executable packaging.",
     assets: [],
     sha256: "",

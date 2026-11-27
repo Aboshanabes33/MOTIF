@@ -1,5 +1,13 @@
+import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 
+// PostHog project tokens are public client-side keys by design; env vars override.
+export const DEFAULT_POSTHOG_PUBLIC_KEY = "phc_zkpPuDN4BW22QtrcZ9Tp6sZhcpgDkxKv3NemR3RXj2qZ";
+export const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
+// Optional build-time config (untracked, git-ignored): { "sentryDsn": "..." } placed next to this file when packaging.
+let buildConfig = {};
+try { buildConfig = JSON.parse(fs.readFileSync(new URL("./build-config.json", import.meta.url), "utf8")); } catch { /* not present */ }
+export const sentryDsn = () => process.env.SENTRY_DSN || buildConfig.sentryDsn || "";
 const MAX_DIAGNOSTICS = 80;
 const anonymousSessionId = randomUUID();
 const diagnostics = [];
@@ -23,10 +31,10 @@ export async function initializeTelemetry(enabled = false) {
     sentry = null;
     return telemetryConfig();
   }
-  if (process.env.SENTRY_DSN && !sentry) {
+  if (sentryDsn() && !sentry) {
     try {
       const sdk = await import("@sentry/node");
-      sdk.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || "production", sendDefaultPii: false });
+      sdk.init({ dsn: sentryDsn(), environment: process.env.NODE_ENV || "production", sendDefaultPii: false });
       sentry = sdk;
     } catch (error) { recordDiagnostic({ kind: "telemetry_init", provider: "sentry", message: String(error?.message || error) }); }
   }
@@ -41,7 +49,7 @@ export async function initializeTelemetry(enabled = false) {
 }
 
 export function telemetryConfig() {
-  return { sentryConfigured: Boolean(process.env.SENTRY_DSN), posthogConfigured: Boolean(process.env.POSTHOG_API_KEY || process.env.POSTHOG_PUBLIC_KEY), diagnosticsAvailable: true };
+  return { sentryConfigured: Boolean(sentryDsn()), posthogConfigured: Boolean(process.env.POSTHOG_API_KEY || process.env.POSTHOG_PUBLIC_KEY), diagnosticsAvailable: true };
 }
 
 export function captureTelemetryEvent(name, properties = {}, enabled = false) {

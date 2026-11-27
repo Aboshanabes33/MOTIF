@@ -485,7 +485,7 @@ export function createMotifStore(opts = {}) {
         projectsRoot: paths.projectsDir,
         lang: "en",
         onboardingCompleted: false,
-        telemetryEnabled: false,
+        telemetryEnabled: true,
         brands: starter.brands,
       });
     }

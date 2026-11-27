@@ -1,28 +1,32 @@
-import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
-import { resourceFromAttributes } from "@opentelemetry/resources";
-import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
-
 const posthogKey = process.env.POSTHOG_API_KEY;
 const posthogHost = process.env.POSTHOG_HOST;
 
-const loggerProvider =
-  posthogKey && posthogHost
-    ? new LoggerProvider({
-        resource: resourceFromAttributes({
-          "service.name": "motif-local-backend",
-          "service.version": process.env.npm_package_version || "unknown",
-          "deployment.environment": process.env.NODE_ENV || "development",
-        }),
-        processors: [
-          new BatchLogRecordProcessor(
-            new OTLPLogExporter({
-              url: `${posthogHost.replace(/\/$/, "")}/i/v1/logs`,
-              headers: { Authorization: `Bearer ${posthogKey}` },
-            }),
-          ),
-        ],
-      })
-    : null;
+// OpenTelemetry is loaded only when configured, so the packaged app (no node_modules) still starts.
+let loggerProvider = null;
+if (posthogKey && posthogHost) {
+  try {
+    const { OTLPLogExporter } = await import("@opentelemetry/exporter-logs-otlp-http");
+    const { resourceFromAttributes } = await import("@opentelemetry/resources");
+    const { BatchLogRecordProcessor, LoggerProvider } = await import("@opentelemetry/sdk-logs");
+    loggerProvider = new LoggerProvider({
+      resource: resourceFromAttributes({
+        "service.name": "motif-local-backend",
+        "service.version": process.env.npm_package_version || "unknown",
+        "deployment.environment": process.env.NODE_ENV || "development",
+      }),
+      processors: [
+        new BatchLogRecordProcessor(
+          new OTLPLogExporter({
+            url: `${posthogHost.replace(/\/$/, "")}/i/v1/logs`,
+            headers: { Authorization: `Bearer ${posthogKey}` },
+          }),
+        ),
+      ],
+    });
+  } catch {
+    loggerProvider = null;
+  }
+}
 
 const posthogLogger = loggerProvider?.getLogger("motif-posthog-logs");
 
