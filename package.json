@@ -40,7 +40,8 @@
     "posthog-js": "^1.455.4",
     "posthog-node": "^6.2.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "remotion": "^4.0.547"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

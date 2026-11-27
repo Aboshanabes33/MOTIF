@@ -3,9 +3,7 @@ import {
   X,
   Pencil,
   Trash2,
-  Cpu,
   CheckCircle2,
-  Sparkles,
   Copy,
 } from "lucide-react";
 import type {
@@ -36,7 +34,6 @@ interface InspectorProps {
   onDeleteProject: (id: string) => void;
   onDeleteFootage: (id: string) => void;
   onDeleteVoiceNote: (id: string) => void;
-  onOpenMcpWithBrand: (brandId: string) => void;
   onToast: (msg: string) => void;
 }
 
@@ -66,7 +63,6 @@ export function Inspector({
   onDeleteProject,
   onDeleteFootage,
   onDeleteVoiceNote,
-  onOpenMcpWithBrand,
   onToast,
 }: InspectorProps) {
   const brandById = new Map(brands.map((b) => [b.id, b]));
@@ -119,10 +115,6 @@ export function Inspector({
               )}
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <span className="pill-badge pill-badge--accent">
-                <Cpu size={11} />
-                {translate(lang, "brands.mcpVisible")}
-              </span>
               {selectedBrand.tagline && (
                 <p className="inspector-body" style={{ marginTop: 6 }}>
                   {selectedBrand.tagline}
@@ -178,22 +170,12 @@ export function Inspector({
                 <p className="inspector-body">{selectedBrand.notes}</p>
               </div>
             )}
-            <div className="kv-row">
-              <span className="kv-key">MCP Resource URI</span>
-              <code style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--accent)" }}>
-                motif://brands/{selectedBrand.id}
-              </code>
-            </div>
           </div>
 
           <div className="inspector-section" style={{ flexDirection: "row", flexWrap: "wrap" }}>
             <button type="button" className="btn btn--primary" onClick={() => onEditBrand(selectedBrand)}>
               <Pencil size={14} />
               {translate(lang, "brands.edit")}
-            </button>
-            <button type="button" className="btn" onClick={() => onOpenMcpWithBrand(selectedBrand.id)}>
-              <Sparkles size={14} />
-              MCP Brief
             </button>
             <button type="button" className="btn btn--danger" onClick={() => onDeleteBrand(selectedBrand)}>
               <Trash2 size={14} />
@@ -425,11 +407,11 @@ export function Inspector({
             <p className="inspector-body" style={{ marginTop: 8 }}>
               {activeRender
                 ? lang === "ar"
-                  ? `جارٍ العمل على «${activeRender.name}» (${activeRender.progress}%). يقرأ وكيل MCP حالياً ${brands.length} براندات و${projects.length} مشاريع من مساحة العمل.`
-                  : `“${activeRender.name}” is at ${activeRender.progress}%. MCP exposes ${brands.length} saved brands, ${projects.length} projects, and ${voiceNotes.length} voice notes to your AI agent.`
+                  ? `نعمل على «${activeRender.name}» — اكتمل ${activeRender.progress}٪ من التصدير.`
+                  : `“${activeRender.name}” is ${activeRender.progress}% complete.`
                 : lang === "ar"
-                  ? `مساحة العمل متصلة وتضم ${brands.length} براندات و${projects.length} مشاريع جاهزة للتحرير وللربط عبر MCP.`
-                  : `Workspace connected with ${brands.length} brands, ${projects.length} projects, and ${footage.length} clips ready for editing or MCP agent collaboration.`}
+                  ? `لديك ${brands.length} براندات و${projects.length} مشاريع جاهزة للعمل.`
+                  : `You have ${brands.length} brands and ${projects.length} projects ready to work on.`}
             </p>
 
             <div style={{ marginTop: 14 }}>
@@ -447,11 +429,11 @@ export function Inspector({
           {/* Live Activity Feed */}
           <div className="inspector-section" style={{ flex: 1 }}>
             <div className="inspector-kicker">{translate(lang, "inspector.liveActivity")}</div>
-            {activity.length === 0 ? (
+            {activity.every((event) => event.source === "mcp") ? (
               <p className="inspector-body">{translate(lang, "inspector.noActivity")}</p>
             ) : (
               <div className="activity-list">
-                {activity.slice(0, 8).map((ev) => (
+                {activity.filter((event) => event.source !== "mcp").slice(0, 8).map((ev) => (
                   <div key={ev.id} className="activity-item">
                     <span className={`activity-dot ${ev.source === "mcp" ? "activity-dot--mcp" : ""}`} />
                     <div style={{ minWidth: 0, flex: 1 }}>

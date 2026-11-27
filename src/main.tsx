@@ -7,6 +7,6 @@ import "./posthog";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <TelemetryErrorBoundary><App /></TelemetryErrorBoundary>
   </StrictMode>,
 );

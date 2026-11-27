@@ -82,6 +82,17 @@ Or open the **MCP Agent** tab (`5`) inside MOTIF for one-click client configs (C
 
 ---
 
+## الخصوصية والتحليلات · Privacy & Analytics
+
+MOTIF does not send analytics or error events until the user opts in from **Settings → Privacy & diagnostics**. Configure providers with environment variables (never paste keys into `prefs.json`):
+
+- `SENTRY_DSN` — optional Sentry error reporting DSN.
+- `POSTHOG_PUBLIC_KEY` — optional browser project key.
+- `POSTHOG_API_KEY` — optional server-side PostHog key; kept server-side only.
+- `POSTHOG_HOST` — optional PostHog host (defaults to `https://us.i.posthog.com`).
+
+Without a provider key, telemetry remains inactive. Settings shows the recent local diagnostics ring buffer and whether each provider is configured.
+
 ## بنية المستودع · Repository Layout
 
 - `video-edit/` — the agent's video-editing stack (`SKILL.md` + `stack.json` + `references/` + `scripts/` + `styles/` + Remotion template)

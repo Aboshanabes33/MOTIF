@@ -13,7 +13,7 @@ const EN = {
   "header.new": "New",
   "header.langSwitch": "العربية",
 
-  "status.connected": "Connected · MCP Ready",
+  "status.connected": "Workspace ready",
   "status.offline": "Reconnecting…",
   "status.shortcuts": "1–7 Views · / Search · Esc Close",
   "status.brandsCount": "{n} brands",
@@ -37,9 +37,9 @@ const EN = {
   "status.slim": "Slimmed",
 
   "brands.title": "Brands",
-  "brands.subtitle": "Saved identities in prefs.json — live-readable by AI agents over MCP",
+  "brands.subtitle": "Your creative identities, videos, and brand worlds in one place",
   "brands.add": "Add Brand",
-  "brands.empty": "No brands yet. Add a brand so your AI agent can see its colors, logo, voice, and creative rules through MCP.",
+  "brands.empty": "No brands yet. Add one to bring your videos and creative identity together.",
   "brands.mcpVisible": "Visible to MCP Agents",
   "brands.colors": "Palette",
   "brands.audience": "Audience",
@@ -76,7 +76,7 @@ const EN = {
   "brands.form.nameRequired": "Brand name is required.",
 
   "voice.title": "Voice note",
-  "voice.subtitle": "Capture spoken creative direction — saved to workspace and readable by MCP agents",
+  "voice.subtitle": "Save a quick voice note with direction for your next edit",
   "voice.tapToRecord": "Click to record a voice note",
   "voice.recording": "Recording… click to stop",
   "voice.micFallback": "Microphone unavailable in this browser — you can type a creative voice memo below.",
@@ -245,7 +245,7 @@ const AR: Record<keyof typeof EN, string> = {
   "header.new": "جديد",
   "header.langSwitch": "EN",
 
-  "status.connected": "متصل · خادم MCP جاهز",
+  "status.connected": "مساحة العمل جاهزة",
   "status.offline": "جاري إعادة الاتصال…",
   "status.shortcuts": "1–7 الأقسام · / بحث · Esc إغلاق",
   "status.brandsCount": "{n} براندات",
@@ -269,9 +269,9 @@ const AR: Record<keyof typeof EN, string> = {
   "status.slim": "مضغوط",
 
   "brands.title": "البراندات",
-  "brands.subtitle": "هويات البراند المحفوظة في prefs.json — يقرؤها الوكيل الذكي لحظياً عبر MCP",
+  "brands.subtitle": "هوياتك الإبداعية وفيديوهاتك في مكان واحد",
   "brands.add": "إضافة براند",
-  "brands.empty": "لا توجد براندات بعد. أضف براند ليرى الوكيل الذكي ألوانه وشعاره ونبرة صوته عبر MCP.",
+  "brands.empty": "لا توجد براندات بعد. أضف براند لتجميع فيديوهاتك وهويتك الإبداعية.",
   "brands.mcpVisible": "مرئي لوكلاء MCP",
   "brands.colors": "الألوان",
   "brands.audience": "الجمهور المستهدف",
@@ -308,7 +308,7 @@ const AR: Record<keyof typeof EN, string> = {
   "brands.form.nameRequired": "اسم البراند مطلوب.",
 
   "voice.title": "ملاحظة صوتية",
-  "voice.subtitle": "سجّل توجيهاتك الصوتية — تُحفظ في مساحة العمل ويقرؤها وكيل MCP",
+  "voice.subtitle": "احفظ ملاحظة صوتية سريعة لتوجيه تعديلك القادم",
   "voice.tapToRecord": "اضغط لتسجيل ملاحظة صوتية",
   "voice.recording": "جاري التسجيل… اضغط للإيقاف",
   "voice.micFallback": "الميكروفون غير متاح في هذا المتصفح — يمكنك كتابة الملاحظة الصوتية بالأسفل.",

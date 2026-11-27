@@ -104,6 +104,17 @@ function readJsonBody(req, maxBytes = 12 * 1024 * 1024) {
   });
 }
 
+function hyperFramesDocument(project) {
+  const duration = Math.max(5, Number(project.durationSec) || 30);
+  const width = project.aspect === "16:9" ? 1920 : 1080;
+  const height = project.aspect === "16:9" ? 1080 : 1920;
+  const scenes = project.aiEdit?.scenes?.length ? project.aiEdit.scenes : [{ title: project.name, start: 0, duration, motion: "rise" }];
+  const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+  const clips = scenes.map((scene, index) => `<div class="clip scene scene-${index}" data-start="${Math.max(0, Number(scene.start) || 0)}" data-duration="${Math.max(1, Number(scene.duration) || 5)}" data-track-index="0"><div class="title">${esc(scene.title || project.name)}</div><div class="subtitle">${esc(project.aiEdit?.captions?.[index % Math.max(project.aiEdit?.captions?.length || 1, 1)] || project.name)}</div></div>`).join("\n");
+  const data = JSON.stringify({ duration, width, height });
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}html,body{margin:0;background:#081414;color:#f0f7f4;font-family:Inter,Arial,sans-serif}#root{position:relative;width:min(100vw,${width}px);aspect-ratio:${width}/${height};max-height:100vh;overflow:hidden;background:radial-gradient(circle at 74% 26%,${esc(project.accentFrom || "#2f7268")}99,transparent 38%),linear-gradient(135deg,#102c2a,#081414)}.scene{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:10%;color:white}.title{font-size:clamp(30px,7vw,110px);font-weight:800;max-width:82%;line-height:1.05}.subtitle{font-size:clamp(15px,2vw,32px);margin-top:3%;color:#c9e5dc}.scene:after{content:'';position:absolute;width:32%;aspect-ratio:1;border-radius:50%;right:8%;top:17%;background:linear-gradient(145deg,#ffffff22,${esc(project.accentFrom || "#2f7268")}99);filter:blur(1px);z-index:-1}</style></head><body><div id="root" data-composition-id="main" data-start="0" data-duration="${duration}" data-width="${width}" data-height="${height}">${clips}</div><script src="/api/vendor/gsap.js"></script><script>const cfg=${data};window.__timelines=window.__timelines||{};const tl=gsap.timeline({paused:true});document.querySelectorAll('.clip').forEach((clip)=>{const start=Number(clip.dataset.start), end=start+Number(clip.dataset.duration), child=clip.querySelector('.title');tl.fromTo(child,{y:36,opacity:0},{y:0,opacity:1,duration:.65,ease:'power3.out'},start);tl.to(child,{opacity:0,duration:.28},Math.max(start,end-.35));});window.__timelines.main=tl;</script></body></html>`;
+}
+
 function buildMcpClientConfigs(mcpScriptPath, dataDir) {
   const normalizedScript = mcpScriptPath.replace(/\\/g, "/");
   const winScript = mcpScriptPath.replace(/\//g, "\\");
@@ -157,6 +168,7 @@ export async function startMotifServer(opts = {}) {
     projectsDir: opts.projectsDir,
     cleanInit: opts.cleanInit,
   });
+  await initializeTelemetry(Boolean(store.readPrefs().telemetryEnabled));
 
   // SSE subscribers
   const sseClients = new Set();
@@ -344,6 +356,27 @@ export async function startMotifServer(opts = {}) {
         });
       }
 
+      if (method === "GET" && pathname === "/api/telemetry/config") {
+        const cfg = telemetryConfig();
+        return sendJson(res, 200, { ...cfg, sentryDsn: process.env.SENTRY_DSN || "", posthogPublicKey: process.env.POSTHOG_PUBLIC_KEY || "", posthogHost: process.env.POSTHOG_HOST || "https://us.i.posthog.com" });
+      }
+      if (method === "GET" && pathname === "/api/telemetry/diagnostics") return sendJson(res, 200, getDiagnostics());
+      if (method === "POST" && pathname === "/api/telemetry/event") {
+        const body = await readJsonBody(req, 32 * 1024);
+        const enabled = Boolean(store.readPrefs().telemetryEnabled);
+        await initializeTelemetry(enabled);
+        captureTelemetryEvent(String(body.event || "unknown").slice(0, 80), body.properties && typeof body.properties === "object" ? body.properties : {}, enabled);
+        return sendJson(res, 202, { accepted: enabled });
+      }
+      if (method === "POST" && pathname === "/api/telemetry/error") {
+        const body = await readJsonBody(req, 16 * 1024);
+        const error = new Error(String(body.message || "Client error").slice(0, 500));
+        const enabled = Boolean(store.readPrefs().telemetryEnabled);
+        await initializeTelemetry(enabled);
+        captureTelemetryError(error, enabled);
+        return sendJson(res, 202, { accepted: true });
+      }
+
       // --- Preferences (canonical prefs.json contract per AGENT.md / CLAUDE.md) ---
       if (method === "GET" && pathname === "/api/prefs") {
         return sendJson(res, 200, store.readPrefs());
@@ -352,6 +385,7 @@ export async function startMotifServer(opts = {}) {
       if (method === "PUT" && pathname === "/api/prefs") {
         const body = await readJsonBody(req);
         const updated = store.writePrefs(body);
+        await initializeTelemetry(Boolean(updated.telemetryEnabled));
         broadcast("prefs", { brandsCount: updated.brands.length, at: Date.now() });
         return sendJson(res, 200, updated);
       }
@@ -665,6 +699,32 @@ export async function startMotifServer(opts = {}) {
         return sendJson(res, 200, { ok: result.gate === "ok", ...result });
       }
 
+      if (method === "GET" && pathname === "/api/updates/check") {
+        const payload = await fetchReleasesPayload({ releaseDir });
+        const latestTag = payload.githubReleases?.find((release) => !release.prerelease)?.tag || CURRENT_RELEASE.tag;
+        const latestVersion = String(latestTag).replace(/^v/i, "");
+        const currentParts = CURRENT_RELEASE.version.split(".").map(Number);
+        const latestParts = latestVersion.split(".").map(Number);
+        const updateAvailable = latestParts.some((part, index) => part > (currentParts[index] || 0)) && !currentParts.some((part, index) => part > (latestParts[index] || 0));
+        return sendJson(res, 200, { updateAvailable, currentVersion: CURRENT_RELEASE.version, latestVersion, releaseUrl: payload.githubReleases?.[0]?.url || CURRENT_RELEASE.releaseUrl });
+      }
+
+      if (method === "GET" && pathname === "/api/vendor/gsap.js") {
+        const file = path.join(REPO_ROOT, "node_modules", "gsap", "dist", "gsap.min.js");
+        if (!fs.existsSync(file)) return sendJson(res, 404, { error: "GSAP runtime unavailable" });
+        res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=86400" });
+        return fs.createReadStream(file).pipe(res);
+      }
+
+      const hyperframesMatch = /^\/api\/projects\/([^/]+)\/hyperframes\/index\.html$/.exec(pathname);
+      if (method === "GET" && hyperframesMatch) {
+        const project = store.getProject(decodeURIComponent(hyperframesMatch[1]));
+        if (!project) return sendJson(res, 404, { error: "Project not found" });
+        const html = hyperFramesDocument(project);
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-length": Buffer.byteLength(html) });
+        return res.end(html);
+      }
+
       // --- Releases Page API ---
       if (method === "GET" && pathname === "/api/releases") {
         const payload = await fetchReleasesPayload({ releaseDir });
@@ -683,6 +743,7 @@ export async function startMotifServer(opts = {}) {
 
       return sendJson(res, 404, { error: "Not found", path: pathname });
     } catch (err) {
+      try { const enabled = Boolean(store.readPrefs().telemetryEnabled); await initializeTelemetry(enabled); captureTelemetryError(err, enabled); } catch { /* diagnostics are best-effort */ }
       const status = Number.isInteger(err?.status) ? err.status : 500;
       return sendJson(res, status, {
         error: err?.message || "Internal server error",

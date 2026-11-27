@@ -129,6 +129,9 @@ export const api = {
     ),
 
   getReleases: () => requestJson<ReleasesPayload>("/api/releases"),
+  checkUpdates: () => requestJson<{ updateAvailable: boolean; currentVersion: string; latestVersion: string; releaseUrl?: string }>("/api/updates/check"),
+  getTelemetryConfig: () => requestJson<{ sentryConfigured: boolean; posthogConfigured: boolean; sentryDsn?: string; posthogPublicKey?: string; posthogHost?: string }>("/api/telemetry/config"),
+  getDiagnostics: () => requestJson<Array<{ at: string; kind: string; message?: string }>>("/api/telemetry/diagnostics"),
 
   /* Video agent — the video-edit stack */
   getVideoStatus: () => requestJson<VideoEditStatus>("/api/video/edit/status"),
