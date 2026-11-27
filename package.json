@@ -33,7 +33,12 @@
     "icons": "python3 scripts/generate-icons.py"
   },
   "dependencies": {
+    "@opentelemetry/exporter-logs-otlp-http": "^0.301.2",
+    "@opentelemetry/resources": "^3.1.1",
+    "@opentelemetry/sdk-logs": "^3.1.1",
     "lucide-react": "^0.511.0",
+    "posthog-js": "^1.455.4",
+    "posthog-node": "^6.2.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

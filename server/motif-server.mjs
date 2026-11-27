@@ -14,6 +14,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMotifStore } from "./store.mjs";
 import { fetchReleasesPayload } from "./releases.mjs";
+import { captureTranscription, shutdownPostHog } from "./posthog-ai.mjs";
+import { logBackendStarted, logVideoStageCompleted, shutdownPostHogLogs } from "./posthog-logs.mjs";
 import {
   MCP_SERVER_INFO,
   MCP_TOOLS,
@@ -655,6 +657,10 @@ export async function startMotifServer(opts = {}) {
           name: body.name,
           mode: body.mode || "full",
         });
+        if (body.stage === "transcribe" && typeof body.posthogDistinctId === "string") {
+          captureTranscription({ distinctId: body.posthogDistinctId, work: body.work, result });
+        }
+        logVideoStageCompleted({ stage: body.stage, result });
         broadcast("video", { stage: body.stage, gate: result.gate, at: Date.now() });
         return sendJson(res, 200, { ok: result.gate === "ok", ...result });
       }
@@ -701,6 +707,7 @@ export async function startMotifServer(opts = {}) {
     runtime,
     version: MCP_SERVER_INFO.version,
   });
+  logBackendStarted({ runtime });
 
   const close = () =>
     new Promise((resolve) => {
@@ -721,7 +728,12 @@ export async function startMotifServer(opts = {}) {
         }
       }
       sseClients.clear();
-      server.close(() => resolve());
+      server.close(() => {
+        Promise.race([
+          Promise.all([shutdownPostHog(), shutdownPostHogLogs()]),
+          new Promise((resolveShutdown) => setTimeout(resolveShutdown, 2_000)),
+        ]).finally(resolve);
+      });
       server.closeAllConnections?.();
     });
 

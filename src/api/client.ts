@@ -148,7 +148,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  runVideoStage: (payload: { stage: string; work: string; name?: string; mode?: VideoMode }) =>
+  runVideoStage: (payload: { stage: string; work: string; name?: string; mode?: VideoMode; posthogDistinctId?: string }) =>
     requestJson<VideoRunResult>("/api/video/edit/run", {
       method: "POST",
       body: JSON.stringify(payload),

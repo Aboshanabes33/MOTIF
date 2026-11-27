@@ -30,6 +30,7 @@ import type {
 } from "../types";
 import { api } from "../api/client";
 import { translate } from "../i18n";
+import posthog, { isPostHogConfigured } from "../posthog";
 
 interface VideoAgentViewProps {
   lang: Lang;
@@ -156,8 +157,21 @@ export function VideoAgentView({ lang, onToast }: VideoAgentViewProps) {
     setRunning(stepId);
     setError("");
     try {
-      const res = await api.runVideoStage({ stage: stepId, work: plan.work, name: plan.name, mode: plan.mode });
+      const res = await api.runVideoStage({
+        stage: stepId,
+        work: plan.work,
+        name: plan.name,
+        mode: plan.mode,
+        posthogDistinctId: isPostHogConfigured ? posthog.get_distinct_id() : undefined,
+      });
       setRunResult({ ...res, stage: stepId });
+      if (isPostHogConfigured) {
+        posthog.capture("video_stage_run_completed", {
+          gate: res.gate,
+          stage: stepId,
+          succeeded: res.ok,
+        });
+      }
       if (res.gate === "refused") onToast(translate(lang, "agent.gateRefused"));
       if (res.gate === "ok") {
         onToast(translate(lang, "agent.gateOk"));
@@ -176,6 +190,13 @@ export function VideoAgentView({ lang, onToast }: VideoAgentViewProps) {
       const res = await api.getVideoPlan({ name: newName.trim(), mode });
       setPlan(res);
       setSelectedClip(res.name);
+      if (isPostHogConfigured) {
+        posthog.capture("video_clip_plan_created", {
+          frame: res.frame,
+          mode: res.mode,
+          stage_count: res.steps.length,
+        });
+      }
       setNewName("");
       onToast(res.work);
       refresh();
