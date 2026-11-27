@@ -315,6 +315,7 @@ export function App() {
   const handleDeleteFootage = async (id: string) => {
     await api.deleteFootage(id);
     if (selected?.kind === "footage" && selected.id === id) setSelected(null);
+    captureEvent("footage_deleted");
     refreshWorkspace();
   };
 
@@ -342,6 +343,7 @@ export function App() {
   const handleDeleteVoiceNote = async (id: string) => {
     await api.deleteVoiceNote(id);
     if (selected?.kind === "voice" && selected.id === id) setSelected(null);
+    captureEvent("voice_note_deleted");
     refreshWorkspace();
   };
 

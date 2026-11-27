@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/react";
 import type { ReactNode } from "react";
-import posthog from "posthog-js";
+import posthog, { isPostHogConfigured } from "./posthog";
 
 let enabled = false;
 let active = false;
@@ -24,10 +24,15 @@ export async function initializeClientTelemetry(telemetryEnabled: boolean) {
     if (browserConfig.sentryDsn) Sentry.init({ dsn: browserConfig.sentryDsn, tracesSampleRate: 0.05 });
     serverOnlyAnalytics = Boolean(browserConfig.posthogConfigured && !browserConfig.posthogPublicKey);
     if (browserConfig.posthogPublicKey) {
-      if (!posthogStarted) {
-        posthog.init(browserConfig.posthogPublicKey, { api_host: browserConfig.posthogHost || "https://us.i.posthog.com", autocapture: false, capture_pageview: false, persistence: "localStorage" });
+      if (isPostHogConfigured || posthogStarted) {
+        posthog.opt_in_capturing();
+      } else {
+        posthog.init(browserConfig.posthogPublicKey, {
+          ...(browserConfig.posthogHost ? { api_host: browserConfig.posthogHost } : {}),
+          persistence: "localStorage",
+        });
         posthogStarted = true;
-      } else posthog.opt_in_capturing();
+      }
     }
     active = true;
   } catch { /* telemetry never affects app startup */ }
