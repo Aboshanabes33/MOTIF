@@ -33,11 +33,9 @@
     "icons": "python3 scripts/generate-icons.py"
   },
   "dependencies": {
-    "@hyperframes/player": "^0.9.102",
-    "@remotion/player": "^4.0.547",
-    "@sentry/node": "^11.19.0",
-    "@sentry/react": "^11.19.0",
-    "gsap": "^3.15.1",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.301.2",
+    "@opentelemetry/resources": "^3.1.1",
+    "@opentelemetry/sdk-logs": "^3.1.1",
     "lucide-react": "^0.511.0",
     "posthog-js": "^1.455.4",
     "posthog-node": "^6.2.0",

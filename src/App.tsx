@@ -31,10 +31,7 @@ import { SearchView } from "./views/SearchView";
 import { McpView } from "./views/McpView";
 import { VideoAgentView } from "./views/VideoAgentView";
 import { ReleaseView } from "./views/ReleaseView";
-import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
-import { OnboardingModal } from "./components/OnboardingModal";
-const AgentVideoEditor = lazy(() => import("./components/AgentVideoEditor").then((module) => ({ default: module.AgentVideoEditor })));
-import { initializeClientTelemetry, captureAppEvent } from "./telemetry";
+import posthog, { isPostHogConfigured } from "./posthog";
 
 function isStandaloneReleaseLocation(): boolean {
   if (typeof window === "undefined") return false;
@@ -95,6 +92,13 @@ export function App() {
     toastTimerRef.current = window.setTimeout(() => setToast(""), 2600);
   }, []);
 
+  const captureEvent = (
+    event: string,
+    properties: Record<string, boolean | number | string | string[]> = {},
+  ) => {
+    if (isPostHogConfigured) posthog.capture(event, properties);
+  };
+
   // Sync HTML lang & RTL direction
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -121,8 +125,21 @@ export function App() {
       }
       setMcpStatus(mcp);
       setConnected(true);
+      if (isPostHogConfigured) {
+        posthog.logger.info("Workspace synchronized", {
+          event: "workspace_synchronized",
+          brand_count: ws.brands?.length || 0,
+          project_count: ws.projects?.length || 0,
+          footage_count: ws.footage?.length || 0,
+        });
+      }
     } catch {
       setConnected(false);
+      if (isPostHogConfigured) {
+        posthog.logger.warn("Workspace synchronization failed", {
+          event: "workspace_synchronization_failed",
+        });
+      }
     }
   }, []);
 
@@ -219,13 +236,19 @@ export function App() {
       const res = await api.updateBrand(editId, payload);
       setBrands(res.brands);
       setSelected({ kind: "brand", id: res.brand.id });
-      captureAppEvent("brand_saved", { action: "updated" });
+      captureEvent("brand_updated", {
+        color_count: res.brand.colors.length,
+        has_logo: Boolean(res.brand.logo),
+      });
       pushToast(`Saved “${res.brand.name}”`);
     } else {
       const res = await api.createBrand(payload);
       setBrands(res.brands);
       setSelected({ kind: "brand", id: res.brand.id });
-      captureAppEvent("brand_saved", { action: "created" });
+      captureEvent("brand_created", {
+        color_count: res.brand.colors.length,
+        has_logo: Boolean(res.brand.logo),
+      });
       pushToast(`Created “${res.brand.name}”`);
     }
     refreshWorkspace();
@@ -237,6 +260,7 @@ export function App() {
     const res = await api.deleteBrand(brand.id);
     setBrands(res.brands);
     if (selected?.kind === "brand" && selected.id === brand.id) setSelected(null);
+    captureEvent("brand_deleted");
     pushToast(`Deleted “${brand.name}”`);
     refreshWorkspace();
   };
@@ -246,18 +270,28 @@ export function App() {
     captureAppEvent("project_created", { aspect: res.project.aspect });
     setSelected({ kind: "project", id: res.project.id });
     setView("today");
+    captureEvent("project_created", {
+      aspect: res.project.aspect,
+      has_brand: Boolean(res.project.brandId),
+      status: res.project.status,
+    });
     pushToast(`Created “${res.project.name}”`);
     refreshWorkspace();
   };
 
   const handleUpdateProject = async (id: string, patch: Partial<Project>) => {
-    await api.updateProject(id, patch);
+    const res = await api.updateProject(id, patch);
+    captureEvent("project_updated", {
+      status: res.project.status,
+      updated_fields: Object.keys(patch),
+    });
     refreshWorkspace();
   };
 
   const handleDeleteProject = async (id: string) => {
     await api.deleteProject(id);
     if (selected?.kind === "project" && selected.id === id) setSelected(null);
+    captureEvent("project_deleted");
     pushToast("Project removed");
     refreshWorkspace();
   };
@@ -265,6 +299,11 @@ export function App() {
   const handleAddFootage = async (payload: Partial<FootageItem>) => {
     const res = await api.addFootage(payload);
     setSelected({ kind: "footage", id: res.footage.id });
+    captureEvent("footage_added", {
+      has_brand: Boolean(res.footage.brandId),
+      has_project: Boolean(res.footage.projectId),
+      kind: res.footage.kind,
+    });
     pushToast(`Added “${res.footage.name}”`);
     refreshWorkspace();
   };
@@ -285,6 +324,13 @@ export function App() {
   }) => {
     const res = await api.createVoiceNote(payload);
     setSelected({ kind: "voice", id: res.voiceNote.id });
+    captureEvent("voice_note_saved", {
+      duration_seconds: res.voiceNote.durationSec,
+      has_audio: res.voiceNote.hasAudio,
+      has_brand: Boolean(res.voiceNote.brandId),
+      has_project: Boolean(res.voiceNote.projectId),
+      has_transcript: Boolean(res.voiceNote.transcript),
+    });
     pushToast(`Saved “${res.voiceNote.title}”`);
     refreshWorkspace();
   };

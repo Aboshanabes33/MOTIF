@@ -17,6 +17,7 @@ import {
 import type { Lang, McpStatusPayload } from "../types";
 import { api } from "../api/client";
 import { translate } from "../i18n";
+import posthog, { isPostHogConfigured } from "../posthog";
 
 interface McpViewProps {
   lang: Lang;
@@ -128,6 +129,9 @@ export function McpView({
         translate(lang, res.alreadyConnected ? "mcp.restart" : "mcp.addedToast")
           .replace("{name}", res.label),
       );
+      if (isPostHogConfigured) {
+        posthog.capture("mcp_client_connected", { already_connected: Boolean(res.alreadyConnected), client });
+      }
       onAfterInvoke();
     } catch (err) {
       const msg = err instanceof Error ? err.message : translate(lang, "mcp.installFailed");
@@ -144,6 +148,7 @@ export function McpView({
     try {
       const res = await api.removeMcpClient(client);
       setClients(res.clients);
+      if (isPostHogConfigured) posthog.capture("mcp_client_disconnected", { client });
       onToast(translate(lang, "mcp.removedToast").replace("{name}", res.label));
     } catch (err) {
       setError(err instanceof Error ? err.message : translate(lang, "mcp.installFailed"));
@@ -162,8 +167,16 @@ export function McpView({
       const res = await api.invokeMcpTool(toolName, parsed);
       setOutput(JSON.stringify(res.result, null, 2));
       setElapsedMs(res.elapsedMs);
+      if (isPostHogConfigured) {
+        posthog.capture("mcp_tool_invoked", {
+          elapsed_ms: res.elapsedMs,
+          succeeded: true,
+          tool_name: res.tool,
+        });
+      }
       onAfterInvoke();
     } catch (err) {
+      if (isPostHogConfigured) posthog.capture("mcp_tool_invoked", { succeeded: false, tool_name: toolName });
       setError(err instanceof Error ? err.message : "MCP invocation failed");
     } finally {
       setRunning(false);
