@@ -27,6 +27,16 @@ win:
     - target: portable
       arch:
         - x64
+mac:
+  category: public.app-category.video
+  identity: null
+  target:
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  artifactName: MOTIF-${version}-mac-${arch}.${ext}
+
 nsis:
   oneClick: false
   perMachine: false
