@@ -133,14 +133,16 @@ if (!gotLock) {
       return;
     }
 
-    backendServer = await startMotifServer({
-      host: "127.0.0.1",
-      port: Number(process.env.MOTIF_PORT || 0),
-      dataDir,
-      staticDir,
-      mcpScriptPath,
-      runtime: "electron",
-    });
+    // Fixed port so the WorkOS sign-in redirect URI stays http://127.0.0.1:8795. If it is taken, fall back to a
+    // random port (sign-in will then not work until the other program is closed).
+    const serverOptions = { host: "127.0.0.1", dataDir, staticDir, mcpScriptPath, runtime: "electron" };
+    const preferredPort = Number(process.env.MOTIF_PORT || 8795);
+    try {
+      backendServer = await startMotifServer({ ...serverOptions, port: preferredPort });
+    } catch (err) {
+      if (preferredPort === 0) throw err;
+      backendServer = await startMotifServer({ ...serverOptions, port: 0 });
+    }
 
     await createMainWindow(backendServer.url);
   });

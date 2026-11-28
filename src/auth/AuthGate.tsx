@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
-import { ConvexReactClient, ConvexProviderWithAuth, useMutation, useQuery } from "convex/react";
+import { ConvexReactClient, ConvexProviderWithAuth, useAction, useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import { PLANS, type PlanId } from "./plans";
 
@@ -11,6 +11,7 @@ export const isAuthConfigured = Boolean(workosClientId && convexUrl);
 
 const meRef = makeFunctionReference<"query", Record<string, never>, { plan: PlanId | null; planStatus: string | null } | null>("users:me");
 const storeRef = makeFunctionReference<"mutation", Record<string, never>, unknown>("users:store");
+const deleteAccountRef = makeFunctionReference<"action", Record<string, never>, { workosDeleted: boolean }>("users:deleteAccount");
 const choosePlanRef = makeFunctionReference<"mutation", { plan: PlanId }, null>("users:choosePlan");
 
 function useAuthFromAuthKit() {
@@ -35,9 +36,11 @@ const T = {
     monthly: "Monthly",
     yearly: "Yearly",
     paidDesc: "Templates and styles.",
+    billedYearly: "billed yearly ({total} SAR / year)",
+    sandbox: "Whop sandbox",
     trial: "{n}-day free trial",
     perMonth: "SAR / month",
-    perYear: "SAR / year",
+    perYear: "SAR / month",
     choose: "Choose",
     soonNote: "Paid plans are coming soon (payments via Whop sandbox). Your choice is saved and you stay on Free until they open.",
     signOut: "Sign out",
@@ -56,15 +59,36 @@ const T = {
     monthly: "شهرية",
     yearly: "سنوية",
     paidDesc: "قوالب وستايلات.",
+    billedYearly: "تُدفع سنوياً ({total} ريال / سنة)",
+    sandbox: "Whop sandbox",
     trial: "تجربة مجانية {n} أيام",
     perMonth: "ريال / شهر",
-    perYear: "ريال / سنة",
+    perYear: "ريال / شهر",
     choose: "اختيار",
     soonNote: "الباقات المدفوعة قريباً (الدفع عبر Whop sandbox). يُحفظ اختيارك وتبقى على المجانية حتى تُفتح.",
     signOut: "تسجيل الخروج",
     loading: "جارٍ التحميل…",
   },
 } as const;
+
+function planLabel(t: (typeof T)["en"] | (typeof T)["ar"], id: PlanId): string {
+  return id === "free" ? t.free : id === "monthly" ? t.monthly : t.yearly;
+}
+
+function planDetail(t: (typeof T)["en"] | (typeof T)["ar"], plan: (typeof PLANS)[number]): string {
+  if (plan.id === "free") return t.freeDesc;
+  const price = `${plan.priceSar} ${plan.billedYearly ? t.perYear : t.perMonth}`;
+  const billed = plan.billedYearly ? ` (${t.billedYearly.replace("{total}", String(plan.priceSar * 12))})` : "";
+  return `${price}${billed} · ${t.trial.replace("{n}", String(plan.trialDays))} · ${t.paidDesc}`;
+}
+
+// Opens the Whop sandbox checkout for a paid plan when its link is configured. Payment stays on Whop.
+function openCheckout(plan: PlanId) {
+  const def = PLANS.find((p) => p.id === plan);
+  if (!def?.checkoutUrl) return;
+  if (window.motifDesktop?.openExternal) window.motifDesktop.openExternal(def.checkoutUrl).catch(() => {});
+  else window.open(def.checkoutUrl, "_blank", "noopener");
+}
 
 function Shell({ lang, children }: { lang: "en" | "ar"; children: ReactNode }) {
   return (
@@ -90,7 +114,10 @@ function SignedIn({ lang, children }: { lang: "en" | "ar"; children: ReactNode }
   const pick = async (plan: PlanId) => {
     setBusy(plan);
     setError("");
-    try { await choosePlan({ plan }); } catch (err) { setError(err instanceof Error ? err.message : "Error"); }
+    try {
+      await choosePlan({ plan });
+      openCheckout(plan);
+    } catch (err) { setError(err instanceof Error ? err.message : "Error"); }
     setBusy(null);
   };
 
@@ -102,16 +129,16 @@ function SignedIn({ lang, children }: { lang: "en" | "ar"; children: ReactNode }
         {PLANS.map((plan) => (
           <button key={plan.id} disabled={busy !== null} onClick={() => pick(plan.id)}>
             <span>
-              {plan.id === "free" ? t.free : plan.id === "monthly" ? t.monthly : t.yearly}
-              {plan.comingSoon && <> · <em>{t.soon}</em></>}
+              {planLabel(t, plan.id)}
+              {plan.comingSoon ? <> · <em>{t.soon}</em></> : plan.id !== "free" && <> · <em>{t.sandbox}</em></>}
             </span>
             <small>
-              {plan.id === "free" ? t.freeDesc : `${plan.priceSar} ${plan.id === "monthly" ? t.perMonth : t.perYear} · ${t.trial.replace("{n}", String(plan.trialDays))} · ${t.paidDesc}`}
+              {planDetail(t, plan)}
             </small>
           </button>
         ))}
       </div>
-      <small>{t.soonNote}</small>
+      {PLANS.some((plan) => plan.comingSoon) && <small>{t.soonNote}</small>}
       {error && <small role="alert">{error}</small>}
       <button className="onboarding-skip" onClick={() => signOut()}>{t.signOut}</button>
     </Shell>
@@ -149,4 +176,94 @@ export function AuthGate({ children }: { children: ReactNode }) {
       </ConvexProviderWithAuth>
     </AuthKitProvider>
   );
+}
+
+const A = {
+  en: {
+    title: "Account",
+    signedAs: "Signed in as",
+    plan: "Plan",
+    change: "Change plan",
+    current: "Current",
+    signOut: "Sign out",
+    danger: "Delete account",
+    dangerText: "This permanently deletes your MOTIF account and sign-in. Local files on this computer are not touched. Type DELETE to confirm.",
+    confirmWord: "DELETE",
+    deleteBtn: "Delete my account",
+    deleted: "Account deleted",
+    off: "Sign-in is not enabled in this build.",
+    soon: "Coming soon",
+  },
+  ar: {
+    title: "الحساب",
+    signedAs: "مسجّل الدخول باسم",
+    plan: "الباقة",
+    change: "تغيير الباقة",
+    current: "الحالية",
+    signOut: "تسجيل الخروج",
+    danger: "حذف الحساب",
+    dangerText: "يحذف حسابك في MOTIF وتسجيل دخولك نهائياً. ملفاتك على هذا الجهاز لا تتأثر. اكتب DELETE للتأكيد.",
+    confirmWord: "DELETE",
+    deleteBtn: "احذف حسابي",
+    deleted: "تم حذف الحساب",
+    off: "تسجيل الدخول غير مفعّل في هذا الإصدار.",
+    soon: "قريباً",
+  },
+} as const;
+
+function AccountPaneInner({ lang, onToast }: { lang: "en" | "ar"; onToast: (m: string) => void }) {
+  const a = A[lang];
+  const t = T[lang];
+  const { user, signOut } = useAuth();
+  const me = useQuery(meRef, {});
+  const choosePlan = useMutation(choosePlanRef);
+  const deleteAccount = useAction(deleteAccountRef);
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const change = async (plan: PlanId) => {
+    setError("");
+    try { await choosePlan({ plan }); openCheckout(plan); } catch (err) { setError(err instanceof Error ? err.message : "Error"); }
+  };
+  const remove = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await deleteAccount({});
+      onToast(a.deleted);
+      await signOut();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <div className="settings-intro"><h3>{a.title}</h3><p>{a.signedAs} {user?.email || ""}{user?.firstName ? ` (${user.firstName}${user.lastName ? ` ${user.lastName}` : ""})` : ""}</p></div>
+      <div className="onboarding-options">
+        {PLANS.map((plan) => (
+          <button key={plan.id} disabled={me?.plan === plan.id} onClick={() => change(plan.id)}>
+            <span>{planLabel(t, plan.id)}{me?.plan === plan.id ? ` · ${a.current}` : plan.comingSoon ? ` · ${a.soon}` : ""}</span>
+            <small>{planDetail(t, plan)}</small>
+          </button>
+        ))}
+      </div>
+      <button className="btn" onClick={() => signOut()}>{a.signOut}</button>
+      <div className="settings-version-card" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+        <strong>{a.danger}</strong>
+        <small>{a.dangerText}</small>
+        <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={a.confirmWord} aria-label={a.danger} />
+        <button className="btn" disabled={busy || confirm !== a.confirmWord} onClick={remove}>{a.deleteBtn}</button>
+        {error && <small role="alert">{error}</small>}
+      </div>
+    </section>
+  );
+}
+
+// Rendered inside Settings. Only meaningful (and only mounted inside the providers) when auth is configured.
+export function AccountPane({ lang, onToast }: { lang: "en" | "ar"; onToast: (m: string) => void }) {
+  if (!isAuthConfigured) return <section><div className="settings-intro"><h3>{A[lang].title}</h3><p>{A[lang].off}</p></div></section>;
+  return <AccountPaneInner lang={lang} onToast={onToast} />;
 }
