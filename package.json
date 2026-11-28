@@ -1,7 +1,7 @@
 {
   "name": "motif-desktop",
   "productName": "MOTIF",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "MOTIF — Liquid Glass Creative Desktop App with Brand Identity Hub and MCP Agent Integration",
   "type": "module",
   "main": "electron/main.mjs",
