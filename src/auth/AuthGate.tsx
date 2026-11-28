@@ -170,7 +170,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   let lang: "en" | "ar" = "en";
   try { lang = localStorage.getItem("motif.lang") === "ar" ? "ar" : "en"; } catch { /* default */ }
   return (
-    <AuthKitProvider clientId={workosClientId as string}>
+    <AuthKitProvider clientId={workosClientId as string} redirectUri={`${window.location.origin}/`}>
       <ConvexProviderWithAuth client={convexClient} useAuth={useAuthFromAuthKit}>
         <Gate lang={lang}>{children}</Gate>
       </ConvexProviderWithAuth>
