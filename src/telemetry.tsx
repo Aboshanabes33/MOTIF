@@ -56,6 +56,8 @@ export async function initializeClientTelemetry(telemetryEnabled: boolean) {
         });
         posthogStarted = true;
       }
+      // Sentry events carry the same anonymous PostHog ids (no PII).
+      linkSentry(posthog);
     }
     active = true;
   } catch { /* telemetry never affects app startup */ }

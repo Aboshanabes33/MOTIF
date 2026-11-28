@@ -405,6 +405,18 @@ export async function startMotifServer(opts = {}) {
         return sendJson(res, 200, { brands: store.listBrands() });
       }
 
+      // One-click example brand (the "Example" button) — never seeded automatically.
+      if (method === "POST" && pathname === "/api/brands/example") {
+        const result = store.createExampleBrand({ source: "user" });
+        broadcast("workspace", { reason: "brand_example", at: Date.now() });
+        return sendJson(res, result.alreadyExisted ? 200 : 201, {
+          ok: true,
+          alreadyExisted: result.alreadyExisted,
+          brand: result.brand,
+          brands: store.listBrands(),
+        });
+      }
+
       if (method === "POST" && pathname === "/api/brands") {
         const body = await readJsonBody(req);
         const brand = store.createBrand(body, { source: "user" });

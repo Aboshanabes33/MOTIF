@@ -42,6 +42,11 @@ export const api = {
       body: JSON.stringify(prefs),
     }),
 
+  createExampleBrand: () =>
+    requestJson<{ ok: boolean; alreadyExisted: boolean; brand: Brand; brands: Brand[] }>(
+      "/api/brands/example",
+      { method: "POST" },
+    ),
   createBrand: (brand: Partial<Brand>) =>
     requestJson<{ brand: Brand; brands: Brand[] }>("/api/brands", {
       method: "POST",

@@ -41,6 +41,8 @@ Rules for this folder: the skill folder is read-only at runtime, all user data l
 
 Brand profiles are global desktop preferences stored in `prefs.json` under the `brands` array.
 
+**A new user starts fresh** — no brands, projects, footage, or voice notes. Never seed demo content automatically. The demo workspace (Qafila + sample projects) exists only behind an explicit opt-in: the **Example** button on the Brands screen (`POST /api/brands/example`, which inserts one editable/deletable Qafila brand and is idempotent), `MOTIF_DEMO=1` (full demo workspace) or `createMotifStore({ demoInit: true })` for internal demos.
+
 Each brand has:
 
 - `id`
