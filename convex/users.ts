@@ -1,4 +1,4 @@
-import { mutationGeneric, queryGeneric } from "convex/server";
+import { actionGeneric, internalMutationGeneric, makeFunctionReference, mutationGeneric, queryGeneric } from "convex/server";
 import { v } from "convex/values";
 
 async function findUser(ctx: any, tokenIdentifier: string) {
@@ -45,5 +45,50 @@ export const choosePlan = mutationGeneric({
       planStatus: plan === "free" ? "active" : "coming_soon",
       planChosenAt: Date.now(),
     });
+  },
+});
+
+// Removes the signed-in user's row.
+export const removeMe = mutationGeneric({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not signed in");
+    const user = await findUser(ctx, identity.tokenIdentifier);
+    if (user) await ctx.db.delete(user._id);
+  },
+});
+
+const removeMeRef = makeFunctionReference<"mutation", Record<string, never>, null>("users:removeMe");
+
+// Deletes the account: our user row, then the WorkOS user when WORKOS_API_KEY is set in the Convex env.
+export const deleteAccount = actionGeneric({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not signed in");
+    await ctx.runMutation(removeMeRef, {});
+    const key = process.env.WORKOS_API_KEY;
+    let workosDeleted = false;
+    if (key) {
+      const res = await fetch(`https://api.workos.com/user_management/users/${encodeURIComponent(identity.subject)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      workosDeleted = res.ok;
+    }
+    return { workosDeleted };
+  },
+});
+
+// Called by the Whop webhook (convex/http.ts). Matches the user by email.
+export const applyWhop = internalMutationGeneric({
+  args: { email: v.string(), plan: v.union(v.literal("free"), v.literal("monthly"), v.literal("yearly")), active: v.boolean() },
+  handler: async (ctx, { email, plan, active }) => {
+    const users = await ctx.db.query("users").collect();
+    const user = users.find((u: any) => (u.email || "").toLowerCase() === email.toLowerCase());
+    if (!user) return false;
+    await ctx.db.patch(user._id, active ? { plan, planStatus: "active", planChosenAt: Date.now() } : { plan: "free", planStatus: "inactive", planChosenAt: Date.now() });
+    return true;
   },
 });

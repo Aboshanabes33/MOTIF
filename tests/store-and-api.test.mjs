@@ -213,7 +213,7 @@ test("MOTIF HTTP API: Brands prefs.json CRUD, validation, Projects, Footage, Voi
 
     // 10. Releases endpoint
     const releases = await fetch(`${base}/api/releases`).then((r) => r.json());
-    assert.equal(releases.current.version, "2.1.1");
+    assert.equal(releases.current.version, "3.0.0");
     assert.ok(releases.current.artifacts.length >= 2);
 
     // Agent-generated edit metadata and HyperFrames composition contract.
@@ -235,7 +235,7 @@ test("MOTIF HTTP API: Brands prefs.json CRUD, validation, Projects, Footage, Voi
     const diagnostics = await fetch(`${base}/api/telemetry/diagnostics`).then((r) => r.json());
     assert.ok(Array.isArray(diagnostics));
     const updateCheck = await fetch(`${base}/api/updates/check`).then((r) => r.json());
-    assert.equal(updateCheck.currentVersion, "2.1.1");
+    assert.equal(updateCheck.currentVersion, "3.0.0");
     assert.equal(typeof updateCheck.updateAvailable, "boolean");
   } finally {
     await srv.close();
