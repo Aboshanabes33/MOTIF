@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 
 const posthogKey = process.env.POSTHOG_API_KEY;
 const posthogHost = process.env.POSTHOG_HOST;
-const processSessionId = randomUUID();
 
 // posthog-node is loaded only when configured, so the packaged app (no node_modules) still starts.
 let posthog = null;
@@ -42,7 +41,7 @@ export function captureTranscription({ distinctId, work, result }) {
   const transcript = result.gate === "ok" ? readTranscript(work) : null;
   const properties = {
     $ai_trace_id: randomUUID(),
-    $ai_session_id: processSessionId,
+    $ai_session_id: null,
     $ai_span_id: randomUUID(),
     $ai_span_name: "video_transcription",
     $ai_model: transcript?.model || "large-v3",

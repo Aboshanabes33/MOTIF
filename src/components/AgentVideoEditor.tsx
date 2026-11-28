@@ -4,6 +4,7 @@ import "@hyperframes/player";
 import { ArrowLeft, Captions, Check, Film, Layers, Play, Sparkles, WandSparkles } from "lucide-react";
 import type { Brand, Lang, Project } from "../types";
 import { RemotionMotionComposition } from "../motion/RemotionMotionComposition";
+import posthog, { isPostHogConfigured } from "../posthog";
 
 interface Props { project: Project; brand?: Brand; lang: Lang; onClose: () => void; onSave: (patch: Partial<Project>) => Promise<void>; }
 export function AgentVideoEditor({ project, brand, lang, onClose, onSave }: Props) {
@@ -27,7 +28,7 @@ export function AgentVideoEditor({ project, brand, lang, onClose, onSave }: Prop
   const durationFrames = Math.max(90, (project.durationSec || 30) * 30);
   const hyperframesUrl = useMemo(() => `/api/projects/${encodeURIComponent(project.id)}/hyperframes/index.html?v=${hyperframesRevision}`, [project.id, hyperframesRevision]);
   const isAr = lang === "ar";
-  const save = async () => { setSaving(true); try { await onSave({ aiEdit: { ...currentEdit, stats: { ...currentEdit.stats, scenes: scenes.length, captions: captions.length } } }); setHyperframesRevision(Date.now()); } finally { setSaving(false); } };
+  const save = async () => { setSaving(true); try { await onSave({ aiEdit: { ...currentEdit, stats: { ...currentEdit.stats, scenes: scenes.length, captions: captions.length } } }); if (isPostHogConfigured) posthog.capture("video_editor_changes_saved", { caption_count: captions.length, engine, scene_count: scenes.length }); setHyperframesRevision(Date.now()); } finally { setSaving(false); } };
 
   return <section className="agent-editor" aria-label={isAr ? "محرر فيديو الوكيل" : "Agent Video Editor"}>
     <header className="agent-editor-header">
