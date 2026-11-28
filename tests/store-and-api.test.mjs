@@ -77,6 +77,9 @@ test("MOTIF HTTP API: Brands prefs.json CRUD, validation, Projects, Footage, Voi
     assert.equal(health.app, "MOTIF");
 
     const info = await fetch(`${base}/api/info`).then((r) => r.json());
+    const initialPrefs = await fetch(`${base}/api/prefs`).then((r) => r.json());
+    assert.equal(initialPrefs.onboardingCompleted, false);
+    assert.equal(initialPrefs.telemetryEnabled, true);
     assert.equal(info.mcp.ready, true);
     assert.ok(info.mcp.toolCount >= 16);
 
@@ -132,12 +135,16 @@ test("MOTIF HTTP API: Brands prefs.json CRUD, validation, Projects, Footage, Voi
     const putPrefs = await fetch(`${base}/api/prefs`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ lang: "ar" }),
+      body: JSON.stringify({ lang: "ar", POSTHOG_API_KEY: "should-never-be-persisted", SENTRY_DSN: "https://secret.invalid/1" }),
     });
     assert.equal(putPrefs.status, 200);
     const afterPut = await putPrefs.json();
     assert.equal(afterPut.lang, "ar");
     assert.equal(afterPut.brands.length, 1);
+    assert.equal(afterPut.POSTHOG_API_KEY, undefined);
+    assert.equal(afterPut.SENTRY_DSN, undefined);
+    const prefsDisk = fs.readFileSync(path.join(tmpDir, "home", "prefs.json"), "utf8");
+    assert.doesNotMatch(prefsDisk, /should-never-be-persisted|secret\\.invalid/);
 
     // 6. Create Project linked to Brand & update progress
     const projRes = await fetch(`${base}/api/projects`, {
@@ -160,6 +167,12 @@ test("MOTIF HTTP API: Brands prefs.json CRUD, validation, Projects, Footage, Voi
       body: JSON.stringify({ status: "rendering", progress: 72 }),
     }).then((r) => r.json());
     assert.equal(patched.project.progress, 72);
+    const savedEdit = await fetch(`${base}/api/projects/${project.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ aiEdit: { ...project.aiEdit, captions: ["Saved caption"] } }),
+    }).then((r) => r.json());
+    assert.equal(savedEdit.project.aiEdit.captions[0], "Saved caption");
 
     // 7. Create Voice Note with audio payload & stream back
     const fakeWav = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
@@ -200,8 +213,30 @@ test("MOTIF HTTP API: Brands prefs.json CRUD, validation, Projects, Footage, Voi
 
     // 10. Releases endpoint
     const releases = await fetch(`${base}/api/releases`).then((r) => r.json());
-    assert.equal(releases.current.version, "2.0.0");
+    assert.equal(releases.current.version, "2.1.1");
     assert.ok(releases.current.artifacts.length >= 2);
+
+    // Agent-generated edit metadata and HyperFrames composition contract.
+    assert.equal(project.aiEdit.engine, "remotion");
+    assert.ok(project.aiEdit.scenes.length > 0);
+    const hyperframes = await fetch(`${base}/api/projects/${project.id}/hyperframes/index.html`).then((r) => r.text());
+    assert.match(hyperframes, /data-composition-id="main"/);
+    assert.match(hyperframes, /window\.__timelines\.main=tl/);
+    assert.match(hyperframes, /data-track-index="0"/);
+    const gsap = await fetch(`${base}/api/vendor/gsap.js`);
+    assert.equal(gsap.status, 200);
+    assert.match(await gsap.text(), /GreenSock|gsap/);
+
+    const telemetryConfig = await fetch(`${base}/api/telemetry/config`).then((r) => r.json());
+    assert.equal(typeof telemetryConfig.posthogConfigured, "boolean");
+    const telemetryPost = await fetch(`${base}/api/telemetry/event`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event: "test", properties: { harmless: true } }) });
+    assert.equal(telemetryPost.status, 202);
+    assert.equal(typeof (await telemetryPost.json()).accepted, "boolean");
+    const diagnostics = await fetch(`${base}/api/telemetry/diagnostics`).then((r) => r.json());
+    assert.ok(Array.isArray(diagnostics));
+    const updateCheck = await fetch(`${base}/api/updates/check`).then((r) => r.json());
+    assert.equal(updateCheck.currentVersion, "2.1.1");
+    assert.equal(typeof updateCheck.updateAvailable, "boolean");
   } finally {
     await srv.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });

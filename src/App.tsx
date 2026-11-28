@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Search } from "lucide-react";
 import type {
   ActivityEvent,
@@ -13,6 +13,7 @@ import type {
   SelectedItem,
   TodaySegment,
   VoiceNote,
+  WorkspacePrefs,
 } from "./types";
 import { api } from "./api/client";
 import { translate, type MessageKey } from "./i18n";
@@ -30,6 +31,11 @@ import { SearchView } from "./views/SearchView";
 import { McpView } from "./views/McpView";
 import { VideoAgentView } from "./views/VideoAgentView";
 import { ReleaseView } from "./views/ReleaseView";
+import posthog, { isPostHogConfigured } from "./posthog";
+import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
+import { OnboardingModal } from "./components/OnboardingModal";
+const AgentVideoEditor = lazy(() => import("./components/AgentVideoEditor").then((module) => ({ default: module.AgentVideoEditor })));
+import { initializeClientTelemetry, captureAppEvent } from "./telemetry";
 
 function isStandaloneReleaseLocation(): boolean {
   if (typeof window === "undefined") return false;
@@ -69,13 +75,16 @@ export function App() {
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [mcpStatus, setMcpStatus] = useState<McpStatusPayload | null>(null);
   const [releases, setReleases] = useState<ReleasesPayload | null>(null);
+  const [prefs, setPrefs] = useState<WorkspacePrefs>({ brands: [] });
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [editingVideo, setEditingVideo] = useState<Project | null>(null);
 
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [brandDialogTarget, setBrandDialogTarget] = useState<{ open: boolean; brand: Brand | null }>({
     open: false,
     brand: null,
   });
-  const [mcpFocusBrandId, setMcpFocusBrandId] = useState<string | null>(null);
   const [toast, setToast] = useState<string>("");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +95,13 @@ export function App() {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     toastTimerRef.current = window.setTimeout(() => setToast(""), 2600);
   }, []);
+
+  const captureEvent = (
+    event: string,
+    properties: Record<string, boolean | number | string | string[]> = {},
+  ) => {
+    if (isPostHogConfigured) posthog.capture(event, properties);
+  };
 
   // Sync HTML lang & RTL direction
   useEffect(() => {
@@ -106,10 +122,28 @@ export function App() {
       setFootage(ws.footage || []);
       setVoiceNotes(ws.voiceNotes || []);
       setActivity(ws.activity || []);
+      if (ws.prefs) {
+        setPrefs(ws.prefs);
+        if (ws.prefs.onboardingCompleted !== true) setShowOnboarding(true);
+        initializeClientTelemetry(Boolean(ws.prefs.telemetryEnabled));
+      }
       setMcpStatus(mcp);
       setConnected(true);
+      if (isPostHogConfigured) {
+        posthog.logger.info("Workspace synchronized", {
+          event: "workspace_synchronized",
+          brand_count: ws.brands?.length || 0,
+          project_count: ws.projects?.length || 0,
+          footage_count: ws.footage?.length || 0,
+        });
+      }
     } catch {
       setConnected(false);
+      if (isPostHogConfigured) {
+        posthog.logger.warn("Workspace synchronization failed", {
+          event: "workspace_synchronization_failed",
+        });
+      }
     }
   }, []);
 
@@ -185,15 +219,7 @@ export function App() {
         return;
       }
 
-      const keyMap: Record<string, NavView> = {
-        "1": "today",
-        "2": "brands",
-        "3": "voice",
-        "4": "search",
-        "5": "agent",
-        "6": "mcp",
-        "7": "releases",
-      };
+      const keyMap: Record<string, NavView> = { "1": "today", "2": "brands", "3": "voice" };
       if (keyMap[e.key]) {
         e.preventDefault();
         setView(keyMap[e.key]);
@@ -214,11 +240,19 @@ export function App() {
       const res = await api.updateBrand(editId, payload);
       setBrands(res.brands);
       setSelected({ kind: "brand", id: res.brand.id });
+      captureEvent("brand_updated", {
+        color_count: res.brand.colors.length,
+        has_logo: Boolean(res.brand.logo),
+      });
       pushToast(`Saved “${res.brand.name}”`);
     } else {
       const res = await api.createBrand(payload);
       setBrands(res.brands);
       setSelected({ kind: "brand", id: res.brand.id });
+      captureEvent("brand_created", {
+        color_count: res.brand.colors.length,
+        has_logo: Boolean(res.brand.logo),
+      });
       pushToast(`Created “${res.brand.name}”`);
     }
     refreshWorkspace();
@@ -250,26 +284,38 @@ export function App() {
     const res = await api.deleteBrand(brand.id);
     setBrands(res.brands);
     if (selected?.kind === "brand" && selected.id === brand.id) setSelected(null);
+    captureEvent("brand_deleted");
     pushToast(`Deleted “${brand.name}”`);
     refreshWorkspace();
   };
 
   const handleCreateProject = async (payload: Partial<Project>) => {
     const res = await api.createProject(payload);
+    captureAppEvent("project_created", { aspect: res.project.aspect });
     setSelected({ kind: "project", id: res.project.id });
     setView("today");
+    captureEvent("project_created", {
+      aspect: res.project.aspect,
+      has_brand: Boolean(res.project.brandId),
+      status: res.project.status,
+    });
     pushToast(`Created “${res.project.name}”`);
     refreshWorkspace();
   };
 
   const handleUpdateProject = async (id: string, patch: Partial<Project>) => {
-    await api.updateProject(id, patch);
+    const res = await api.updateProject(id, patch);
+    captureEvent("project_updated", {
+      status: res.project.status,
+      updated_fields: Object.keys(patch),
+    });
     refreshWorkspace();
   };
 
   const handleDeleteProject = async (id: string) => {
     await api.deleteProject(id);
     if (selected?.kind === "project" && selected.id === id) setSelected(null);
+    captureEvent("project_deleted");
     pushToast("Project removed");
     refreshWorkspace();
   };
@@ -277,6 +323,11 @@ export function App() {
   const handleAddFootage = async (payload: Partial<FootageItem>) => {
     const res = await api.addFootage(payload);
     setSelected({ kind: "footage", id: res.footage.id });
+    captureEvent("footage_added", {
+      has_brand: Boolean(res.footage.brandId),
+      has_project: Boolean(res.footage.projectId),
+      kind: res.footage.kind,
+    });
     pushToast(`Added “${res.footage.name}”`);
     refreshWorkspace();
   };
@@ -284,6 +335,7 @@ export function App() {
   const handleDeleteFootage = async (id: string) => {
     await api.deleteFootage(id);
     if (selected?.kind === "footage" && selected.id === id) setSelected(null);
+    captureEvent("footage_deleted");
     refreshWorkspace();
   };
 
@@ -297,6 +349,13 @@ export function App() {
   }) => {
     const res = await api.createVoiceNote(payload);
     setSelected({ kind: "voice", id: res.voiceNote.id });
+    captureEvent("voice_note_saved", {
+      duration_seconds: res.voiceNote.durationSec,
+      has_audio: res.voiceNote.hasAudio,
+      has_brand: Boolean(res.voiceNote.brandId),
+      has_project: Boolean(res.voiceNote.projectId),
+      has_transcript: Boolean(res.voiceNote.transcript),
+    });
     pushToast(`Saved “${res.voiceNote.title}”`);
     refreshWorkspace();
   };
@@ -304,7 +363,15 @@ export function App() {
   const handleDeleteVoiceNote = async (id: string) => {
     await api.deleteVoiceNote(id);
     if (selected?.kind === "voice" && selected.id === id) setSelected(null);
+    captureEvent("voice_note_deleted");
     refreshWorkspace();
+  };
+
+  const handlePrefsChange = async (patch: Partial<WorkspacePrefs>) => {
+    const updated = await api.putPrefs(patch);
+    setPrefs(updated);
+    if (patch.telemetryEnabled !== undefined) initializeClientTelemetry(Boolean(updated.telemetryEnabled));
+    captureAppEvent("settings_updated", { telemetryEnabled: Boolean(updated.telemetryEnabled) });
   };
 
   const enterStandaloneReleases = () => {
@@ -354,17 +421,13 @@ export function App() {
       <TitleBar
         lang={lang}
         onToggleLang={toggleLang}
-        mcpToolCount={mcpStatus?.tools.length ?? 22}
         connected={connected}
         standaloneRelease={standaloneRelease}
         onClickWordmark={() => {
           if (standaloneRelease) exitStandaloneReleases();
           else setView("today");
         }}
-        onClickMcp={() => {
-          if (standaloneRelease) exitStandaloneReleases();
-          setView("mcp");
-        }}
+        onClickSettings={() => setShowSettings(true)}
       />
 
       {standaloneRelease ? (
@@ -458,6 +521,7 @@ export function App() {
                   exampleBusy={exampleBusy}
                   onEditBrand={(brand) => setBrandDialogTarget({ open: true, brand })}
                   onDeleteBrand={handleDeleteBrand}
+                  onOpenVideo={(project) => { captureAppEvent("video_editor_opened", { engine: project.aiEdit?.engine || "remotion" }); setEditingVideo(project); }}
                 />
               )}
 
@@ -492,7 +556,6 @@ export function App() {
                 <McpView
                   lang={lang}
                   mcpStatus={mcpStatus}
-                  focusBrandId={mcpFocusBrandId}
                   onAfterInvoke={refreshWorkspace}
                   onToast={pushToast}
                 />
@@ -510,7 +573,7 @@ export function App() {
             </div>
           </main>
 
-          <Inspector
+          {view !== "brands" && <Inspector
             lang={lang}
             selected={selected}
             brands={brands}
@@ -526,14 +589,14 @@ export function App() {
             onDeleteProject={handleDeleteProject}
             onDeleteFootage={handleDeleteFootage}
             onDeleteVoiceNote={handleDeleteVoiceNote}
-            onOpenMcpWithBrand={(brandId) => {
-              setMcpFocusBrandId(brandId);
-              setView("mcp");
-            }}
             onToast={pushToast}
-          />
+          />}
         </div>
       )}
+
+      {editingVideo && <Suspense fallback={<div className="agent-editor-loading">{lang === "ar" ? "جارٍ فتح المحرر…" : "Opening editor…"}</div>}><AgentVideoEditor project={editingVideo} brand={brands.find((brand) => brand.id === editingVideo.brandId)} lang={lang} onClose={() => setEditingVideo(null)} onSave={(patch) => handleUpdateProject(editingVideo.id, patch)} /></Suspense>}
+      {showSettings && <AgentConfigDrawer lang={lang} version={info?.version || "2.0.0"} status={mcpStatus} releases={releases} prefs={prefs} onPrefs={handlePrefsChange} onClose={() => setShowSettings(false)} onToast={pushToast} onAfterInvoke={refreshWorkspace} />}
+      {showOnboarding && !standaloneRelease && <OnboardingModal lang={lang} status={mcpStatus} onComplete={() => setShowOnboarding(false)} onToast={pushToast} />}
 
       <StatusBar
         lang={lang}

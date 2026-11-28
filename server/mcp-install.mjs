@@ -6,7 +6,7 @@
  * path, keeps a timestamped backup next to the original, and refuses to touch a
  * file that is not valid JSON instead of clobbering it.
  *
- * Supported agents: Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, Codex.
+ * Supported agents: OpenCode, Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, Codex.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -26,7 +26,9 @@ export function clientConfigPaths({ platform = process.platform, home = os.homed
   const p = P(platform);
   const appData = env.APPDATA || p.join(home, "AppData", "Roaming");
   const macSupport = p.join(home, "Library", "Application Support");
+  const xdgConfig = env.XDG_CONFIG_HOME || p.join(home, ".config");
   return {
+    opencode: p.join(xdgConfig, "opencode", "opencode.json"),
     "claude-desktop":
       platform === "win32"
         ? p.join(appData, "Claude", "claude_desktop_config.json")
@@ -47,6 +49,7 @@ export function clientConfigPaths({ platform = process.platform, home = os.homed
 }
 
 const LABELS = {
+  opencode: "OpenCode",
   "claude-desktop": "Claude Desktop",
   "claude-code": "Claude Code",
   cursor: "Cursor",
@@ -56,6 +59,7 @@ const LABELS = {
 };
 
 const KINDS = {
+  opencode: "opencode",
   "claude-desktop": "json",
   "claude-code": "json",
   cursor: "json",
@@ -133,6 +137,21 @@ function findJsonEntry(cfg, def) {
   const map = cfg?.[def.key];
   if (!map || typeof map !== "object") return null;
   return map[SERVER_KEY] || null;
+}
+
+function openCodeMap(cfg) {
+  if (cfg?.mcp?.servers && typeof cfg.mcp.servers === "object") return cfg.mcp.servers;
+  if (!cfg.mcp || typeof cfg.mcp !== "object") cfg.mcp = {};
+  return cfg.mcp;
+}
+
+function openCodeEntry({ mcpScriptPath, dataDir, v2 = false }) {
+  return {
+    type: "local",
+    command: ["node", mcpScriptPath],
+    ...(dataDir ? { environment: { MOTIF_DATA: dataDir } } : {}),
+    ...(v2 ? {} : { enabled: true }),
+  };
 }
 
 function tomlEscape(value) {
@@ -213,7 +232,16 @@ export function detectClients({ mcpScriptPath, dataDir, ...opts } = {}) {
     } catch {
       installed = false;
     }
-    if (def.kind === "json") {
+    if (def.kind === "opencode") {
+      try {
+        const cfg = readJsonConfig(def.configPath);
+        const entry = cfg.mcp?.servers?.[SERVER_KEY] || cfg.mcp?.[SERVER_KEY] || null;
+        configured = Boolean(entry);
+        upToDate = configured && (!mcpScriptPath || JSON.stringify(entry) === JSON.stringify(openCodeEntry({ mcpScriptPath, dataDir, v2: Boolean(cfg.mcp?.servers) })));
+      } catch {
+        configured = false;
+      }
+    } else if (def.kind === "json") {
       try {
         const cfg = readJsonConfig(def.configPath);
         const entry = findJsonEntry(cfg, def);
@@ -251,6 +279,23 @@ export function installClient({ client, mcpScriptPath, dataDir, ...opts } = {}) 
   }
 
   fs.mkdirSync(path.dirname(def.configPath), { recursive: true });
+
+  if (def.kind === "opencode") {
+    const cfg = readJsonConfig(def.configPath);
+    const existed = fs.existsSync(def.configPath);
+    const backup = existed ? backupFile(def.configPath) : null;
+    const v2 = Boolean(cfg.mcp?.servers && typeof cfg.mcp.servers === "object");
+    const map = openCodeMap(cfg);
+    const already = Boolean(v2 ? map.servers?.[SERVER_KEY] : map[SERVER_KEY]);
+    const entry = openCodeEntry({ mcpScriptPath, dataDir, v2 });
+    if (v2) map[SERVER_KEY] = entry;
+    else {
+      cfg.$schema ||= "https://opencode.ai/config.json";
+      map[SERVER_KEY] = entry;
+    }
+    fs.writeFileSync(def.configPath, `${JSON.stringify(cfg, null, 2)}\n`, "utf8");
+    return { ok: true, client: def.id, label: def.label, configPath: def.configPath, backup, alreadyConnected: already, restartRequired: true, entry };
+  }
 
   if (def.kind === "json") {
     const cfg = readJsonConfig(def.configPath);
@@ -302,6 +347,17 @@ export function removeClient({ client, ...opts } = {}) {
   }
   if (!fs.existsSync(def.configPath)) {
     return { ok: true, client: def.id, label: def.label, configPath: def.configPath, removed: false };
+  }
+
+  if (def.kind === "opencode") {
+    const cfg = readJsonConfig(def.configPath);
+    const v2 = Boolean(cfg.mcp?.servers && typeof cfg.mcp.servers === "object");
+    const map = v2 ? cfg.mcp.servers : cfg.mcp;
+    if (!map || !map[SERVER_KEY]) return { ok: true, client: def.id, label: def.label, configPath: def.configPath, removed: false };
+    const backup = backupFile(def.configPath);
+    delete map[SERVER_KEY];
+    fs.writeFileSync(def.configPath, `${JSON.stringify(cfg, null, 2)}\n`, "utf8");
+    return { ok: true, client: def.id, label: def.label, configPath: def.configPath, backup, removed: true };
   }
 
   if (def.kind === "json") {

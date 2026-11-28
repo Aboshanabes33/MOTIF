@@ -17,8 +17,8 @@ let cachedGithubReleases = null;
 let cachedAt = 0;
 
 export const CURRENT_RELEASE = {
-  version: "2.0.0",
-  tag: "v2.0.0",
+  version: "2.1.1",
+  tag: "v2.1.1",
   name: "MOTIF 2.0 — Liquid Glass Desktop & MCP Agent Hub",
   publishedAt: "2026-11-26T20:00:00Z",
   channel: "stable",
@@ -27,14 +27,14 @@ export const CURRENT_RELEASE = {
   electronVersion: "35.2.0",
   reactVersion: "19.1.0",
   mcpProtocol: "2025-03-26",
-  releaseUrl: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
+  releaseUrl: `https://github.com/${GITHUB_REPO}/releases/tag/v2.1.1`,
   highlights: [
     "Complete React 19 + TypeScript desktop rebuild faithful to the MOTIF Liquid Glass Design Spec",
     "Built-in Model Context Protocol (MCP) server with 22 tools, 18 resources & 4 prompts for Claude, Cursor, and Codex — including the video-edit agent stack, installed into your agent with one click",
     "AI agents can inspect and edit saved Brands (colors, logo, audience, tone of voice, channels, notes), Projects, Footage, and Voice Notes in real time",
     "Self-contained Windows x64 Portable executable (.exe) with official MOTIF icon, bundled Node.js 24 LTS runtime, and zero external prerequisites",
     "Full Arabic (RTL) and English (LTR) interface with keyboard shortcuts (1–6, /, Escape)",
-    "Electron NSIS Installer + Portable workflow ready in .github/workflows/release-windows.yml",
+    "Local Windows packaging via `npm run build:win-exe` (standalone portable .exe) and `npm run dist:win` (Electron NSIS installer)",
   ],
   highlightsAr: [
     "إعادة بناء كاملة لتطبيق MOTIF باستخدام React 19 وTypeScript وفق تصميم Liquid Glass",
@@ -42,7 +42,7 @@ export const CURRENT_RELEASE = {
     "تمكين الوكيل الذكي من رؤية وتعديل البراندات (الألوان، الشعار، الجمهور، نبرة الصوت، القنوات) والمشاريع والملاحظات الصوتية لحظياً",
     "ملف Windows x64 تنفيذي مستقل (.exe) بأيقونة MOTIF الرسمية وبيئة Node.js 24 مدمجة دون أي متطلبات مسبقة",
     "دعم كامل للغتين العربية (RTL) والإنجليزية (LTR) مع اختصارات لوحة المفاتيح",
-    "دعم بناء مثبّت Electron NSIS وPortable عبر .github/workflows/release-windows.yml",
+    "بناء مباشر لنسخة ويندوز المحمولة عبر `npm run build:win-exe` ومثبّت Electron عبر `npm run dist:win`",
   ],
   artifacts: [
     {
@@ -53,7 +53,7 @@ export const CURRENT_RELEASE = {
       arch: "x64",
       kind: "portable",
       recommended: true,
-      url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
+      url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.1.1`,
       note: "Standalone single-file Windows 10/11 x64 executable with bundled Node.js 24 LTS, MOTIF icon, React UI, and MCP server — double-click and run immediately.",
     },
     {
@@ -64,8 +64,8 @@ export const CURRENT_RELEASE = {
       arch: "x64",
       kind: "installer",
       recommended: false,
-      url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
-      note: "Full Electron NSIS installer built via `npm run dist:win` or GitHub Actions Windows runner (Start Menu & Desktop shortcuts).",
+      url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.1.1`,
+      note: "Full Electron NSIS installer built locally via `npm run dist:win` (Start Menu & Desktop shortcuts).",
     },
   ],
   requirements: {
@@ -84,7 +84,7 @@ export const FALLBACK_GITHUB_RELEASES = [
     name: "MOTIF v2.0.0 — Windows x64 (React + Liquid Glass + MCP)",
     publishedAt: "2026-11-26T20:00:00Z",
     prerelease: false,
-    url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.0.0`,
+    url: `https://github.com/${GITHUB_REPO}/releases/tag/v2.1.1`,
     summary: "Complete React 19 + Liquid Glass desktop rebuild with built-in 16-tool MCP server and Windows x64 executable packaging.",
     assets: [],
     sha256: "",

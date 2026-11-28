@@ -3,9 +3,11 @@ import { createRoot } from "react-dom/client";
 import "./styles/fonts.css";
 import "./styles/motif.css";
 import { App } from "./App";
+import "./posthog";
+import { TelemetryErrorBoundary } from "./telemetry";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <TelemetryErrorBoundary><App /></TelemetryErrorBoundary>
   </StrictMode>,
 );

@@ -110,6 +110,14 @@ function safeReadJson(filePath, fallback) {
   }
 }
 
+function stripSensitivePreferenceKeys(value) {
+  if (Array.isArray(value)) return value.map(stripSensitivePreferenceKeys);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !/(?:secret|token|password|dsn|api.?key|public.?key)/i.test(key))
+    .map(([key, item]) => [key, stripSensitivePreferenceKeys(item)]));
+}
+
 export function normalizeHexColor(value) {
   if (typeof value !== "string") return null;
   let s = value.trim();
@@ -216,6 +224,27 @@ export const EXAMPLE_BRAND = Object.freeze({
 export function exampleBrand() {
   const now = new Date().toISOString();
   return { ...EXAMPLE_BRAND, colors: [...EXAMPLE_BRAND.colors], createdAt: now, updatedAt: now };
+}
+
+function defaultAiEdit(project = {}) {
+  const duration = Math.max(12, Number(project.durationSec) || 42);
+  return {
+    engine: "remotion",
+    agentSummary: project.summary || "The AI agent shaped the pacing, captions, and motion design for this edit.",
+    stats: { cuts: 8, scenes: 4, captions: 12, motionGraphics: 3 },
+    actions: [
+      { at: 0, title: "Selected the opening hook", detail: "Trimmed the intro to get to the story faster." },
+      { at: Math.round(duration * 0.22), title: "Reframed key moments", detail: "Matched motion and pacing to the brand." },
+      { at: Math.round(duration * 0.58), title: "Added captions and motion", detail: "Created readable bilingual captions and a branded title." },
+    ],
+    scenes: [
+      { id: "hook", title: "Opening hook", start: 0, duration: Math.round(duration * 0.22), motion: "rise" },
+      { id: "story", title: "Main story", start: Math.round(duration * 0.22), duration: Math.round(duration * 0.45), motion: "reveal" },
+      { id: "detail", title: "Details", start: Math.round(duration * 0.67), duration: Math.round(duration * 0.22), motion: "float" },
+      { id: "outro", title: "Brand outro", start: Math.round(duration * 0.89), duration: Math.max(3, Math.round(duration * 0.11)), motion: "fade" },
+    ],
+    captions: ["A story worth watching", "Crafted with intention", "Made for your next moment"],
+  };
 }
 
 function makeStarterData() {
@@ -445,14 +474,14 @@ function makeStarterData() {
     },
   ];
 
-  return { brands, projects, footage, voiceNotes, activity };
+  return { brands, projects: projects.map((project) => ({ ...project, aiEdit: defaultAiEdit(project) })), footage, voiceNotes, activity };
 }
 
 export function createMotifStore(opts = {}) {
   const paths = resolveDataPaths(opts);
   // Fresh start is the default: a new user begins with zero brands.
   // The demo workspace (Qafila + projects + footage + notes) is only seeded when
-  // explicitly requested — `MOTIF_DEMO=1`, `motif:demo`, or the Example button.
+  // explicitly requested — `MOTIF_DEMO=1` (full demo workspace) or the Example button (one brand).
   const demoInit =
     typeof opts.demoInit === "boolean" ? opts.demoInit : process.env.MOTIF_DEMO === "1";
   const cleanInit = opts.cleanInit === true || (opts.cleanInit === undefined && !demoInit);
@@ -472,6 +501,8 @@ export function createMotifStore(opts = {}) {
       atomicWriteJson(paths.prefsFile, {
         projectsRoot: paths.projectsDir,
         lang: "en",
+        onboardingCompleted: false,
+        telemetryEnabled: true,
         brands: starter.brands,
       });
     }
@@ -533,6 +564,7 @@ export function createMotifStore(opts = {}) {
 
   function readPrefs() {
     const raw = safeReadJson(paths.prefsFile, {});
+    const safePrefs = stripSensitivePreferenceKeys(raw);
     const brands = Array.isArray(raw.brands)
       ? raw.brands
           .filter((b) => b && typeof b === "object" && typeof b.name === "string" && b.name.trim())
@@ -546,7 +578,7 @@ export function createMotifStore(opts = {}) {
           .filter(Boolean)
       : [];
     return {
-      ...raw,
+      ...safePrefs,
       projectsRoot: raw.projectsRoot || paths.projectsDir,
       brands,
     };
@@ -557,7 +589,7 @@ export function createMotifStore(opts = {}) {
       throw Object.assign(new Error("Preferences must be a JSON object"), { status: 400 });
     }
     const current = readPrefs();
-    const merged = { ...current, ...nextPrefs };
+    const merged = stripSensitivePreferenceKeys({ ...current, ...nextPrefs });
     if ("brands" in nextPrefs) {
       if (!Array.isArray(nextPrefs.brands)) {
         throw Object.assign(new Error("brands must be an array"), { status: 400 });
@@ -791,6 +823,7 @@ export function createMotifStore(opts = {}) {
       accentTo: "#0c2729",
       summary: String(payload.summary ?? "").trim().slice(0, 400),
       notes: String(payload.notes ?? "").trim().slice(0, 2000),
+      aiEdit: payload.aiEdit && typeof payload.aiEdit === "object" ? payload.aiEdit : defaultAiEdit({ ...payload, durationSec: payload.durationSec || 42, summary: payload.summary }),
       createdAt: now,
       updatedAt: now,
     };
@@ -832,6 +865,7 @@ export function createMotifStore(opts = {}) {
           : existing.durationSec,
       summary: patch.summary !== undefined ? String(patch.summary).trim().slice(0, 400) : existing.summary,
       notes: patch.notes !== undefined ? String(patch.notes).trim().slice(0, 2000) : existing.notes,
+      aiEdit: patch.aiEdit && typeof patch.aiEdit === "object" ? patch.aiEdit : existing.aiEdit,
       accentFrom: brand?.colors?.[0] || existing.accentFrom,
       updatedAt: new Date().toISOString(),
     };

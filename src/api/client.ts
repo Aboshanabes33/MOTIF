@@ -134,6 +134,9 @@ export const api = {
     ),
 
   getReleases: () => requestJson<ReleasesPayload>("/api/releases"),
+  checkUpdates: () => requestJson<{ updateAvailable: boolean; currentVersion: string; latestVersion: string; releaseUrl?: string }>("/api/updates/check"),
+  getTelemetryConfig: () => requestJson<{ sentryConfigured: boolean; posthogConfigured: boolean; sentryDsn?: string; posthogPublicKey?: string; posthogHost?: string }>("/api/telemetry/config"),
+  getDiagnostics: () => requestJson<Array<{ at: string; kind: string; message?: string }>>("/api/telemetry/diagnostics"),
 
   /* Video agent — the video-edit stack */
   getVideoStatus: () => requestJson<VideoEditStatus>("/api/video/edit/status"),
@@ -153,7 +156,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  runVideoStage: (payload: { stage: string; work: string; name?: string; mode?: VideoMode }) =>
+  runVideoStage: (payload: { stage: string; work: string; name?: string; mode?: VideoMode; posthogDistinctId?: string }) =>
     requestJson<VideoRunResult>("/api/video/edit/run", {
       method: "POST",
       body: JSON.stringify(payload),
