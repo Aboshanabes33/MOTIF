@@ -224,6 +224,26 @@ export function App() {
     refreshWorkspace();
   };
 
+  const [exampleBusy, setExampleBusy] = useState(false);
+  const handleLoadExample = async () => {
+    setExampleBusy(true);
+    try {
+      const res = await api.createExampleBrand();
+      setBrands(res.brands);
+      if (res.brand) setSelected({ kind: "brand", id: res.brand.id });
+      pushToast(
+        translate(lang, res.alreadyExisted ? "brands.exampleExists" : "brands.exampleAdded", {
+          name: res.brand?.name || "Qafila",
+        }),
+      );
+      refreshWorkspace();
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : "Example failed");
+    } finally {
+      setExampleBusy(false);
+    }
+  };
+
   const handleDeleteBrand = async (brand: Brand) => {
     const ok = window.confirm(translate(lang, "brands.deleteConfirm", { name: brand.name }));
     if (!ok) return;
@@ -434,6 +454,8 @@ export function App() {
                   selected={selected}
                   onSelect={setSelected}
                   onAddBrand={() => setBrandDialogTarget({ open: true, brand: null })}
+                  onLoadExample={handleLoadExample}
+                  exampleBusy={exampleBusy}
                   onEditBrand={(brand) => setBrandDialogTarget({ open: true, brand })}
                   onDeleteBrand={handleDeleteBrand}
                 />

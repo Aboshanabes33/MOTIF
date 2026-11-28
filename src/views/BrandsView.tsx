@@ -1,4 +1,4 @@
-import { Plus, Pencil, Trash2, Cpu } from "lucide-react";
+import { Plus, Pencil, Trash2, Cpu, Sparkles, Loader2 } from "lucide-react";
 import type { Brand, Lang, Project, SelectedItem } from "../types";
 import { translate } from "../i18n";
 
@@ -11,6 +11,8 @@ interface BrandsViewProps {
   onAddBrand: () => void;
   onEditBrand: (brand: Brand) => void;
   onDeleteBrand: (brand: Brand) => void;
+  onLoadExample: () => Promise<void>;
+  exampleBusy?: boolean;
 }
 
 export function BrandsView({
@@ -22,6 +24,8 @@ export function BrandsView({
   onAddBrand,
   onEditBrand,
   onDeleteBrand,
+  onLoadExample,
+  exampleBusy = false,
 }: BrandsViewProps) {
   const projectCountByBrand = new Map<string, number>();
   for (const p of projects) {
@@ -37,19 +41,50 @@ export function BrandsView({
           <Cpu size={12} />
           {translate(lang, "brands.mcpVisible")} · prefs.json
         </span>
-        <button type="button" className="btn btn--primary" onClick={onAddBrand}>
-          <Plus size={15} />
-          {translate(lang, "brands.add")}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              void onLoadExample();
+            }}
+            disabled={exampleBusy}
+            title={translate(lang, "brands.exampleHint")}
+          >
+            {exampleBusy ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />}
+            {translate(lang, "brands.example")}
+          </button>
+          <button type="button" className="btn btn--primary" onClick={onAddBrand}>
+            <Plus size={15} />
+            {translate(lang, "brands.add")}
+          </button>
+        </div>
       </div>
 
       {brands.length === 0 ? (
         <div className="content-card empty-state">
           <p style={{ margin: 0, maxWidth: 440 }}>{translate(lang, "brands.empty")}</p>
-          <button type="button" className="btn btn--primary" onClick={onAddBrand}>
-            <Plus size={15} />
-            {translate(lang, "brands.add")}
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={onAddBrand}
+            >
+              <Plus size={15} />
+              {translate(lang, "brands.add")}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                void onLoadExample();
+              }}
+              disabled={exampleBusy}
+            >
+              {exampleBusy ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />}
+              {translate(lang, "brands.example")}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="brands-list">

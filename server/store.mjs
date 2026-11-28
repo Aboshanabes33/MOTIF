@@ -199,6 +199,25 @@ export function validateAndNormalizeBrand(input, existingId = null) {
   };
 }
 
+/** The demo brand behind the "Example" button — one click, never seeded automatically. */
+export const EXAMPLE_BRAND = Object.freeze({
+  name: "Qafila · قافلة",
+  tagline: "Cinematic Arabic tech & storytelling",
+  logo: "",
+  colors: ["#2f7268", "#9fd8cd", "#f2b880", "#0c2729"],
+  audience: "Arabic-speaking founders, creators, and filmmakers (20–38)",
+  voice: "Calm, insightful, crisp pacing with dry wit and warm editorial tone",
+  channels: "YouTube, Instagram Reels, TikTok",
+  notes:
+    "Use clean mint accents on dark teal lower-thirds. Prefer 9:16 vertical cuts under 58 seconds with bold Arabic captions.",
+});
+
+/** A ready-to-save example brand, stamped now (ids/timestamps are fresh every call). */
+export function exampleBrand() {
+  const now = new Date().toISOString();
+  return { ...EXAMPLE_BRAND, colors: [...EXAMPLE_BRAND.colors], createdAt: now, updatedAt: now };
+}
+
 function makeStarterData() {
   const now = new Date();
   const iso = (minsAgo) => new Date(now.getTime() - minsAgo * 60_000).toISOString();
@@ -206,14 +225,7 @@ function makeStarterData() {
   const brands = [
     {
       id: "b_qafila01",
-      name: "Qafila · قافلة",
-      tagline: "Cinematic Arabic tech & storytelling",
-      logo: "",
-      colors: ["#2f7268", "#9fd8cd", "#f2b880", "#0c2729"],
-      audience: "Arabic-speaking founders, creators, and filmmakers (20–38)",
-      voice: "Calm, insightful, crisp pacing with dry wit and warm editorial tone",
-      channels: "YouTube, Instagram Reels, TikTok",
-      notes: "Use clean mint accents on dark teal lower-thirds. Prefer 9:16 vertical cuts under 58 seconds with bold Arabic captions.",
+      ...exampleBrand(),
       createdAt: iso(1440),
       updatedAt: iso(90),
     },
@@ -438,7 +450,12 @@ function makeStarterData() {
 
 export function createMotifStore(opts = {}) {
   const paths = resolveDataPaths(opts);
-  const cleanInit = opts.cleanInit ?? process.env.MOTIF_CLEAN_INIT === "1";
+  // Fresh start is the default: a new user begins with zero brands.
+  // The demo workspace (Qafila + projects + footage + notes) is only seeded when
+  // explicitly requested — `MOTIF_DEMO=1`, `motif:demo`, or the Example button.
+  const demoInit =
+    typeof opts.demoInit === "boolean" ? opts.demoInit : process.env.MOTIF_DEMO === "1";
+  const cleanInit = opts.cleanInit === true || (opts.cleanInit === undefined && !demoInit);
 
   ensureDirs(paths);
 
@@ -667,6 +684,39 @@ export function createMotifStore(opts = {}) {
       meta: { brandId: id },
     });
     return { ok: true, deleted: target };
+  }
+
+  /**
+   * Start over: empty brands, projects, footage, voice notes and activity.
+   * Keeps the folder itself and any disk-backed projects (those live on disk, not here).
+   */
+  function resetWorkspace() {
+    atomicWriteJson(paths.prefsFile, {
+      projectsRoot: paths.projectsDir,
+      lang: readPrefs().lang || "en",
+      brands: [],
+    }, { backup: true });
+    atomicWriteJson(paths.workspaceFile, {
+      version: 2,
+      projects: [],
+      folders: [],
+      footage: [],
+      voiceNotes: [],
+    });
+    atomicWriteJson(paths.activityFile, { events: [] });
+    return { ok: true };
+  }
+
+  /**
+   * The "Example" button: insert a realistic demo brand (Qafila) so a fresh user
+   * can see what a complete brand looks like — one click, and it is a normal brand
+   * they can edit or delete like any other. Repeated clicks return the existing one.
+   */
+  function createExampleBrand({ source = "user" } = {}) {
+    const existing = listBrands().find((b) => b.name === EXAMPLE_BRAND.name);
+    if (existing) return { ok: true, alreadyExisted: true, brand: existing };
+    const brand = createBrand(exampleBrand(), { source });
+    return { ok: true, alreadyExisted: false, brand };
   }
 
   // --- Projects ---
@@ -1051,6 +1101,7 @@ export function createMotifStore(opts = {}) {
     listBrands,
     getBrand,
     createBrand,
+    createExampleBrand,
     updateBrand,
     deleteBrand,
     listProjects,
@@ -1069,6 +1120,7 @@ export function createMotifStore(opts = {}) {
     recordActivity,
     searchWorkspace,
     buildBrandGuidelines,
+    resetWorkspace,
     writeServerInfo,
     readServerInfo,
   };

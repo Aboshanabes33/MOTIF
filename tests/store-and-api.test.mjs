@@ -9,6 +9,56 @@ function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "motif-api-test-"));
 }
 
+test("a brand-new user starts fresh: zero brands, projects, footage and voice notes", async () => {
+  const tmpDir = makeTempDir();
+  const srv = await startMotifServer({ host: "127.0.0.1", port: 0, dataDir: tmpDir });
+  try {
+    const prefs = await fetch(`${srv.url}/api/prefs`).then((r) => r.json());
+    assert.deepEqual(prefs.brands, []);
+    const ws = await fetch(`${srv.url}/api/workspace`).then((r) => r.json());
+    assert.equal(ws.brands.length, 0);
+    assert.equal(ws.projects.length, 0);
+    assert.equal(ws.footage.length, 0);
+    assert.equal(ws.voiceNotes.length, 0);
+
+    // The disk is fresh too — no starter prefs.json with demo brands.
+    const diskPrefs = JSON.parse(fs.readFileSync(path.join(tmpDir, "home", "prefs.json"), "utf8"));
+    assert.deepEqual(diskPrefs.brands, []);
+  } finally {
+    await srv.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("the Example button adds one demo brand (Qafila) and is idempotent", async () => {
+  const tmpDir = makeTempDir();
+  const srv = await startMotifServer({ host: "127.0.0.1", port: 0, dataDir: tmpDir });
+  try {
+    const first = await fetch(`${srv.url}/api/brands/example`, { method: "POST" });
+    assert.equal(first.status, 201);
+    const added = await first.json();
+    assert.equal(added.brand.name, "Qafila · قافلة");
+    assert.equal(added.brand.colors.length, 4);
+    assert.equal(added.alreadyExisted, false);
+    assert.equal(added.brands.length, 1);
+
+    const second = await fetch(`${srv.url}/api/brands/example`, { method: "POST" });
+    assert.equal(second.status, 200);
+    const again = await second.json();
+    assert.equal(again.alreadyExisted, true);
+    assert.equal(again.brands.length, 1, "the example is never duplicated");
+
+    // It is a normal brand: editable and deletable.
+    const del = await fetch(`${srv.url}/api/brands/${encodeURIComponent(again.brand.id)}`, { method: "DELETE" });
+    assert.equal(del.status, 200);
+    const prefs = await fetch(`${srv.url}/api/prefs`).then((r) => r.json());
+    assert.deepEqual(prefs.brands, []);
+  } finally {
+    await srv.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("MOTIF HTTP API: Brands prefs.json CRUD, validation, Projects, Footage, Voice Notes, Search & Releases", async () => {
   const tmpDir = makeTempDir();
   const srv = await startMotifServer({
